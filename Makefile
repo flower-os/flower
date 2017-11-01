@@ -12,7 +12,7 @@ makedirs:
 clean:
 	rm -r build
 
-run: flower.iso
+run: iso
 	qemu-system-x86_64 -cdrom build/flower.iso
 
 boot.o: src/boot
