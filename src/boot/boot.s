@@ -29,9 +29,9 @@ clear_screen:
 
         mov dword [eax], 0 ; move 2 black (null) characters into the buffer
 
-        sub ecx, 2 ; minus 2 from ecx because 16 bit vga buffer = 2 bytes
+        sub ecx, 4 ; minus 4 from ecx because 16 bit vga buffer = 2 bytes and we're clearing two pixels at once
 
-        cmp ecx, 0 - 2 ; if eax *was* 0, it will wrap around
+        cmp ecx, 0 - 4 ; if eax *was* 0, it will wrap around
         jne clear_screen_loop ; since it was't zero, jump to the top of the loop
 
     mov ecx, 0 ; clear ecx
