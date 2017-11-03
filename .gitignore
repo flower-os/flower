@@ -1,7 +1,6 @@
 /target/
 **/*.rs.bk
 src/rust/Cargo.lock
-.gitignore
 .idea/
 build/
 flower.iml
