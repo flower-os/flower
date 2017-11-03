@@ -14,10 +14,10 @@ def gen_asm(string, colour):
         code = hex_letter(letter, colour)
         
         if 2 * index < 10:
-            fmt_str = "mov word [0xb8000 +  {0}], {1} ; {2}\n"
+            fmt_str = "mov word [VGA_PTR +  {0}], {1} ; {2}\n"
         
         else:
-            fmt_str = "mov word [0xb8000 + {0}], {1} ; {2}\n"
+            fmt_str = "mov word [VGA_PTR + {0}], {1} ; {2}\n"
         
         out += fmt_str.format(2 * index, code, letter)
     
