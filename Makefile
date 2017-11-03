@@ -7,49 +7,51 @@ default: iso
 ## Normal run
 
 iso: build src/grub.cfg
-	mkdir -p isofiles
-	mkdir -p isofiles/boot/grub
-	cp src/grub.cfg isofiles/boot/grub/
-	cp build/kernel.bin isofiles/boot/
-	grub-mkrescue -o build/release/flower.iso isofiles
+	cp src/grub.cfg build/release/isofiles/boot/grub/
+	cp build/release/kernel.bin build/release/isofiles/boot/
+	grub-mkrescue -o build/release/flower.iso build/release/isofiles
     
 build: makedirs multiboot_header.o boot.o src/linker.ld
 	ld -n -o build/release/kernel.bin -T src/linker.ld build/release/boot/multiboot_header.o build/release/boot/boot.o
 
 run: iso
-	qemu-system-x86_64 -cdrom build/flower.iso
+	qemu-system-x86_64 -cdrom build/release/flower.iso
 
 ## Debug run
 
 debug-iso: debug-build src/grub.cfg
-	mkdir -p debug-isofiles
-	mkdir -p debug-isofiles/boot/grub
-	cp src/grub.cfg debug-isofiles/boot/grub/
-	cp build/kernel.bin debug-isofiles/boot/
-	grub-mkrescue -o build/debug/flower.iso isofiles
+	cp src/grub.cfg build/debug/isofiles/boot/grub/
+	cp build/debug/kernel.bin build/debug/isofiles/boot/
+	grub-mkrescue -o build/debug/flower.iso build/debug/isofiles
 
 debug-build: debug-makedirs debug-multiboot_header.o debug-boot.o src/linker.ld
-	ld -n -o build/debug/kernel.bin -T src/linker.ld build/boot/multiboot_header.o build/boot/boot.o
+	ld -n -o build/debug/kernel.bin -T src/linker.ld build/debug/boot/multiboot_header.o build/debug/boot/boot.o
 
-debug: iso
-	qemu-system-x86_64 -cdrom build/flower.iso -s
+debug: debug-iso
+	qemu-system-x86_64 -cdrom build/debug/flower.iso -s
 
-debug-wait: iso
-	qemu-system-x86_64 -cdrom build/flower.iso -s -S
+debug-wait: debug-iso
+	qemu-system-x86_64 -cdrom build/debug/flower.iso -s -S
 
 # Util configurations
 
 ## General
 clean:
-	rm -r build
+	rm -rf build
+	rm -rf isofiles
+	rm -rf debug-isofiles
 
 ## Normal files
 makedirs:
+	mkdir -p build/release/isofiles
+	mkdir -p build/release/isofiles/boot/grub
 	mkdir -p build/release
 	mkdir -p build/release/boot 
 
 ## Debug
 debug-makedirs:
+	mkdir -p build/debug/isofiles
+	mkdir -p build/debug/isofiles/boot/grub
 	mkdir -p build/debug
 	mkdir -p build/debug/boot 
 
