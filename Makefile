@@ -15,6 +15,9 @@ clean:
 run: iso
 	qemu-system-x86_64 -cdrom build/flower.iso
 
+debug: iso
+	qemu-system-x86_64 -cdrom build/flower.iso -s
+
 boot.o: src/boot
 	nasm -f elf64 src/boot/boot.s -o build/boot/boot.o
 
