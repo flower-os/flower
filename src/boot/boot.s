@@ -14,12 +14,14 @@ start:
     
     ; Clear screen and print "FlowerOS boot"
     call clear_screen
+    
     ;call boot_print
-    push word 0x34
-    push word 0x30
-    push word 0x31
+    
+    push word 'A'
+    push word 'B'
+    push word 'C'
     push word 3
-    call error_print
+    jmp error_print
     
     hlt
 
@@ -49,9 +51,9 @@ clear_screen:
     
 ; Print out error message if boot failed
 ; Args: length (word), ascii character codes (words)
+; Note to self: USE push word! Otherwise it will push extra 16bit of 0s
+; Does not return, and needs to be called with jmp
 error_print:
-    mov dword ecx, 0
-    pop cx
     
     mov word [VGA_PTR +  0], 0x0446 ; F
     mov word [VGA_PTR +  2], 0x046c ; l
@@ -81,23 +83,25 @@ error_print:
     mov word [VGA_PTR + 50], 0x0465 ; e
     mov word [VGA_PTR + 52], 0x0420 ;
     
+    mov ecx, 0 ; clear ecx
+    pop cx ; (word) length of char array
+    
     print_error_code_loop:
         
-        pop ax ; pop code
+        pop ax ; pop (word) code
         or ax, 0x0400 ; form proper vga code
         
         ; ebx = vga memory location
-        mov word ebx, ecx ; set ebx to char offset
-        shl ebx, 1 ; two bits per char
-        add ebx, VGA_PTR + 52; vga memory pointer offset
+        mov ebx, ecx ; set bx to char offset
+        shl ebx, 1 ; shift for * 2 because two bits per char
+        add ebx, VGA_PTR + 52; vga memory pointer offset = previous chars + 1 char
         
-        mov word [ebx], ax ; set char to ax
+        mov [ebx], ax ; set char to code
         
-        dec cx
+        dec ecx
         
-        cmp cx, 0 - 1 ; will wrap around if was 0
+        cmp ecx, 0
         jne print_error_code_loop ; if cx is not 0, loop
-        
     
     hlt
     
