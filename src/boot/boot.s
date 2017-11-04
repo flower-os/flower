@@ -14,15 +14,8 @@ start:
     
     ; Clear screen and print "FlowerOS boot"
     call clear_screen
-    
-    ;call boot_print
-    
-    push word 'A'
-    push word 'B'
-    push word 'C'
-    push word 3
-    jmp error_print
-    
+    call boot_print
+
     hlt
 
 ; Clear the screen
