@@ -20,35 +20,14 @@ start:
     call check_cpuid  ; Check if cpuid supported
     call check_long_mode ; Check if long mode supported
     
-    ; Clear screen and print "FlowerOS boot"
-    call clear_screen
-    call boot_print
-
-    hlt
-
-; Clear the screen
-; Formula: memory loc = VGA_PTR + (y * columns + x) * 2
-;          => L = VGA_PTR + (y * 80 + x) * 2
-; *note, the times 2 is because vga buffer is 16bit
-; Columns = 80 because the res is 80x25
-clear_screen:
-    mov ecx, (RESOLUTION_Y * RESOLUTION_X + RESOLUTION_X) * 2 ; bottom right pixel (without video buffer pointer offset)
+    ; Transition to long mode
+    call setup_paging ; set up paging
+    lgdt [gdt64.pointer] ; load gdt
+    call setup_long_mode ; set up registers
     
-    .clear_screen_loop:
-
-        mov eax, ecx ; copy the current count into eax
-        add eax, VGA_PTR ; add the vga memory map pointer to it
-
-        mov dword [eax], 0 ; move 2 black (null) characters into the buffer
-
-        sub ecx, 4 ; minus 4 from ecx because 16 bit vga buffer = 2 bytes and we're clearing two pixels at once
-
-        cmp ecx, 0 - 4 ; if eax *was* 0, it will wrap around
-        jne .clear_screen_loop ; since it was't zero, jump to the top of the loop
-
-    mov ecx, 0 ; clear ecx
-    
-    ret
+    ; Mr Crusher, set heading for Gee dee tee mark sixty four, warp 6
+    ; Engage!
+    jmp gdt64.code:long_mode_start
     
 ; Print out error message if boot failed
 ; Args: length (word), ascii character codes for hex error code (words)
@@ -114,7 +93,7 @@ error_print:
         ; ebx = vga memory location
         mov ebx, ecx ; set bx to char offset
         shl ebx, 1 ; shift for * 2 because two bits per char
-        add ebx, VGA_PTR + 56; vga memory pointer offset = previous chars + 1 char
+        add ebx, VGA_PTR + 56; vga memory pointer offset
         
         mov [ebx], ax ; set char to code
         
@@ -125,27 +104,68 @@ error_print:
     
     push edx ; push return pointer
     ret
-    
 
-; Print out "FlowerOS boot"
-boot_print:
+; Set up paging
+; Thanks to https://intermezzos.github.io/book/paging.html
+setup_paging:
+
+    ; Point entry #1 of page 4 to entry #1 of page 3
+    mov eax, p3_table + 0 ; set eax to 1st entry of p3 table
+    or eax, 0b11
+    mov [p4_table + 0], eax ; set 1st entry of p4 table to 1st entry of p3 table
     
-    mov word [VGA_PTR +  0], 0x0246 ; F
-    mov word [VGA_PTR +  2], 0x026c ; l
-    mov word [VGA_PTR +  4], 0x026f ; o
-    mov word [VGA_PTR +  6], 0x0277 ; w
-    mov word [VGA_PTR +  8], 0x0265 ; e
-    mov word [VGA_PTR + 10], 0x0272 ; r
-    mov word [VGA_PTR + 12], 0x024f ; O
-    mov word [VGA_PTR + 14], 0x0253 ; S
-    mov word [VGA_PTR + 16], 0x0220 ;
-    mov word [VGA_PTR + 18], 0x0262 ; b
-    mov word [VGA_PTR + 20], 0x026f ; o
-    mov word [VGA_PTR + 22], 0x026f ; o
-    mov word [VGA_PTR + 24], 0x0274 ; t
+    ; Point entry #1 of page 3 to entry #1 of page 2
+    mov eax, p2_table + 0 ; set eax to 1st entry of p3 table
+    or eax, 0b11
+    mov [p4_table + 0], eax ; set 1st entry of p4 table to 1st entry of p3 table
+    
+    mov ecx, 0
+    .map_p2_table_loop:
+        
+        mov eax, 0x200000 ; 2mib (page size) TODO 4kib page size. 
+                          ; TODO #2 isn't that 512 pages * 2mb = only 1gb?
+        mul ecx ; multiply by counter
+        or eax, 0b10000011 ; first 1 is huge page bit
+        
+        mov [p2_table + ecx * 8], eax
+        
+        inc ecx
+        cmp ecx, 512
+        jne .map_p2_table_loop
+    
+    ; Set page table address to cr3
+    mov eax, p4_table ; cr3 must be mov'd to from another register
+    mov cr3, eax 
+    
+    ; Enable Physical Address Extension
+    mov eax, cr4
+    or eax, 1 << 5
+    mov cr4, eax
+    
+    ; Set long mode bit
+    mov ecx, 0xc0000080
+    rdmsr
+    or eax, 1 << 8
+    wrmsr
+    
+    ; Enable paging
+    mov eax, cr0
+    or eax, 1 << 31
+    mov cr0, eax
     
     ret
     
+; Jumps to long mode
+; Thanks to https://intermezzos.github.io/book/jumping-headlong-into-long-mode.html
+; Copied from there
+setup_long_mode:
+
+    ; Update selector registers
+    mov ax, gdt64.data ; load gdt data into ax
+    mov ss, ax ; set stack segment register
+    mov ds, ax ; set data segment register
+    mov es, ax ; set extra segment register
+
 ; Check booted by multiboot correctly
 ; Thanks to Phill Opp: https://os.phil-opp.com/entering-longmode/
 check_multiboot:
@@ -229,8 +249,84 @@ check_long_mode:
     
 section .bss
 
- ; Stack grows the other way
+align 4096
+p4_table:
+    resb 4096
+p3_table:
+    resb 4096
+p2_table:
+    resb 4096
 
+; Stack grows the other way
 stack_bottom:
     resb 1024
 stack_top:
+
+section .rodata
+
+; Copied from intermezzos: https://intermezzos.github.io/book/setting-up-a-gdt.html
+gdt64:
+    dq 0
+
+.code: equ $ - gdt64 ; offset from gdt
+    dq (1<<44) | (1<<47) | (1<<41) | (1<<43) | (1<<53)
+
+.data: equ $ - gdt64 ; offset from gdt
+    dq (1<<44) | (1<<47) | (1<<41)
+
+.pointer:
+    dw .pointer - gdt64 - 1 ; length
+    dq gdt64 ; address of table
+
+section .text
+bits 64
+long_mode_start:
+
+    ; Clear screen and print "FlowerOS boot"
+    call clear_screen
+    call boot_print
+
+    hlt
+
+; Clear the screen
+; Formula: memory loc = VGA_PTR + (y * columns + x) * 2
+;          => L = VGA_PTR + (y * 80 + x) * 2
+; *note, the times 2 is because vga buffer is 16bit
+; Columns = 80 because the res is 80x25
+clear_screen:
+    mov rcx, ((RESOLUTION_Y - 1) * (RESOLUTION_X - 1) + (RESOLUTION_X - 1)) * 2 ; bottom right pixel (without video buffer pointer offset)
+    
+    .clear_screen_loop:
+
+        mov rax, rcx ; copy the current count into eax
+        add rax, VGA_PTR ; add the vga memory map pointer to it
+
+        mov qword [rax], 0 ; move 2 black (null) characters into the buffer
+
+        sub rcx, 8 ; minus 8 from rcx because 16 bit vga buffer = 2 bytes and we're clearing four pixels at once
+
+        cmp rcx, 0 - 6 ; if rax *was* 2 (bottom right pixel mod 4 = 2), it will wrap around
+        jne .clear_screen_loop ; since it was't zero, jump to the top of the loop
+
+    mov rcx, 0 ; clear rcx
+    
+    ret
+
+; Print out "FlowerOS boot"
+boot_print:
+    
+    mov word [VGA_PTR +  0], 0x0246 ; F
+    mov word [VGA_PTR +  2], 0x026c ; l
+    mov word [VGA_PTR +  4], 0x026f ; o
+    mov word [VGA_PTR +  6], 0x0277 ; w
+    mov word [VGA_PTR +  8], 0x0265 ; e
+    mov word [VGA_PTR + 10], 0x0272 ; r
+    mov word [VGA_PTR + 12], 0x024f ; O
+    mov word [VGA_PTR + 14], 0x0253 ; S
+    mov word [VGA_PTR + 16], 0x0220 ;
+    mov word [VGA_PTR + 18], 0x0262 ; b
+    mov word [VGA_PTR + 20], 0x026f ; o
+    mov word [VGA_PTR + 22], 0x026f ; o
+    mov word [VGA_PTR + 24], 0x0274 ; t
+    
+    ret
