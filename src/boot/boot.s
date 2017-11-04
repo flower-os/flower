@@ -43,8 +43,24 @@ clear_screen:
     ret
     
 ; Print out error message if boot failed
-; Args: length (word), ascii character codes (words)
+; Args: length (word), ascii character codes for hex error code (words)
 ; Note: use push word! Otherwise it will push extra 16bit of 0s
+;
+; Example:
+; push word 'd'
+; push word 'e'
+; push word 'a'
+; push word 'd'
+; push word 'b'
+; push word 'e'
+; push word 'e'
+; push word 'f'
+; push word 8
+; call error_print
+; 
+; Outputs:
+; FlowerOS boot failed, code 0xdeadbeef
+;
 error_print:
     
     mov word [VGA_PTR +  0], 0x0446 ; F
@@ -56,12 +72,12 @@ error_print:
     mov word [VGA_PTR + 12], 0x044f ; O
     mov word [VGA_PTR + 14], 0x0453 ; S
     mov word [VGA_PTR + 16], 0x0420 ;
-    mov word [VGA_PTR + 18], 0x0442 ; B
+    mov word [VGA_PTR + 18], 0x0462 ; b
     mov word [VGA_PTR + 20], 0x046f ; o
     mov word [VGA_PTR + 22], 0x046f ; o
     mov word [VGA_PTR + 24], 0x0474 ; t
     mov word [VGA_PTR + 26], 0x0420 ;
-    mov word [VGA_PTR + 28], 0x0446 ; F
+    mov word [VGA_PTR + 28], 0x0466 ; f
     mov word [VGA_PTR + 30], 0x0461 ; a
     mov word [VGA_PTR + 32], 0x0469 ; i
     mov word [VGA_PTR + 34], 0x046c ; l
@@ -74,6 +90,8 @@ error_print:
     mov word [VGA_PTR + 48], 0x0464 ; d
     mov word [VGA_PTR + 50], 0x0465 ; e
     mov word [VGA_PTR + 52], 0x0420 ;
+    mov word [VGA_PTR + 54], 0x0430 ; 0
+    mov word [VGA_PTR + 56], 0x0478 ; x
     
     pop edx ; pop return pointer
     mov ecx, 0 ; clear ecx
@@ -87,7 +105,7 @@ error_print:
         ; ebx = vga memory location
         mov ebx, ecx ; set bx to char offset
         shl ebx, 1 ; shift for * 2 because two bits per char
-        add ebx, VGA_PTR + 52; vga memory pointer offset = previous chars + 1 char
+        add ebx, VGA_PTR + 56; vga memory pointer offset = previous chars + 1 char
         
         mov [ebx], ax ; set char to code
         
