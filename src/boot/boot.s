@@ -44,8 +44,7 @@ clear_screen:
     
 ; Print out error message if boot failed
 ; Args: length (word), ascii character codes (words)
-; Note to self: USE push word! Otherwise it will push extra 16bit of 0s
-; Does not return, and needs to be called with jmp
+; Note: use push word! Otherwise it will push extra 16bit of 0s
 error_print:
     
     mov word [VGA_PTR +  0], 0x0446 ; F
@@ -76,6 +75,7 @@ error_print:
     mov word [VGA_PTR + 50], 0x0465 ; e
     mov word [VGA_PTR + 52], 0x0420 ;
     
+    pop edx ; pop return pointer
     mov ecx, 0 ; clear ecx
     pop cx ; (word) length of char array
     
@@ -96,7 +96,8 @@ error_print:
         cmp ecx, 0
         jne print_error_code_loop ; if cx is not 0, loop
     
-    hlt
+    push edx ; push return pointer
+    ret
     
 
 ; Print out "FlowerOS boot"
