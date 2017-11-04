@@ -21,13 +21,13 @@ start:
     call check_long_mode ; Check if long mode supported
     
     ; Transition to long mode
-    call setup_paging ; set up paging
-    lgdt [gdt64.pointer] ; load gdt
-    call setup_long_mode ; set up registers
+    call setup_paging ; Set up paging
+    lgdt [gdt64.pointer] ; Load gdt
+    call setup_selector_registers ; Set up selector registers
     
-    ; Mr Crusher, set heading for Gee dee tee mark sixty four, warp 6
-    ; Engage!
     jmp gdt64.code:long_mode_start
+    
+    hlt ; should never happen
     
 ; Print out error message if boot failed
 ; Args: length (word), ascii character codes for hex error code (words)
@@ -117,7 +117,7 @@ setup_paging:
     ; Point entry #1 of page 3 to entry #1 of page 2
     mov eax, p2_table + 0 ; set eax to 1st entry of p3 table
     or eax, 0b11
-    mov [p4_table + 0], eax ; set 1st entry of p4 table to 1st entry of p3 table
+    mov [p3_table + 0], eax ; set 1st entry of p4 table to 1st entry of p3 table
     
     mov ecx, 0
     .map_p2_table_loop:
@@ -150,21 +150,23 @@ setup_paging:
     
     ; Enable paging
     mov eax, cr0
-    or eax, 1 << 31
+    or eax, (1 << 31)
     mov cr0, eax
-    
+
     ret
     
-; Jumps to long mode
+; Sets up long mode registers
 ; Thanks to https://intermezzos.github.io/book/jumping-headlong-into-long-mode.html
 ; Copied from there
-setup_long_mode:
-
+setup_selector_registers:
+    
     ; Update selector registers
-    mov ax, gdt64.data ; load gdt data into ax
+    mov ax, gdt64.data ; load gdt data location into ax
     mov ss, ax ; set stack segment register
     mov ds, ax ; set data segment register
     mov es, ax ; set extra segment register
+    
+    ret
 
 ; Check booted by multiboot correctly
 ; Thanks to Phill Opp: https://os.phil-opp.com/entering-longmode/
@@ -281,7 +283,15 @@ gdt64:
 section .text
 bits 64
 long_mode_start:
-
+    
+    ; Set all data segment registers to 0
+    mov ax, 0
+    mov ss, ax
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+    
     ; Clear screen and print "FlowerOS boot"
     call clear_screen
     call boot_print
