@@ -59,16 +59,16 @@ debug-makedirs:
 
 ## Normal files
 
-multiboot_header.o: src/boot/multiboot_header.s
-	nasm -f elf64 src/boot/multiboot_header.s -o build/release/boot/multiboot_header.o
+multiboot_header.o: src/boot/multiboot_header.asm
+	nasm -f elf64 src/boot/multiboot_header.asm -o build/release/boot/multiboot_header.o
 
-boot.o: src/boot/boot.s
-	nasm -f elf64 src/boot/boot.s -o build/release/boot/boot.o
+boot.o: src/boot/boot.asm
+	nasm -f elf64 src/boot/boot.asm -o build/release/boot/boot.o
 
 ## Files with debug symbols
 
-debug-multiboot_header.o: src/boot/multiboot_header.s
-	nasm -f elf64 -F dwarf -g src/boot/multiboot_header.s -o build/debug/boot/multiboot_header.o
+debug-multiboot_header.o: src/boot/multiboot_header.asm
+	nasm -f elf64 -F dwarf -g src/boot/multiboot_header.asm -o build/debug/boot/multiboot_header.o
 
-debug-boot.o: src/boot/boot.s
-	nasm -f elf64 -F dwarf -g src/boot/boot.s -o build/debug/boot/boot.o  
+debug-boot.o: src/boot/boot.asm
+	nasm -f elf64 -F dwarf -g src/boot/boot.asm -o build/debug/boot/boot.o  
