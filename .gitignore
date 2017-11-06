@@ -4,4 +4,3 @@ src/rust/Cargo.lock
 .idea/
 build/
 flower.iml
-isofiles/
