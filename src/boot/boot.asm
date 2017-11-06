@@ -12,18 +12,22 @@ bits 32
 
 start:
     
-    ; Setup stack
-    mov esp, stack_top
-    
     ; Checks
-    call check_multiboot ; Check if booted correctly
-    call check_cpuid  ; Check if cpuid supported
-    call check_long_mode ; Check if long mode supported
+    ;call check_multiboot ; Check if booted correctly
+    ;call check_cpuid  ; Check if cpuid supported
+    ;call check_long_mode ; Check if long mode supported
     
     ; Transition to long mode
+    
     call setup_paging ; Set up paging
+    
     lgdt [gdt64.pointer] ; Load gdt
-    call setup_selector_registers ; Set up selector registers
+        
+    ; Update selector registers
+    mov ax, gdt64.data ; load gdt data location into ax
+    mov ss, ax ; set stack segment register
+    mov ds, ax ; set data segment register
+    mov es, ax ; set extra segment register
     
     jmp gdt64.code:long_mode_start
     
@@ -154,19 +158,6 @@ setup_paging:
     mov cr0, eax
 
     ret
-    
-; Sets up long mode registers
-; Thanks to https://intermezzos.github.io/book/jumping-headlong-into-long-mode.html
-; Copied from there
-setup_selector_registers:
-    
-    ; Update selector registers
-    mov ax, gdt64.data ; load gdt data location into ax
-    mov ss, ax ; set stack segment register
-    mov ds, ax ; set data segment register
-    mov es, ax ; set extra segment register
-    
-    ret
 
 ; Check booted by multiboot correctly
 ; Thanks to Phill Opp: https://os.phil-opp.com/entering-longmode/
@@ -250,7 +241,6 @@ check_long_mode:
     hlt
     
 section .bss
-
 align 4096
 p4_table:
     resb 4096
@@ -261,7 +251,7 @@ p2_table:
 
 ; Stack grows the other way
 stack_bottom:
-    resb 1024
+    resb 4096
 stack_top:
 
 section .rodata
@@ -269,15 +259,12 @@ section .rodata
 ; Copied from intermezzos: https://intermezzos.github.io/book/setting-up-a-gdt.html
 gdt64:
     dq 0
-
 .code: equ $ - gdt64 ; offset from gdt
     dq (1<<44) | (1<<47) | (1<<41) | (1<<43) | (1<<53)
-
 .data: equ $ - gdt64 ; offset from gdt
     dq (1<<44) | (1<<47) | (1<<41)
-
 .pointer:
-    dw .pointer - gdt64 - 1 ; length
+    dw $ - gdt64 - 1 ; length
     dq gdt64 ; address of table
 
 section .text
@@ -292,10 +279,12 @@ long_mode_start:
     mov fs, ax
     mov gs, ax
     
-    ; Clear screen and print "FlowerOS boot"
+    ; Setup stack
+    mov esp, stack_top
+    
     call clear_screen
     call boot_print
-
+    
     hlt
 
 ; Clear the screen
@@ -304,21 +293,21 @@ long_mode_start:
 ; *note, the times 2 is because vga buffer is 16bit
 ; Columns = 80 because the res is 80x25
 clear_screen:
-    mov rcx, ((RESOLUTION_Y - 1) * (RESOLUTION_X - 1) + (RESOLUTION_X - 1)) * 2 ; bottom right pixel (without video buffer pointer offset)
+    mov ecx, ((RESOLUTION_Y * RESOLUTION_X) + RESOLUTION_X) * 2 ; bottom right pixel (without video buffer pointer offset)
     
     .clear_screen_loop:
 
-        mov rax, rcx ; copy the current count into eax
-        add rax, VGA_PTR ; add the vga memory map pointer to it
+        mov eax, ecx ; copy the current count into eax
+        add eax, VGA_PTR ; add the vga memory map pointer to it
 
-        mov qword [rax], 0 ; move 2 black (null) characters into the buffer
+        mov dword [eax], 0 ; move 2 black (null) characters into the buffer
 
-        sub rcx, 8 ; minus 8 from rcx because 16 bit vga buffer = 2 bytes and we're clearing four pixels at once
+        sub ecx, 4 ; minus 4 from ecx because 16 bit vga buffer = 2 bytes and we're clearing two pixels at once
 
-        cmp rcx, 0 - 6 ; if rax *was* 2 (bottom right pixel mod 4 = 2), it will wrap around
+        cmp ecx, 0 - 4 ; if eax *was* 0, it will wrap around
         jne .clear_screen_loop ; since it was't zero, jump to the top of the loop
 
-    mov rcx, 0 ; clear rcx
+    mov ecx, 0 ; clear ecx
     
     ret
 
@@ -333,7 +322,7 @@ boot_print:
     mov word [VGA_PTR + 10], 0x0272 ; r
     mov word [VGA_PTR + 12], 0x024f ; O
     mov word [VGA_PTR + 14], 0x0253 ; S
-    mov word [VGA_PTR + 16], 0x0220 ;
+    mov word [VGA_PTR + 16], 0x0220 ;  
     mov word [VGA_PTR + 18], 0x0262 ; b
     mov word [VGA_PTR + 20], 0x026f ; o
     mov word [VGA_PTR + 22], 0x026f ; o
