@@ -126,8 +126,7 @@ setup_paging:
     mov ecx, 0
     .map_p2_table_loop:
         
-        mov eax, 0x200000 ; 2mib (page size) TODO 4kib page size. 
-                          ; TODO #2 isn't that 512 pages * 2mb = only 1gb?
+        mov eax, 0x200000 ; 2mib (page size) TODO 4kib page size?
         mul ecx ; multiply by counter
         or eax, 0b10000011 ; first 1 is huge page bit
         
