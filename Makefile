@@ -1,8 +1,8 @@
 asm_dir := src/asm
 
-nasm_flags := --f elf64
+nasm_flags := -f elf64
 out_dir := build/release
-debug: out_dir = build/debug 
+debug: out_dir = build/debug
 debug: nasm_flags = -f elf64 -F dwarf -g
 
 linker_script := src/linker.ld
@@ -25,7 +25,7 @@ $(iso): $(kernel) $(grub_cfg)
 
 run: $(iso)
 	qemu-system-x86_64 -cdrom $(iso)
-	
+
 debug: $(iso)
 	qemu-system-x86_64 -cdrom $(iso) -s
 
@@ -42,11 +42,11 @@ makedirs:
 	mkdir -p $(out_dir)
 	mkdir -p $(out_dir)/isofiles
 	mkdir -p $(out_dir)/isofiles/boot/grub
-	mkdir -p $(out_dir)/boot 
+	mkdir -p $(out_dir)/boot
 
 # Compile kernel.bin
-$(kernel): $(asm_object_files) $(linker_script)
-	@ld -n -T $(linker_script) -o $(kernel) $(asm_object_files)
+$(kernel): $(asm_obj_files) $(linker_script)
+	@ld -n -T $(linker_script) -o $(kernel) $(asm_obj_files)
 	
 # Compile asm files
 $(out_dir)/%.o: $(asm_dir)/%.asm makedirs
