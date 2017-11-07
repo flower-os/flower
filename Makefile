@@ -1,4 +1,4 @@
-asm_dir := src/asm
+asm_dir := src/boot
 
 nasm_flags := -f elf64
 out_dir := build/release
