@@ -13,9 +13,9 @@ bits 32
 start:
     
     ; Checks
-    ;call check_multiboot ; Check if booted correctly
-    ;call check_cpuid  ; Check if cpuid supported
-    ;call check_long_mode ; Check if long mode supported
+    call check_multiboot ; Check if booted correctly
+    call check_cpuid  ; Check if cpuid supported
+    call check_long_mode ; Check if long mode supported
     
     ; Transition to long mode
     
