@@ -1,74 +1,53 @@
+asm_dir := src/asm
+
+nasm_flags := --f elf64
+out_dir := build/release
+debug: out_dir = build/debug 
+debug: nasm_flags = -f elf64 -F dwarf -g
+
+linker_script := src/linker.ld
+grub_cfg := src/grub.cfg
+
+asm_source_files := $(wildcard $(asm_dir)/*.asm)
+asm_obj_files := $(patsubst $(asm_dir)/%.asm, $(out_dir)/%.o, $(asm_source_files))
+
+kernel := $(out_dir)/kernel.bin
+iso := $(out_dir)/flower.iso
+
 default: iso
 
-.PHONY: clean run
+.PHONY: clean run debug
 
-# Intended-to-be-run configurations
+$(iso): $(kernel) $(grub_cfg)
+	cp $(grub_cfg) $(out_dir)/isofiles/boot/grub/
+	cp $(kernel) $(out_dir)/isofiles/boot/
+	grub-mkrescue -o $(out_dir)/flower.iso $(out_dir)/isofiles
 
-## Normal run
+run: $(iso)
+	qemu-system-x86_64 -cdrom $(iso)
+	
+debug: $(iso)
+	qemu-system-x86_64 -cdrom $(iso) -s
 
-iso: build src/grub.cfg
-	cp src/grub.cfg build/release/isofiles/boot/grub/
-	cp build/release/kernel.bin build/release/isofiles/boot/
-	grub-mkrescue -o build/release/flower.iso build/release/isofiles
-    
-build: makedirs multiboot_header.o boot.o src/linker.ld
-	ld -n -o build/release/kernel.bin -T src/linker.ld build/release/boot/multiboot_header.o build/release/boot/boot.o
+# Run in qemu and wait for gdb connection
+debug-wait: $(iso)
+	qemu-system-x86_64 -cdrom $(iso) -s -S
 
-run: iso
-	qemu-system-x86_64 -cdrom build/release/flower.iso
-
-## Debug run
-
-debug-iso: debug-build src/grub.cfg
-	cp src/grub.cfg build/debug/isofiles/boot/grub/
-	cp build/debug/kernel.bin build/debug/isofiles/boot/
-	grub-mkrescue -o build/debug/flower.iso build/debug/isofiles
-
-debug-build: debug-makedirs debug-multiboot_header.o debug-boot.o src/linker.ld
-	ld -n -o build/debug/kernel.bin -T src/linker.ld build/debug/boot/multiboot_header.o build/debug/boot/boot.o
-
-debug: debug-iso
-	qemu-system-x86_64 -cdrom build/debug/flower.iso -s
-
-debug-wait: debug-iso
-	qemu-system-x86_64 -cdrom build/debug/flower.iso -s -S
-
-# Util configurations
-
-## General
+# Clean build dir
 clean:
 	rm -rf build
-	rm -rf isofiles
-	rm -rf debug-isofiles
 
-## Normal files
+# Make build directories
 makedirs:
-	mkdir -p build/release/isofiles
-	mkdir -p build/release/isofiles/boot/grub
-	mkdir -p build/release
-	mkdir -p build/release/boot 
+	mkdir -p $(out_dir)
+	mkdir -p $(out_dir)/isofiles
+	mkdir -p $(out_dir)/isofiles/boot/grub
+	mkdir -p $(out_dir)/boot 
 
-## Debug
-debug-makedirs:
-	mkdir -p build/debug/isofiles
-	mkdir -p build/debug/isofiles/boot/grub
-	mkdir -p build/debug
-	mkdir -p build/debug/boot 
-
-# File configurations
-
-## Normal files
-
-multiboot_header.o: src/boot/multiboot_header.asm
-	nasm -f elf64 src/boot/multiboot_header.asm -o build/release/boot/multiboot_header.o
-
-boot.o: src/boot/boot.asm
-	nasm -f elf64 src/boot/boot.asm -o build/release/boot/boot.o
-
-## Files with debug symbols
-
-debug-multiboot_header.o: src/boot/multiboot_header.asm
-	nasm -f elf64 -F dwarf -g src/boot/multiboot_header.asm -o build/debug/boot/multiboot_header.o
-
-debug-boot.o: src/boot/boot.asm
-	nasm -f elf64 -F dwarf -g src/boot/boot.asm -o build/debug/boot/boot.o  
+# Compile kernel.bin
+$(kernel): $(asm_object_files) $(linker_script)
+	@ld -n -T $(linker_script) -o $(kernel) $(asm_object_files)
+	
+# Compile asm files
+$(out_dir)/%.o: $(asm_dir)/%.asm makedirs
+	@nasm $(nasm_flags) $< -o $@	
