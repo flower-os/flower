@@ -17,6 +17,7 @@ out_dir = $(build_containing_dir)/$(build_type)
 asm_dir := kernel/src/asm
 rust_crate_dir := kernel
 rust_kernel := $(out_dir)/libflower_kernel.a
+target := x86_64-unknown-flower-none
 asm_source_files := $(wildcard $(asm_dir)/*.asm)
 asm_obj_files = $(patsubst $(asm_dir)/%.asm,  $(out_dir)/%.o, $(asm_source_files))
 
@@ -47,8 +48,8 @@ makedirs:
 # Compile rust
 $(rust_kernel): $(rust_crate_dir)/Cargo.toml
 	@cd $(rust_crate_dir) && \
-      xargo build --target x86_64-unknown-flower-gnu $(xargo_flags)
-	@mv $(rust_crate_dir)/target/x86_64-unknown-flower-gnu/$(build_type)/libflower_kernel.a $(rust_kernel)
+      xargo build --target $(target) $(xargo_flags)
+	@mv $(rust_crate_dir)/target/$(target)/$(build_type)/libflower_kernel.a $(rust_kernel)
 
 # Compile kernel.bin
 $(out_dir)/kernel.bin: $(asm_obj_files) $(linker_script) $(rust_kernel)
