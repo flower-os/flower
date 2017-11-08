@@ -1,0 +1,15 @@
+[package]
+name = "flower"
+version = "0.1.0"
+authors = ["Restioson <restiosondev@gmail.com>", "gegy1000 <gegy1000@gmail.com>"]
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+
+[profile.release]
+panic = "abort"
+
+[build]
+target-dir = "../../build/target"
