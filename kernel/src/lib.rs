@@ -3,6 +3,8 @@
 #![feature(asm)]
 #![feature(lang_items)]
 
+extern crate rlibc;
+
 mod lang;
 
 use core::ptr::write_volatile;

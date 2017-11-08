@@ -10,4 +10,4 @@ crate-type = ["staticlib"]
 panic = "abort"
 
 [dependencies]
-
+rlibc = "^1.0"

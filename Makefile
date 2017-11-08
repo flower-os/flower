@@ -52,7 +52,7 @@ $(rust_kernel): $(rust_crate_dir)/Cargo.toml
 
 # Compile kernel.bin
 $(out_dir)/kernel.bin: $(asm_obj_files) $(linker_script) $(rust_kernel)
-	@ld -n -T $(linker_script) -o $(kernel) $(asm_obj_files) $(rust_kernel)
+	@ld -n -T $(linker_script) -o $(kernel) $(asm_obj_files) $(rust_kernel) --gc-sections
     
 # Compile asm files
 $(out_dir)/%.o: $(asm_dir)/%.asm makedirs
