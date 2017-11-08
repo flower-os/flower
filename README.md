@@ -7,7 +7,7 @@
 You'll need to install `nasm`, `ld`, `qemu` (to run in virtual machine),
 `grub`, and `make`.
 
-You can build it with `make build`, make the iso with `make iso`, and
+You can make the iso with `make iso`, and
 launch qemu and run it with `make run`.
 
 ## Thanks
