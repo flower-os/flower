@@ -39,7 +39,7 @@ fn boot_print() {
 
     for (index, char) in b"Flower kernel boot".iter().enumerate() {
         unsafe {
-            write_volatile(vga_ptr.offset(index as isize), 0x0200u16 + *char as u16)
+            write_volatile(vga_ptr.offset(index as isize), 0x0200u16 | *char as u16)
         }
     }
 
