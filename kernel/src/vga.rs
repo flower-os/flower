@@ -15,6 +15,7 @@ pub static WRITER: Mutex<VgaWriter> = Mutex::new(VgaWriter::new(
 /// Interface to VGA, allowing write
 pub struct VgaWriter {
     column_position: usize,
+    row_position: usize,
     color: VgaColor,
     buffer: Unique<VgaBuffer>,
 }
@@ -23,6 +24,7 @@ impl VgaWriter {
     const fn new(color: VgaColor) -> Self {
         VgaWriter {
             column_position: 0,
+            row_position: 0,
             color: color,
             buffer: unsafe { Unique::new_unchecked(0xb8000 as *mut _) },
         }
@@ -35,7 +37,7 @@ impl VgaWriter {
                 if self.column_position >= RESOLUTION_X {
                     self.new_line();
                 }
-                let row = RESOLUTION_Y - 1;
+                let row = self.row_position;
                 let column = self.column_position;
                 let char_color = self.color;
                 self.buffer()[row][column].write(VgaChar {
@@ -58,9 +60,14 @@ impl VgaWriter {
     }
 
     fn new_line(&mut self) {
-        self.buffer().rotate(1); // Rotate 1 (shift elements left 1)
-        self.clear_row(RESOLUTION_Y - 1);
         self.column_position = 0;
+        self.row_position += 1;
+        if self.row_position >= RESOLUTION_Y {
+            self.row_position = 0;
+        }
+
+        let row = self.row_position;
+        self.clear_row(row);
     }
 
     // TODO clear last row only?

@@ -20,7 +20,10 @@ use vga::Color;
 #[no_mangle]
 pub extern fn kmain() -> ! {
     vga::WRITER.lock().fill_screen(Color::Black);
-    vga::WRITER.lock().write_str("Flower kernel boot");
+    vga::WRITER.lock().write_str("Flower kernel boot\n");
+    vga::WRITER.lock().write_str("1\n");
+    vga::WRITER.lock().write_str("2\n");
+    vga::WRITER.lock().write_str("3\n");
 
     unsafe { asm!("hlt"); }
     loop {}
