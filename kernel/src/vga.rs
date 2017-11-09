@@ -40,7 +40,7 @@ impl VgaWriter {
                 let char_color = self.color;
                 self.buffer()[row][column].write(VgaChar {
                     color: char_color,
-                    character: character,
+                    character: character as u8,
                 });
                 self.column_position += 1;
             }
@@ -116,15 +116,15 @@ impl DerefMut for VgaBuffer {
 #[derive(Copy, Clone)]
 #[repr(C)]
 struct VgaChar {
+    pub character: u8,
     pub color: VgaColor,
-    pub character: char,
 }
 
 impl VgaChar {
     fn new(color: VgaColor, character: char) -> Self {
         VgaChar {
             color: color,
-            character: character
+            character: character as u8
         }
     }
 }
