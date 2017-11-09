@@ -58,12 +58,9 @@ impl VgaWriter {
     }
 
     fn new_line(&mut self) {
-        if self.column_position < RESOLUTION_Y - 1 {
-            self.column_position += 1
-        } else {
-            self.buffer().rotate(1); // Rotate 1 (shift elements left 1)
-            self.clear_row(RESOLUTION_Y - 1);
-        }
+        self.buffer().rotate(1); // Rotate 1 (shift elements left 1)
+        self.clear_row(RESOLUTION_Y - 1);
+        self.column_position = 0;
     }
 
     // TODO clear last row only?
