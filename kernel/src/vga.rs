@@ -60,11 +60,13 @@ impl VgaWriter {
     }
 
     fn new_line(&mut self) {
-        self.column_position = 0;
-        self.row_position += 1;
-        if self.row_position >= RESOLUTION_Y {
-            self.row_position = 0;
+        if self.row_position >= RESOLUTION_Y - 1 {
+            self.buffer().rotate(1); // Rotate 1, push all text up
+        } else {
+            self.row_position += 1;
         }
+
+        self.column_position = 0;
 
         let row = self.row_position;
         self.clear_row(row);
