@@ -2,10 +2,14 @@
 
 #![feature(asm)]
 #![feature(lang_items)]
+#![feature(const_fn)]
+#![feature(const_unique_new)]
+#![feature(unique)]
 
 extern crate rlibc;
 
 mod lang;
+mod vga;
 
 use core::ptr::write_volatile;
 
