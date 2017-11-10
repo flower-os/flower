@@ -83,19 +83,14 @@ impl VgaWriter {
 
     /// Fills the screen 4 pixels at a time
     pub fn fill_screen(&mut self, fill_colour: Color) {
-        let blank_char = (fill_colour as u64) << 8;
+        let blank = VgaChar {
+            color: VgaColor::new(Color::Black, fill_colour),
+            character: ' ' as u8,
+        };
 
-        let blank = (blank_char << 48) |
-            (blank_char << 32) |
-            (blank_char << 16) |
-            blank_char;
-
-        let vga_ptr = VGA_ADDR as *mut u64;
-
-        // Clear pixels four at a time
-        for four_pixels in 0..((RESOLUTION_Y * RESOLUTION_X) / 4) as isize {
-            unsafe {
-                write_volatile(vga_ptr.offset(four_pixels), blank);
+        for row in 0..RESOLUTION_Y {
+            for column in 0..RESOLUTION_X {
+                self.buffer()[row][column].write(blank);
             }
         }
     }
