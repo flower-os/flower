@@ -1,9 +1,8 @@
 use volatile::Volatile;
 use spin::Mutex;
-use core::ptr::{Unique, write_volatile};
+use core::ptr::Unique;
 use core::ops::{Deref, DerefMut};
 
-const VGA_ADDR: usize = 0xb8000;
 const RESOLUTION_X: usize = 80;
 const RESOLUTION_Y: usize = 25;
 
@@ -30,7 +29,16 @@ impl VgaWriter {
         }
     }
 
+    pub fn set_color(&mut self, color: VgaColor) {
+        self.color = color;
+    }
+
     pub fn write_char(&mut self, character: char) {
+        let color = self.color;
+        self.write_char_colored(character, color);
+    }
+
+    pub fn write_char_colored(&mut self, character: char, char_color: VgaColor) {
         match character {
             '\n' => self.new_line(),
             character => {
@@ -39,7 +47,6 @@ impl VgaWriter {
                 }
                 let row = self.row_position;
                 let column = self.column_position;
-                let char_color = self.color;
                 self.buffer()[row][column].write(VgaChar {
                     color: char_color,
                     character: character as u8,
@@ -47,6 +54,18 @@ impl VgaWriter {
                 self.column_position += 1;
             }
         }
+    }
+
+    pub fn set_char(&mut self, row: usize, column: usize, character: char) {
+        let char_color = self.color;
+        self.set_char_colored(row, column, character, char_color);
+    }
+
+    pub fn set_char_colored(&mut self, row: usize, column: usize, character: char, char_color: VgaColor) {
+        self.buffer()[row][column].write(VgaChar {
+            color: char_color,
+            character: character as u8,
+        });
     }
 
     pub fn write_str(&mut self, str: &str) {
@@ -161,4 +180,20 @@ pub enum Color {
     Pink = 13,
     Yellow = 14,
     White = 15,
+}
+
+macro_rules! print {
+    ($($arg:tt)*) => ({
+        $crate::vga::print(format_args!($($arg)*));
+    });
+}
+
+macro_rules! println {
+    ($fmt:expr) => (print!(concat!($fmt, "\n")));
+    ($fmt:expr, $($arg:tt)*) => (print!(concat!($fmt, "\n"), $($arg)*));
+}
+
+pub fn stdout_print(args: fmt::Arguments) {
+    use core::fmt::Write;
+    WRITER.lock().write_fmt(args).unwrap();
 }
