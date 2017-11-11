@@ -5,6 +5,7 @@
 %define RESOLUTION_Y 25
 %define VGA_PTR 0xb8000
 
+extern kmain
 global start
 
 section .text
@@ -281,50 +282,6 @@ long_mode_start:
     ; Setup stack
     mov esp, stack_top
     
-    call clear_screen
-    call boot_print
+    call kmain
     
     hlt
-
-; Clear the screen
-; Formula: memory loc = VGA_PTR + (y * columns + x) * 2
-;          => L = VGA_PTR + (y * 80 + x) * 2
-; *note, the times 2 is because vga buffer is 16bit
-; Columns = 80 because the res is 80x25
-clear_screen:
-    mov ecx, ((RESOLUTION_Y * RESOLUTION_X) + RESOLUTION_X) * 2 ; bottom right pixel (without video buffer pointer offset)
-    
-    .clear_screen_loop:
-
-        mov eax, ecx ; copy the current count into eax
-        add eax, VGA_PTR ; add the vga memory map pointer to it
-
-        mov dword [eax], 0 ; move 2 black (null) characters into the buffer
-
-        sub ecx, 4 ; minus 4 from ecx because 16 bit vga buffer = 2 bytes and we're clearing two pixels at once
-
-        cmp ecx, 0 - 4 ; if eax *was* 0, it will wrap around
-        jne .clear_screen_loop ; since it was't zero, jump to the top of the loop
-
-    mov ecx, 0 ; clear ecx
-    
-    ret
-
-; Print out "FlowerOS boot"
-boot_print:
-    
-    mov word [VGA_PTR +  0], 0x0246 ; F
-    mov word [VGA_PTR +  2], 0x026c ; l
-    mov word [VGA_PTR +  4], 0x026f ; o
-    mov word [VGA_PTR +  6], 0x0277 ; w
-    mov word [VGA_PTR +  8], 0x0265 ; e
-    mov word [VGA_PTR + 10], 0x0272 ; r
-    mov word [VGA_PTR + 12], 0x024f ; O
-    mov word [VGA_PTR + 14], 0x0253 ; S
-    mov word [VGA_PTR + 16], 0x0220 ;  
-    mov word [VGA_PTR + 18], 0x0262 ; b
-    mov word [VGA_PTR + 20], 0x026f ; o
-    mov word [VGA_PTR + 22], 0x026f ; o
-    mov word [VGA_PTR + 24], 0x0274 ; t
-    
-    ret

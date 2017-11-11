@@ -1,6 +1,7 @@
 /target/
 **/*.rs.bk
-src/rust/Cargo.lock
+kernel/Cargo.lock
 .idea/
 *.iml
 build/
+kernel/target/
