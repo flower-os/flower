@@ -13,7 +13,6 @@ extern crate rlibc;
 extern crate volatile;
 extern crate spin;
 
-
 mod lang;
 mod vga;
 

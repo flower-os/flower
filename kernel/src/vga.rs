@@ -1,11 +1,10 @@
 use volatile::Volatile;
 use spin::Mutex;
-use core::ptr::{Unique, write_volatile};
+use core::ptr::Unique;
 use core::ops::{Index, IndexMut};
 use core::cmp;
 use core::convert::{TryFrom, TryInto};
 
-const VGA_ADDR: usize = 0xb8000;
 const RESOLUTION_X: usize = 80;
 const RESOLUTION_Y: usize = 25;
 
@@ -17,6 +16,7 @@ pub static WRITER: Mutex<VgaWriter> = Mutex::new(VgaWriter::new(
 /// Interface to VGA, allowing write
 pub struct VgaWriter {
     column_position: usize,
+    row_position: usize,
     color: VgaColor,
     buffer: Unique<VgaBuffer>,
 }
@@ -30,30 +30,53 @@ impl VgaWriter {
     const fn new(color: VgaColor) -> Self {
         VgaWriter {
             column_position: 0,
+            row_position: 0,
             color: color,
             buffer: unsafe { Unique::new_unchecked(0xb8000 as *mut _) },
         }
     }
 
+    pub fn set_color(&mut self, color: VgaColor) {
+        self.color = color;
+    }
+
     pub fn write_char(&mut self, character: char) -> Result<(), VgaWriteError> {
+        let color = self.color;
+        self.write_char_colored(character, color);
+
+        Ok(())
+    }
+
+    pub fn write_char_colored(&mut self, character: char, char_color: VgaColor) -> Result<(), VgaWriteError> {
         match character {
             '\n' => self.new_line()?,
             character => {
                 if self.column_position >= RESOLUTION_X {
                     self.new_line()?;
                 }
-                let row = RESOLUTION_Y - 1;
+                let row = self.row_position;
                 let column = self.column_position;
-                let char_color = self.color;
                 self.buffer()[row][column].write(VgaChar {
                     color: char_color,
-                    character: character,
+                    character: character as u8,
                 });
                 self.column_position += 1;
             }
         }
 
         Ok(())
+    }
+
+    pub fn set_char(&mut self, row: usize, column: usize, character: char) {
+        let char_color = self.color;
+        self.set_char_colored(row, column, character, char_color);
+    }
+
+    pub fn set_char_colored(&mut self, row: usize, column: usize, character: char, char_color: VgaColor) {
+        self.buffer()[row][column].write(VgaChar {
+            color: char_color,
+            character: character as u8,
+        });
     }
 
     pub fn write_str(&mut self, str: &str) -> Result<(), VgaWriteError> {
@@ -92,19 +115,14 @@ impl VgaWriter {
 
     /// Fills the screen 4 pixels at a time
     pub fn fill_screen(&mut self, fill_colour: Color) {
-        let blank_char = (fill_colour as u64) << 8;
+        let blank = VgaChar {
+            color: VgaColor::new(Color::Black, fill_colour),
+            character: ' ' as u8,
+        };
 
-        let blank = (blank_char << 48) |
-            (blank_char << 32) |
-            (blank_char << 16) |
-            blank_char;
-
-        let vga_ptr = VGA_ADDR as *mut u64;
-
-        // Clear pixels four at a time
-        for four_pixels in 0..((RESOLUTION_Y * RESOLUTION_X) / 4) as isize {
-            unsafe {
-                write_volatile(vga_ptr.offset(four_pixels), blank);
+        for row in 0..RESOLUTION_Y {
+            for column in 0..RESOLUTION_X {
+                self.buffer()[row][column].write(blank);
             }
         }
     }
@@ -158,15 +176,15 @@ impl IndexMut<usize> for VgaBuffer {
 #[derive(Copy, Clone)]
 #[repr(C)]
 struct VgaChar {
+    pub character: u8,
     pub color: VgaColor,
-    pub character: char,
 }
 
 impl VgaChar {
     fn new(color: VgaColor, character: char) -> Self {
         VgaChar {
             color: color,
-            character: character
+            character: character as u8
         }
     }
 }
@@ -211,6 +229,22 @@ pub enum Color {
     Pink = 13,
     Yellow = 14,
     White = 15,
+}
+
+macro_rules! print {
+    ($($arg:tt)*) => ({
+        $crate::vga::print(format_args!($($arg)*));
+    });
+}
+
+macro_rules! println {
+    ($fmt:expr) => (print!(concat!($fmt, "\n")));
+    ($fmt:expr, $($arg:tt)*) => (print!(concat!($fmt, "\n"), $($arg)*));
+}
+
+pub fn stdout_print(args: fmt::Arguments) {
+    use core::fmt::Write;
+    WRITER.lock().write_fmt(args).unwrap();
 }
 
 /// Struct to show that the color code was out of bounds for [TryFrom] for [Color]
