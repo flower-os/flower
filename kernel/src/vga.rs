@@ -2,7 +2,6 @@ use volatile::Volatile;
 use spin::Mutex;
 use core::{cmp, fmt};
 use core::ptr::Unique;
-use core::ops::{Index, IndexMut};
 use core::convert::{TryFrom, TryInto};
 
 const RESOLUTION_X: usize = 80;
@@ -57,7 +56,7 @@ impl VgaWriter {
                 }
                 let row = self.row_position;
                 let column = self.column_position;
-                self.buffer()[row][column].write(VgaChar {
+                self.buffer().set_char(row, column, VgaChar {
                     color: char_color,
                     character: character as u8,
                 });
@@ -74,7 +73,7 @@ impl VgaWriter {
     }
 
     pub fn set_char_colored(&mut self, row: usize, column: usize, character: char, char_color: VgaColor) {
-        self.buffer()[row][column].write(VgaChar {
+        self.buffer().set_char(row, column, VgaChar {
             color: char_color,
             character: character as u8,
         });
@@ -120,7 +119,7 @@ impl VgaWriter {
 
         for row in 0..RESOLUTION_Y {
             for column in 0..RESOLUTION_X {
-                self.buffer()[row][column].write(blank);
+                self.buffer().set_char(row, column, blank);
             }
         }
     }
@@ -135,7 +134,16 @@ impl fmt::Write for VgaWriter {
 /// Represents the complete VGA character buffer, containing a 2D array of VgaChar
 struct VgaBuffer([[Volatile<VgaChar>; RESOLUTION_X]; RESOLUTION_Y]);
 
+#[allow(dead_code)]
 impl VgaBuffer {
+    pub fn set_char(&mut self, x: usize, y: usize, value: VgaChar) {
+        self.0[x][y].write(value);
+    }
+
+    pub fn get_char(&mut self, x: usize, y: usize) -> VgaChar {
+        self.0[x][y].read()
+    }
+
     pub fn scroll_down(&mut self, amount: usize, background_color: Color) {
         let amount = cmp::min(amount, RESOLUTION_Y);
 
@@ -151,7 +159,7 @@ impl VgaBuffer {
         }
     }
 
-    fn clear_row(&mut self, y: usize, color: Color) {
+    pub fn clear_row(&mut self, y: usize, color: Color) {
         let blank = VgaChar::new(
             VgaColor::new(Color::Black, color),
             ' '
@@ -163,19 +171,6 @@ impl VgaBuffer {
     }
 }
 
-impl Index<usize> for VgaBuffer {
-    type Output = [Volatile<VgaChar>; RESOLUTION_X];
-
-    fn index(&self, i: usize) -> &Self::Output {
-        &self.0[i]
-    }
-}
-
-impl IndexMut<usize> for VgaBuffer {
-    fn index_mut(&mut self, i: usize) -> &mut Self::Output {
-        &mut self.0[i]
-    }
-}
 /// Represents a full character in the VGA buffer, with a character code, foreground and background
 #[derive(Copy, Clone)]
 #[repr(C)]
