@@ -1,8 +1,8 @@
 use volatile::Volatile;
 use spin::Mutex;
+use core::{cmp, fmt};
 use core::ptr::Unique;
 use core::ops::{Index, IndexMut};
-use core::cmp;
 use core::convert::{TryFrom, TryInto};
 
 const RESOLUTION_X: usize = 80;
@@ -26,6 +26,7 @@ pub enum VgaWriteError {
     ColorCodeOutOfBounds(u8)
 }
 
+#[allow(dead_code)]
 impl VgaWriter {
     const fn new(color: VgaColor) -> Self {
         VgaWriter {
@@ -42,7 +43,7 @@ impl VgaWriter {
 
     pub fn write_char(&mut self, character: char) -> Result<(), VgaWriteError> {
         let color = self.color;
-        self.write_char_colored(character, color);
+        self.write_char_colored(character, color)?;
 
         Ok(())
     }
@@ -110,9 +111,6 @@ impl VgaWriter {
         Ok(())
     }
 
-    // TODO clear last row only?
-
-
     /// Fills the screen 4 pixels at a time
     pub fn fill_screen(&mut self, fill_colour: Color) {
         let blank = VgaChar {
@@ -125,6 +123,12 @@ impl VgaWriter {
                 self.buffer()[row][column].write(blank);
             }
         }
+    }
+}
+
+impl fmt::Write for VgaWriter {
+    fn write_str(&mut self, str: &str) -> Result<(), fmt::Error> {
+        self.write_str(str).map_err(|_| fmt::Error)
     }
 }
 
@@ -233,7 +237,7 @@ pub enum Color {
 
 macro_rules! print {
     ($($arg:tt)*) => ({
-        $crate::vga::print(format_args!($($arg)*));
+        $crate::vga::stdout_print(format_args!($($arg)*));
     });
 }
 

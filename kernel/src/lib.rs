@@ -14,6 +14,7 @@ extern crate volatile;
 extern crate spin;
 
 mod lang;
+#[macro_use]
 mod vga;
 
 use vga::Color;
@@ -22,7 +23,7 @@ use vga::Color;
 #[no_mangle]
 pub extern fn kmain() -> ! {
     vga::WRITER.lock().fill_screen(Color::Black);
-    vga::WRITER.lock().write_str("Flower kernel boot\n").expect("Writing to VGA failed");
+    println!("Flower kernel boot\n");
 
     unsafe { asm!("hlt"); }
     loop {}
