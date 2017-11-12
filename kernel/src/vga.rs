@@ -93,9 +93,10 @@ impl VgaWriter {
 
     fn new_line(&mut self) -> Result<(), VgaWriteError> {
         let color = self.color;
+        self.column_position = 0;
 
-        if self.column_position < RESOLUTION_Y - 1 {
-            self.column_position += 1
+        if self.row_position < RESOLUTION_Y - 1 {
+            self.row_position += 1
         } else {
             // Scroll down 1
             self.buffer().scroll_down(1,
