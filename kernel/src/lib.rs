@@ -17,13 +17,17 @@ mod lang;
 mod io;
 #[macro_use]
 mod vga;
+mod keyboard;
+mod keymap;
 mod ps2_io;
 mod ps2;
 
 use vga::Color;
+use keyboard::{Keyboard, Ps2Keyboard};
 
 const FLOWER: &'static str = include_str!("flower.txt");
 const FLOWER_STEM: &'static str = include_str!("flower_stem.txt");
+
 
 /// Kernel main function
 #[no_mangle]
@@ -46,6 +50,20 @@ pub extern fn kmain() -> ! {
     vga::WRITER.lock().set_color(
         vga::VgaColor::new(Color::White, Color::Black)
     );
+
+    let keyboard_device = &mut ps2::PS2.lock().devices[0];
+    let mut keyboard = Ps2Keyboard::new(keyboard_device);
+    println!("Enabling keyboard");
+    if keyboard.enable() {
+        println!("Successfully enabled keyboard");
+        loop {
+            if let Some(char) = keyboard.read_char() {
+                print!("{}", char);
+            }
+        }
+    } else {
+        println!("Failed to enable keyboard");
+    }
 
     halt()
 }
