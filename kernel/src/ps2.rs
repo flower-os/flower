@@ -180,7 +180,6 @@ impl Ps2Device {
         if self.get_flag(DEVICE_SECOND_FLAG) {
             command(ControllerCommand::WriteInputPort2);
         }
-        println!("ps2c: sending device command {}", cmd as u8);
         let mut result = Some(RESEND);
         for _i in 0..4 {
             if result != Some(RESEND) && result != None {
@@ -189,19 +188,15 @@ impl Ps2Device {
             write_data(cmd as u8);
             result = read_data();
         }
-        println!("ps2c: command returned {}", result.unwrap_or(0));
         result
     }
 
     /// Sends a command for this PS2 device with data and returns a result
     pub fn command_data(&mut self, cmd: DeviceCommand, data: u8) -> Option<u8> {
         let result = self.command(cmd);
-        println!("ps2c: sending device command data {}", data);
         if is_ok(result) {
             write_data(data as u8);
-            let response = read_data();
-            println!("ps2c: data command returned {}", response.unwrap_or(0));
-            response
+            read_data()
         } else {
             result
         }

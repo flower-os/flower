@@ -17,22 +17,17 @@ pub fn command(cmd: ControllerCommand) {
 /// Sends a controller command with data and without a return
 pub fn command_data(cmd: ControllerCommand, data: u8) {
     command_raw(cmd as u8);
-    println!("ps2c: sending controller command data {}", data);
     write(&DATA_PORT, data);
 }
 
 /// Sends a controller command with a return
 pub fn command_ret(cmd: ControllerReturnCommand) -> Option<u8> {
     command_raw(cmd as u8);
-    // TODO Inline
-    let read = read(&DATA_PORT);
-    println!("ps2c: received {} from command", read.unwrap_or(0));
-    read
+    read(&DATA_PORT)
 }
 
 /// Sends a raw controller command code
 fn command_raw(cmd: u8) {
-    println!("ps2c: sending controller command {}", cmd);
     write(&COMMAND_PORT, cmd);
 }
 
