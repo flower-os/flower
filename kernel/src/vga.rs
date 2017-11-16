@@ -25,7 +25,7 @@ pub enum VgaWriteError {
     ColorCodeOutOfBounds(u8)
 }
 
-#[allow(dead_code)]
+#[allow(dead_code)] // For api -- may be used later
 impl VgaWriter {
     const fn new(color: VgaColor) -> Self {
         VgaWriter {
@@ -99,8 +99,13 @@ impl VgaWriter {
     }
 
     pub fn write_str(&mut self, str: &str) -> Result<(), VgaWriteError> {
-        for char in str.chars() {
-            self.write_char(char)?;
+        let color = self.color;
+        self.write_str_colored(str, color)
+    }
+
+    pub fn write_str_colored(&mut self, str: &str, color: VgaColor) -> Result<(), VgaWriteError> {
+       for char in str.chars() {
+            self.write_char_colored(char, color)?;
         }
 
         Ok(())
@@ -117,7 +122,8 @@ impl VgaWriter {
             self.row_position += 1
         } else {
             // Scroll down 1
-            let background_color = self.background_color()?;
+            let background_color = self.background_color()
+                .map_err(|e| VgaWriteError::ColorCodeOutOfBounds(e.0))?;
             self.buffer().scroll_down(1, background_color);
         }
 
@@ -139,12 +145,13 @@ impl VgaWriter {
     }
 
     /// Gets the background color for this writer
-    fn background_color(&mut self) -> Result<Color, VgaWriteError> {
-        Ok((self.color
-            .try_into()
-            .map_err(|e: ColorCodeOutOfBounds|
-                VgaWriteError::ColorCodeOutOfBounds(e.0)
-            )?: (Color, Color)).0)
+    pub fn background_color(&mut self) -> Result<Color, ColorCodeOutOfBounds> {
+        Ok((self.color.try_into()?: (Color, Color)).0)
+    }
+
+    /// Gets the foreground color for this writer
+    pub fn foreground_color(&mut self) -> Result<Color, ColorCodeOutOfBounds> {
+        Ok((self.color.try_into()?: (Color, Color)).1)
     }
 
     /// Gets current pos of cursor
