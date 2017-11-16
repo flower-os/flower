@@ -8,11 +8,14 @@
 #![feature(slice_rotate)]
 #![feature(try_from)]
 #![feature(type_ascription)]
+#![feature(abi_x86_interrupt)]
 
 extern crate rlibc;
 extern crate volatile;
 extern crate spin;
 extern crate x86_64;
+#[macro_use]
+extern crate lazy_static;
 
 #[macro_use]
 extern crate bitflags;
@@ -26,7 +29,7 @@ mod util;
 #[macro_use]
 mod drivers;
 mod io;
-mod interrupt;
+mod interrupts;
 
 use drivers::ps2;
 use drivers::keyboard::{Keyboard, KeyEventType, Ps2Keyboard};
@@ -64,6 +67,8 @@ pub extern fn kmain() -> ! {
         "Flower kernel boot!\n-------------------\n\n",
         VgaColor::new(Color::Green, Color::Black)
     ).expect("Color code should be valid");
+
+    interrupts::init();
 
     let mut controller = ps2::CONTROLLER.lock();
     match controller.initialize() {
