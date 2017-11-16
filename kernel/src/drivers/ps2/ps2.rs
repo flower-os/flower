@@ -1,4 +1,4 @@
-use drivers::ps2_io::*;
+use drivers::ps2::io::*;
 use spin::Mutex;
 
 pub const DEVICE_ENABLED_FLAG: u8 = 1 << 0;
