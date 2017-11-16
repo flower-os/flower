@@ -251,7 +251,7 @@ p2_table:
 
 ; Stack grows the other way
 stack_bottom:
-    resb 4096
+    resb 1024 * 16 ; 16 KiB
 stack_top:
 
 section .rodata
