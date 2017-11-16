@@ -274,7 +274,7 @@ pub enum Color {
 
 macro_rules! print {
     ($($arg:tt)*) => ({
-        $crate::vga::stdout_print(format_args!($($arg)*));
+        $crate::drivers::vga::stdout_print(format_args!($($arg)*));
     });
 }
 
