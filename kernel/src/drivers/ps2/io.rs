@@ -1,8 +1,8 @@
 use io::IOPort;
 
-static DATA_PORT: IOPort = IOPort::new(0x60);
-static STATUS_PORT: IOPort = IOPort::new(0x64);
-static COMMAND_PORT: IOPort = IOPort::new(0x64);
+static DATA_PORT: IOPort = unsafe { IOPort::new(0x60) };
+static STATUS_PORT: IOPort = unsafe { IOPort::new(0x64) };
+static COMMAND_PORT: IOPort = unsafe { IOPort::new(0x64) };
 
 pub const WAIT_TIMEOUT: u16 = 1000;
 

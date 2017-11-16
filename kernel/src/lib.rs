@@ -12,6 +12,7 @@
 extern crate rlibc;
 extern crate volatile;
 extern crate spin;
+extern crate x86_64;
 
 mod lang;
 mod io;
