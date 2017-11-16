@@ -50,6 +50,7 @@ impl VgaWriter {
     pub fn write_char_colored(&mut self, character: char, char_color: VgaColor) -> Result<(), VgaWriteError> {
         match character {
             '\n' => self.new_line()?,
+            '\x08' => self.backspace_char()?,
             character => {
                 if self.column_position >= RESOLUTION_X {
                     self.new_line()?;
@@ -63,6 +64,24 @@ impl VgaWriter {
                 self.column_position += 1;
             }
         }
+
+        Ok(())
+    }
+
+    /// Backspaces one char
+    pub fn backspace_char(&mut self) -> Result<(), VgaWriteError> {
+        if self.column_position > 0 {
+            self.column_position -= 1;
+        } else if self.row_position > 0 {
+            self.column_position = RESOLUTION_X - 1;
+            self.row_position -= 1;
+        } else {
+            return Ok(());
+        }
+
+        let row = self.row_position;
+        let column = self.column_position;
+        self.set_char(row, column, ' ');
 
         Ok(())
     }
@@ -92,20 +111,14 @@ impl VgaWriter {
     }
 
     fn new_line(&mut self) -> Result<(), VgaWriteError> {
-        let color = self.color;
         self.column_position = 0;
 
         if self.row_position < RESOLUTION_Y - 1 {
             self.row_position += 1
         } else {
             // Scroll down 1
-            self.buffer().scroll_down(1,
-                                      (color
-                                          .try_into()
-                                          .map_err(|e: ColorCodeOutOfBounds|
-                                              VgaWriteError::ColorCodeOutOfBounds(e.0)
-                                          )?: (Color, Color)).1
-            );
+            let background_color = self.get_background_color()?;
+            self.buffer().scroll_down(1, background_color);
         }
 
         Ok(())
@@ -123,6 +136,15 @@ impl VgaWriter {
                 self.buffer().set_char(row, column, blank);
             }
         }
+    }
+
+    /// Gets the background color for this writer
+    fn get_background_color(&mut self) -> Result<Color, VgaWriteError> {
+        Ok((self.color
+            .try_into()
+            .map_err(|e: ColorCodeOutOfBounds|
+                VgaWriteError::ColorCodeOutOfBounds(e.0)
+            )?: (Color, Color)).0)
     }
 }
 
@@ -156,7 +178,7 @@ impl VgaBuffer {
 
         // Clear rows up to the amount
         for row in 0..amount {
-            self.clear_row(row, background_color);
+            self.clear_row((RESOLUTION_Y - 1) - row, background_color);
         }
     }
 
@@ -200,11 +222,12 @@ impl VgaColor {
     }
 }
 
+/// Converts VgaColor to tuple of `(background, foreground)`
 impl TryFrom<VgaColor> for (Color, Color) {
     type Error = ColorCodeOutOfBounds;
 
     fn try_from(color: VgaColor) -> Result<Self, Self::Error> {
-        Ok((Color::try_from(color.0 >> 4)?, Color::try_from(color.0 & 0x00FF)?))
+        Ok((Color::try_from((color.0 & 0xF0) >> 4)?, Color::try_from(color.0 & 0x0F)?))
     }
 }
 
@@ -251,7 +274,6 @@ pub fn stdout_print(args: fmt::Arguments) {
 pub struct ColorCodeOutOfBounds(u8);
 
 impl TryFrom<u8> for Color {
-
     /// The only type of error is out of bounds
     type Error = ColorCodeOutOfBounds;
 
