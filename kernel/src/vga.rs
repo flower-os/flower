@@ -111,7 +111,6 @@ impl VgaWriter {
     }
 
     fn new_line(&mut self) -> Result<(), VgaWriteError> {
-        let color = self.color;
         self.column_position = 0;
 
         if self.row_position < RESOLUTION_Y - 1 {
