@@ -14,8 +14,11 @@ extern crate volatile;
 extern crate spin;
 
 mod lang;
+mod io;
 #[macro_use]
 mod vga;
+mod ps2_io;
+mod ps2;
 
 use vga::Color;
 
@@ -24,7 +27,12 @@ use vga::Color;
 pub extern fn kmain() -> ! {
     vga::WRITER.lock().fill_screen(Color::Black);
     println!("Flower kernel boot");
+    ps2::PS2.lock().initialize();
 
-    unsafe { asm!("hlt"); }
-    loop {}
+    halt()
+}
+
+fn halt() -> ! {
+    unsafe { asm!("hlt") }
+    loop {} // Required to trick rust
 }
