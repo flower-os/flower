@@ -5,7 +5,7 @@
 ## Setup
 
 You will need:
- - [rustup](https://rustup.rs) and a nightly Rust build to compile;
+ - [rustup](https://rustup.rs) and a nightly Rust (if yours doesn't work, then update to latest) build to compile;
  - The `rust-src` component from rustup;
  - [Xargo](https://github.com/japaric/xargo);
  - [nasm](http://www.nasm.us/);
