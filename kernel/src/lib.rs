@@ -16,14 +16,12 @@ extern crate spin;
 mod lang;
 mod io;
 #[macro_use]
-mod vga;
-mod ps2_io;
-mod ps2;
+mod drivers;
 
-use vga::{VgaColor, Color};
+use drivers::vga::{self, VgaColor, Color};
 
-const FLOWER: &'static str = include_str!("flower.txt");
-const FLOWER_STEM: &'static str = include_str!("flower_stem.txt");
+const FLOWER: &'static str = include_str!("resources/art/flower.txt");
+const FLOWER_STEM: &'static str = include_str!("resources/art/flower_stem.txt");
 
 /// Kernel main function
 #[no_mangle]
@@ -55,7 +53,7 @@ pub extern fn kmain() -> ! {
          VgaColor::new(Color::Green, Color::Black)
     ).expect("Color code should be valid");
 
-    ps2::PS2.lock().initialize();
+    drivers::ps2::PS2.lock().initialize();
 
     halt()
 }
