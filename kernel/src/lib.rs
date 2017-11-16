@@ -22,12 +22,30 @@ mod ps2;
 
 use vga::Color;
 
+const FLOWER: &'static str = include_str!("flower.txt");
+const FLOWER_STEM: &'static str = include_str!("flower_stem.txt");
+
 /// Kernel main function
 #[no_mangle]
 pub extern fn kmain() -> ! {
     vga::WRITER.lock().fill_screen(Color::Black);
     println!("Flower kernel boot");
     ps2::PS2.lock().initialize();
+
+    // Print flower
+    vga::WRITER.lock().set_color(
+        vga::VgaColor::new(Color::LightBlue, Color::Black)
+    );
+    print!("{}", FLOWER);
+    vga::WRITER.lock().set_color(
+        vga::VgaColor::new(Color::Green, Color::Black)
+    );
+    print!("{}", FLOWER_STEM);
+
+    // Reset colors
+    vga::WRITER.lock().set_color(
+        vga::VgaColor::new(Color::White, Color::Black)
+    );
 
     halt()
 }
