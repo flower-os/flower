@@ -29,8 +29,6 @@ const FLOWER_STEM: &'static str = include_str!("flower_stem.txt");
 #[no_mangle]
 pub extern fn kmain() -> ! {
     vga::WRITER.lock().fill_screen(Color::Black);
-    println!("Flower kernel boot");
-    ps2::PS2.lock().initialize();
 
     // Print flower
     vga::WRITER.lock().set_color(
@@ -46,6 +44,16 @@ pub extern fn kmain() -> ! {
     vga::WRITER.lock().set_color(
         vga::VgaColor::new(Color::White, Color::Black)
     );
+
+    // Reset cursor position to (0, 0)
+    // It's hackish but it looks better
+    vga::WRITER.lock().set_cursor_pos((0, 0));
+
+
+    println!("Flower kernel boot");
+    ps2::PS2.lock().initialize();
+
+
 
     halt()
 }

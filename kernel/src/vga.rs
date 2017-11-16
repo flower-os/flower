@@ -117,7 +117,7 @@ impl VgaWriter {
             self.row_position += 1
         } else {
             // Scroll down 1
-            let background_color = self.get_background_color()?;
+            let background_color = self.background_color()?;
             self.buffer().scroll_down(1, background_color);
         }
 
@@ -139,12 +139,23 @@ impl VgaWriter {
     }
 
     /// Gets the background color for this writer
-    fn get_background_color(&mut self) -> Result<Color, VgaWriteError> {
+    fn background_color(&mut self) -> Result<Color, VgaWriteError> {
         Ok((self.color
             .try_into()
             .map_err(|e: ColorCodeOutOfBounds|
                 VgaWriteError::ColorCodeOutOfBounds(e.0)
             )?: (Color, Color)).0)
+    }
+
+    /// Gets current pos of cursor
+    pub fn cursor_pos(&self) -> (usize, usize) {
+        (self.row_position, self.column_position)
+    }
+
+    /// Sets the current pos of cursor
+    pub fn set_cursor_pos(&mut self, pos: (usize, usize)) {
+        self.row_position = pos.0;
+        self.column_position = pos.1;
     }
 }
 
