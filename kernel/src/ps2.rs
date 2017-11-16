@@ -126,6 +126,7 @@ impl Ps2Controller {
 }
 
 /// Returns if the given code is OK
+#[allow(dead_code)] // To be used by keyboard / mouse driver depending on PS/2
 pub fn is_ok(code: Option<u8>) -> bool {
     code == Some(ACK) || code == Some(SELF_TEST_PASSED)
 }
@@ -175,6 +176,7 @@ impl Ps2Device {
     }
 
     /// Sends a command for this PS2 device and returns result
+    #[allow(dead_code)] // Used by drivers depending on PS/2
     pub fn command(&mut self, cmd: DeviceCommand) -> Option<u8> {
         // If second PS2 port, send context switch command
         if self.get_flag(DEVICE_SECOND_FLAG) {
@@ -192,6 +194,7 @@ impl Ps2Device {
     }
 
     /// Sends a command for this PS2 device with data and returns a result
+    #[allow(dead_code)] // Used by drivers depending on PS/2
     pub fn command_data(&mut self, cmd: DeviceCommand, data: u8) -> Option<u8> {
         let result = self.command(cmd);
         if is_ok(result) {
