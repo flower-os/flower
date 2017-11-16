@@ -26,6 +26,7 @@ mod util;
 #[macro_use]
 mod drivers;
 mod io;
+mod interrupt;
 
 use drivers::ps2;
 use drivers::keyboard::{Keyboard, KeyEventType, Ps2Keyboard};
