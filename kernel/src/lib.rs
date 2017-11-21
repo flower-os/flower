@@ -27,9 +27,15 @@ mod util;
 mod drivers;
 mod io;
 
+use spin::Mutex;
+use drivers::vga::{self, VgaWriter, Color};
+use drivers::terminal::{self, TerminalColor};
+use drivers::terminal::text_area::{STDOUT, TextArea, AreaWriter};
 use drivers::ps2;
 use drivers::keyboard::{Keyboard, KeyEventType, Ps2Keyboard};
 use drivers::vga::{self, VgaColor, Color};
+
+pub static FLOWER_AREA: Mutex<AreaWriter<VgaWriter>> = Mutex::new(AreaWriter::new(32, 0, vga::RESOLUTION_X - 32, vga::RESOLUTION_Y, &terminal::WRITER));
 
 const FLOWER: &'static str = include_str!("resources/art/flower.txt");
 const FLOWER_STEM: &'static str = include_str!("resources/art/flower_stem.txt");
@@ -37,32 +43,25 @@ const FLOWER_STEM: &'static str = include_str!("resources/art/flower_stem.txt");
 /// Kernel main function
 #[no_mangle]
 pub extern fn kmain() -> ! {
-    vga::WRITER.lock().fill_screen(Color::Black);
+    terminal::WRITER.lock().fill_screen(Color::Black);
 
     // Print flower
-    vga::WRITER.lock().set_color(
-        VgaColor::new(Color::LightBlue, Color::Black)
-    );
-    print!("\n{}", FLOWER);
-    vga::WRITER.lock().set_color(
-        VgaColor::new(Color::Green, Color::Black)
-    );
-    print!("{}", FLOWER_STEM);
+    FLOWER_AREA.lock().set_color(TerminalColor::new(Color::LightBlue, Color::Black));
+    FLOWER_AREA.lock().write_string("\n");
+    FLOWER_AREA.lock().write_string(FLOWER);
+    FLOWER_AREA.lock().set_color(TerminalColor::new(Color::Green, Color::Black));
+    FLOWER_AREA.lock().write_string(FLOWER_STEM);
 
-    // Reset colors
-    vga::WRITER.lock().set_color(
-        VgaColor::new(Color::White, Color::Black)
-    );
-
-    // Reset cursor position to (0, 0)
-    // It's hackish but it looks better
-    vga::WRITER.lock().set_cursor_pos((0, 0));
+    STDOUT.lock().set_color(TerminalColor::new(Color::Green, Color::Black));
 
     // Print boot message
-    vga::WRITER.lock().write_str_colored(
-        "Flower kernel boot!\n-------------------\n\n",
-        VgaColor::new(Color::Green, Color::Black)
-    ).expect("Color code should be valid");
+    println!("Flower kernel boot!");
+    println!("-------------------");
+    println!();
+
+    // Reset colors
+    STDOUT.lock().set_color(TerminalColor::new(Color::White, Color::Black)
+    );
 
     let mut controller = ps2::CONTROLLER.lock();
     match controller.initialize() {
