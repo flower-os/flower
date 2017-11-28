@@ -1,10 +1,12 @@
 use volatile::Volatile;
 use core::cmp;
+use core::fmt;
+use core::convert::{From, TryFrom};
 use core::ptr::Unique;
-use core::convert::TryFrom;
 use core::result::Result;
 
-use drivers::terminal::{TerminalWriter, TerminalColor};
+use color::{Color, ColorCodeOutOfBounds};
+use drivers::terminal::{TerminalWriter, SizedTerminalWriter, Point, TerminalCharacter, TerminalColor};
 
 pub const RESOLUTION_X: usize = 80;
 pub const RESOLUTION_Y: usize = 25;
@@ -14,11 +16,16 @@ pub struct VgaWriter {
     buffer: Unique<VgaBuffer>,
 }
 
+impl fmt::Debug for VgaWriter {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "VgaWriter")
+    }
+}
+
 #[derive(Debug)]
 pub enum VgaWriteError {
 }
 
-#[allow(dead_code)] // For api -- may be used later
 impl VgaWriter {
     pub const fn new() -> Self {
         VgaWriter {
@@ -48,9 +55,15 @@ impl VgaWriter {
 impl TerminalWriter for VgaWriter {
     type Error = VgaWriteError;
 
-    fn set(&mut self, column: usize, row: usize, character: u8, color: TerminalColor) -> Result<(), VgaWriteError> {
-        self.buffer().set_char(column, row, VgaChar::new(VgaColor::new(color.foreground, color.background), character));
+    fn write(&mut self, char: TerminalCharacter) -> Result<(), Self::Error> {
+        self.buffer().set_char(0, 0, VgaChar::new(VgaColor::from(char.color), char.character as u8));
+        Ok(())
+    }
+}
 
+impl SizedTerminalWriter for VgaWriter {
+    fn set(&mut self, point: Point, char: TerminalCharacter) -> Result<(), Self::Error> {
+        self.buffer().set_char(point.x, point.y, VgaChar::new(VgaColor::from(char.color), char.character as u8));
         Ok(())
     }
 }
@@ -123,65 +136,18 @@ impl VgaColor {
     }
 }
 
-/// Converts VgaColor to tuple of `(background, foreground)`
+/// Converts a [TerminalColor] to a [VgaColor] to be displayed
+impl From<TerminalColor> for VgaColor {
+    fn from(color: TerminalColor) -> Self {
+        VgaColor::new(color.foreground, color.background)
+    }
+}
+
+/// Converts [VgaColor] to tuple of `(background, foreground)`
 impl TryFrom<VgaColor> for (Color, Color) {
     type Error = ColorCodeOutOfBounds;
 
     fn try_from(color: VgaColor) -> Result<Self, Self::Error> {
         Ok((Color::try_from((color.0 & 0xF0) >> 4)?, Color::try_from(color.0 & 0x0F)?))
-    }
-}
-
-/// Represents valid VGA colors
-#[allow(dead_code)] // dead variants for completeness
-#[derive(Copy, Clone)]
-#[repr(u8)]
-pub enum Color {
-    Black = 0,
-    Blue = 1,
-    Green = 2,
-    Cyan = 3,
-    Red = 4,
-    Magenta = 5,
-    Brown = 6,
-    LightGray = 7,
-    DarkGray = 8,
-    LightBlue = 9,
-    LightGreen = 10,
-    LightCyan = 11,
-    LightRed = 12,
-    Pink = 13,
-    Yellow = 14,
-    White = 15,
-}
-
-/// Struct to show that the color code was out of bounds for [TryFrom] for [Color]
-pub struct ColorCodeOutOfBounds(u8);
-
-impl TryFrom<u8> for Color {
-    /// The only type of error is out of bounds
-    type Error = ColorCodeOutOfBounds;
-
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        use Color::*;
-        match value {
-            0 => Ok(Black),
-            1 => Ok(Blue),
-            2 => Ok(Green),
-            3 => Ok(Cyan),
-            4 => Ok(Red),
-            5 => Ok(Magenta),
-            6 => Ok(Brown),
-            7 => Ok(LightGray),
-            8 => Ok(DarkGray),
-            9 => Ok(LightBlue),
-            10 => Ok(LightGreen),
-            11 => Ok(LightCyan),
-            12 => Ok(LightRed),
-            13 => Ok(Pink),
-            14 => Ok(Yellow),
-            15 => Ok(White),
-            code => Err(ColorCodeOutOfBounds(code))
-        }
     }
 }
