@@ -15,15 +15,16 @@ extern crate spin;
 
 mod lang;
 mod io;
+mod color;
 #[macro_use]
 mod drivers;
 
 use spin::Mutex;
-use drivers::vga::{self, VgaWriter, Color};
-use drivers::terminal::{self, TerminalColor};
-use drivers::terminal::text_area::{STDOUT, TextArea, AreaWriter};
+use drivers::vga::{self, VgaWriter};
+use color::Color;
+use drivers::terminal::{self, STDOUT, Terminal, TextArea, Point, TerminalColor, TerminalWriteError};
 
-pub static FLOWER_AREA: Mutex<AreaWriter<VgaWriter>> = Mutex::new(AreaWriter::new(32, 0, vga::RESOLUTION_X - 32, vga::RESOLUTION_Y, &terminal::WRITER));
+pub static FLOWER_AREA: Mutex<TextArea<VgaWriter>> = Mutex::new(TextArea::new(&terminal::WRITER, Point::new(32, 0), Point::new(vga::RESOLUTION_X - 32, vga::RESOLUTION_Y)));
 
 const FLOWER: &'static str = include_str!("resources/art/flower.txt");
 const FLOWER_STEM: &'static str = include_str!("resources/art/flower_stem.txt");
@@ -33,14 +34,10 @@ const FLOWER_STEM: &'static str = include_str!("resources/art/flower_stem.txt");
 pub extern fn kmain() -> ! {
     terminal::WRITER.lock().fill_screen(Color::Black);
 
-    // Print flower
-    FLOWER_AREA.lock().set_color(TerminalColor::new(Color::LightBlue, Color::Black));
-    FLOWER_AREA.lock().write_string("\n");
-    FLOWER_AREA.lock().write_string(FLOWER);
-    FLOWER_AREA.lock().set_color(TerminalColor::new(Color::Green, Color::Black));
-    FLOWER_AREA.lock().write_string(FLOWER_STEM);
+    print_flower().expect("Flower should be printed");
 
-    STDOUT.lock().set_color(TerminalColor::new(Color::Green, Color::Black));
+    STDOUT.lock().set_color(TerminalColor::new(Color::Green, Color::Black))
+        .expect("Color should be set");
 
     // Print boot message
     println!("Flower kernel boot!");
@@ -48,11 +45,23 @@ pub extern fn kmain() -> ! {
     println!("");
 
     // Reset colors
-    STDOUT.lock().set_color(TerminalColor::new(Color::White, Color::Black));
+    STDOUT.lock().set_color(TerminalColor::new(Color::White, Color::Black))
+        .expect("Color should be set");
 
     drivers::ps2::PS2.lock().initialize();
 
     halt()
+}
+
+fn print_flower() -> Result<(), TerminalWriteError<VgaWriter>> {
+    let mut area = FLOWER_AREA.lock();
+    area.set_color(TerminalColor::new(Color::LightBlue, Color::Black))?;
+    area.write_string("\n")?;
+    area.write_string(FLOWER)?;
+    area.set_color(TerminalColor::new(Color::Green, Color::Black))?;
+    area.write_string(FLOWER_STEM)?;
+
+    Ok(())
 }
 
 // TODO move somewhere else
