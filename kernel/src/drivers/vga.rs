@@ -175,12 +175,12 @@ impl fmt::Write for VgaWriter {
 /// Represents the complete VGA character buffer, containing a 2D array of VgaChar
 struct VgaBuffer([[Volatile<VgaChar>; RESOLUTION_X]; RESOLUTION_Y]);
 
-#[allow(dead_code)]
 impl VgaBuffer {
     pub fn set_char(&mut self, x: usize, y: usize, value: VgaChar) {
         self.0[x][y].write(value);
     }
 
+    #[allow(dead_code)] // Part of API
     pub fn get_char(&mut self, x: usize, y: usize) -> VgaChar {
         self.0[x][y].read()
     }

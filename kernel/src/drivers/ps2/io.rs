@@ -108,7 +108,7 @@ pub enum ControllerCommand {
 }
 
 /// Represents a PS2 controller command with a return value
-#[allow(dead_code)]
+#[allow(dead_code)] // Dead variants for completeness
 #[derive(Copy, Clone)]
 #[repr(u8)]
 pub enum ControllerReturnCommand {
@@ -120,7 +120,7 @@ pub enum ControllerReturnCommand {
 }
 
 /// Represents a PS2 device command opcode
-#[allow(dead_code)]
+#[allow(dead_code)] // Dead variants for completeness
 #[derive(Copy, Clone)]
 #[repr(u8)]
 pub enum DeviceCommand {

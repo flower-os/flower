@@ -241,7 +241,7 @@ impl Ps2Config {
     }
 }
 
-#[allow(dead_code)]
+#[allow(dead_code)] // Dead variants for completeness
 #[derive(Copy, Clone)]
 #[repr(u8)]
 pub enum ControllerConfigBit {
