@@ -38,6 +38,8 @@ run: $(iso)
 # Clean build dir
 clean:
 	@rm -rf build
+	@cd $(rust_crate_dir) && xargo clean
+
 
 # Make build directories
 makedirs:
