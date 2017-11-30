@@ -1,6 +1,6 @@
 use core::convert::TryFrom;
 
-/// Represents generic flower colors
+/// Represents generic flower colors, based off of VGA's color set
 #[allow(dead_code)] // dead variants for completeness
 #[derive(Debug, Copy, Clone)]
 #[repr(u8)]
