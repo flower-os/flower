@@ -19,11 +19,12 @@ mod util;
 mod io;
 mod color;
 #[macro_use]
+mod terminal;
 mod drivers;
 
 use drivers::vga::{self, VgaWriter};
 use color::Color;
-use drivers::terminal::{self, STDOUT, Terminal, TextArea, Point, TerminalColor, TerminalWriteError};
+use terminal::{STDOUT, Terminal, TextArea, Point, TerminalColor, TerminalWriteError};
 
 const FLOWER: &'static str = include_str!("resources/art/flower.txt");
 const FLOWER_STEM: &'static str = include_str!("resources/art/flower_stem.txt");

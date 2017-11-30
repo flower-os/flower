@@ -6,7 +6,7 @@ use core::result::Result;
 
 use util::{self, FromDiscriminator};
 use color::Color;
-use drivers::terminal::{TerminalWriter, SizedTerminalWriter, Point, TerminalCharacter, TerminalColor};
+use terminal::{TerminalWriter, SizedTerminalWriter, Point, TerminalCharacter, TerminalColor};
 
 pub const RESOLUTION_X: usize = 80;
 pub const RESOLUTION_Y: usize = 25;
