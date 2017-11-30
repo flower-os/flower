@@ -1,3 +1,5 @@
+//! Various utilities
+
 /// A macro to implement [FromDiscriminator] on an enum with explicit discriminators.
 /// Doesn't support generics or comments, but does support attributes, etc
 macro_rules! from_discriminator {
