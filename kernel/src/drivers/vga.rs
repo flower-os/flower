@@ -1,11 +1,11 @@
 use volatile::Volatile;
-use core::cmp;
-use core::fmt;
-use core::convert::{From, TryFrom};
+use core::{cmp, fmt};
+use core::convert::TryFrom;
 use core::ptr::Unique;
 use core::result::Result;
 
-use color::{Color, ColorCodeOutOfBounds};
+use util::{self, FromDiscriminator};
+use color::Color;
 use drivers::terminal::{TerminalWriter, SizedTerminalWriter, Point, TerminalCharacter, TerminalColor};
 
 pub const RESOLUTION_X: usize = 80;
@@ -145,9 +145,12 @@ impl From<TerminalColor> for VgaColor {
 
 /// Converts [VgaColor] to tuple of `(background, foreground)`
 impl TryFrom<VgaColor> for (Color, Color) {
-    type Error = ColorCodeOutOfBounds;
+    type Error = util::UnknownDiscriminator;
 
     fn try_from(color: VgaColor) -> Result<Self, Self::Error> {
-        Ok((Color::try_from((color.0 & 0xF0) >> 4)?, Color::try_from(color.0 & 0x0F)?))
+        Ok((
+            Color::from_discriminator(((color.0 & 0xF0) >> 4) as u64)?,
+            Color::from_discriminator((color.0 & 0x0F) as u64)?
+        ))
     }
 }

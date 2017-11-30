@@ -14,17 +14,16 @@ extern crate volatile;
 extern crate spin;
 
 mod lang;
+#[macro_use]
+mod util;
 mod io;
 mod color;
 #[macro_use]
 mod drivers;
 
-use spin::Mutex;
 use drivers::vga::{self, VgaWriter};
 use color::Color;
 use drivers::terminal::{self, STDOUT, Terminal, TextArea, Point, TerminalColor, TerminalWriteError};
-
-pub static FLOWER_AREA: Mutex<TextArea<VgaWriter>> = Mutex::new(TextArea::new(&terminal::WRITER, Point::new(32, 0), Point::new(vga::RESOLUTION_X - 32, vga::RESOLUTION_Y)));
 
 const FLOWER: &'static str = include_str!("resources/art/flower.txt");
 const FLOWER_STEM: &'static str = include_str!("resources/art/flower_stem.txt");
@@ -41,8 +40,7 @@ pub extern fn kmain() -> ! {
 
     // Print boot message
     println!("Flower kernel boot!");
-    println!("-------------------");
-    println!("");
+    println!("-------------------\n");
 
     // Reset colors
     STDOUT.lock().set_color(TerminalColor::new(Color::White, Color::Black))
@@ -54,7 +52,12 @@ pub extern fn kmain() -> ! {
 }
 
 fn print_flower() -> Result<(), TerminalWriteError<VgaWriter>> {
-    let mut area = FLOWER_AREA.lock();
+    let mut area = TextArea::new(
+        &terminal::WRITER,
+        Point::new(32, 0),
+        Point::new(vga::RESOLUTION_X - 32, vga::RESOLUTION_Y)
+    );
+
     area.set_color(TerminalColor::new(Color::LightBlue, Color::Black))?;
     area.write_string("\n")?;
     area.write_string(FLOWER)?;
