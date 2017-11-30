@@ -22,7 +22,7 @@ pub static STDOUT: Mutex<TextArea<VgaWriter>> = Mutex::new(TextArea::new(&WRITER
 
 macro_rules! print {
     ($($arg:tt)*) => ({
-        $crate::drivers::terminal::stdout_print(format_args!($($arg)*));
+        $crate::terminal::stdout_print(format_args!($($arg)*));
     });
 }
 

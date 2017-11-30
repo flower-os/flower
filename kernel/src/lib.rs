@@ -26,11 +26,12 @@ mod util;
 mod io;
 mod color;
 #[macro_use]
+mod terminal;
 mod drivers;
 
 use drivers::vga::{self, VgaWriter};
 use color::Color;
-use drivers::terminal::{self, STDOUT, Terminal, TextArea, Point, TerminalColor, TerminalWriteError};
+use terminal::{STDOUT, Terminal, TextArea, Point, TerminalColor, TerminalWriteError};
 use drivers::ps2;
 use drivers::keyboard::{Keyboard, KeyEventType, Ps2Keyboard};
 use drivers::vga::{self, VgaColor, Color};
