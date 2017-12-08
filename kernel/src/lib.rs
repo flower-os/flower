@@ -54,8 +54,7 @@ pub extern fn kmain() -> ! {
     println!("-------------------\n");
 
     // Reset colors
-    STDOUT.lock().set_color(TerminalColor::new(Color::White, Color::Black)
-    )
+    STDOUT.lock().set_color(TerminalColor::new(Color::White, Color::Black))
         .expect("Color should be set");
 
     let mut controller = ps2::CONTROLLER.lock();
