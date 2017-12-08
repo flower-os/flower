@@ -93,6 +93,7 @@ pub extern fn kmain() -> ! {
     } else {
         println!("kbd: enable unsuccessful");
     }
+    ps2::PS2.lock().initialize().expect("PS/2 should successfully initialize");
 
     unsafe { halt() }
 }
