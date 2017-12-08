@@ -16,13 +16,17 @@ extern crate x86_64;
 
 mod lang;
 mod io;
+mod keyboard;
+mod keymap;
 #[macro_use]
 mod drivers;
 
 use drivers::vga::{self, VgaColor, Color};
+use keyboard::{Keyboard, Ps2Keyboard};
 
 const FLOWER: &'static str = include_str!("resources/art/flower.txt");
 const FLOWER_STEM: &'static str = include_str!("resources/art/flower_stem.txt");
+
 
 /// Kernel main function
 #[no_mangle]
@@ -44,6 +48,7 @@ pub extern fn kmain() -> ! {
         VgaColor::new(Color::White, Color::Black)
     );
 
+
     // Reset cursor position to (0, 0)
     // It's hackish but it looks better
     vga::WRITER.lock().set_cursor_pos((0, 0));
@@ -55,6 +60,20 @@ pub extern fn kmain() -> ! {
     ).expect("Color code should be valid");
 
     drivers::ps2::PS2.lock().initialize();
+
+    let keyboard_device = &mut ps2::PS2.lock().devices[0];
+    let mut keyboard = Ps2Keyboard::new(keyboard_device);
+    println!("Enabling keyboard");
+    if keyboard.enable() {
+        println!("Successfully enabled keyboard");
+        loop {
+            if let Some(char) = keyboard.read_char() {
+                print!("{}", char);
+            }
+        }
+    } else {
+        println!("Failed to enable keyboard");
+    }
 
     halt()
 }
