@@ -15,11 +15,17 @@ extern crate spin;
 extern crate x86_64;
 
 mod lang;
-mod io;
 #[macro_use]
+mod util;
+mod io;
+mod color;
+#[macro_use]
+mod terminal;
 mod drivers;
 
-use drivers::vga::{self, VgaColor, Color};
+use drivers::vga::{self, VgaWriter};
+use color::Color;
+use terminal::{STDOUT, Terminal, TextArea, Point, TerminalColor, TerminalWriteError};
 
 const FLOWER: &'static str = include_str!("resources/art/flower.txt");
 const FLOWER_STEM: &'static str = include_str!("resources/art/flower_stem.txt");
@@ -27,36 +33,40 @@ const FLOWER_STEM: &'static str = include_str!("resources/art/flower_stem.txt");
 /// Kernel main function
 #[no_mangle]
 pub extern fn kmain() -> ! {
-    vga::WRITER.lock().fill_screen(Color::Black);
+    terminal::WRITER.lock().fill_screen(Color::Black);
 
-    // Print flower
-    vga::WRITER.lock().set_color(
-        VgaColor::new(Color::LightBlue, Color::Black)
-    );
-    print!("\n{}", FLOWER);
-    vga::WRITER.lock().set_color(
-        VgaColor::new(Color::Green, Color::Black)
-    );
-    print!("{}", FLOWER_STEM);
+    print_flower().expect("Flower should be printed");
 
-    // Reset colors
-    vga::WRITER.lock().set_color(
-        VgaColor::new(Color::White, Color::Black)
-    );
-
-    // Reset cursor position to (0, 0)
-    // It's hackish but it looks better
-    vga::WRITER.lock().set_cursor_pos((0, 0));
+    STDOUT.lock().set_color(TerminalColor::new(Color::Green, Color::Black))
+        .expect("Color should be set");
 
     // Print boot message
-    vga::WRITER.lock().write_str_colored(
-        "Flower kernel boot!\n-------------------\n\n",
-         VgaColor::new(Color::Green, Color::Black)
-    ).expect("Color code should be valid");
+    println!("Flower kernel boot!");
+    println!("-------------------\n");
+
+    // Reset colors
+    STDOUT.lock().set_color(TerminalColor::new(Color::White, Color::Black))
+        .expect("Color should be set");
 
     drivers::ps2::PS2.lock().initialize();
 
     halt()
+}
+
+fn print_flower() -> Result<(), TerminalWriteError<VgaWriter>> {
+    let mut area = TextArea::new(
+        &terminal::WRITER,
+        Point::new(32, 0),
+        Point::new(vga::RESOLUTION_X - 32, vga::RESOLUTION_Y)
+    );
+
+    area.set_color(TerminalColor::new(Color::LightBlue, Color::Black))?;
+    area.write_string("\n")?;
+    area.write_string(FLOWER)?;
+    area.set_color(TerminalColor::new(Color::Green, Color::Black))?;
+    area.write_string(FLOWER_STEM)?;
+
+    Ok(())
 }
 
 // TODO move somewhere else
