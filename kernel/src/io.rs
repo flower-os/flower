@@ -43,6 +43,36 @@ pub trait InOut {
 
 //TODO add type implementors.
 
+impl InOut for u8 {
+    unsafe fn port_in(port: u16) -> u8 {
+        inb(port)
+    }
+
+    unsafe fn port_out(port: u16, value: u8) {
+        outb(value, port);
+    }
+}
+
+impl InOut for u16 {
+    unsafe fn port_in(port: u16) -> u16 {
+        inw(port)
+    }
+
+    unsafe fn port_out(port: u16, value: u16) {
+        outw(port);
+    }
+}
+
+impl InOut for u32 {
+    unsafe fn port_in(port: u16) -> u32 {
+        inl(port)
+    }
+
+    unsafe fn port_out(port: u16, value: u32) {
+        outl(port, value);
+    } 
+}
+
 /// Represents a port to be accessed through in/out instructions. The values read and written are
 /// `InOut` in size.
 #[derive(Debug)]
