@@ -22,7 +22,6 @@ bitflags! {
 #[derive(Copy, Clone)]
 #[repr(u8)]
 pub enum ControllerCommand {
-    WriteConfig = 0x60,
     DisablePort2 = 0xA7,
     EnablePort2 = 0xA8,
     DisablePort1 = 0xAD,
@@ -40,6 +39,14 @@ pub enum ControllerReturnCommand {
     TestPort1 = 0xAB,
     TestPort2 = 0xA9,
     IdentifyDevice = 0xF2,
+}
+
+/// Represents a PS2 controller command with a data value
+#[allow(dead_code)] // Dead variants for completeness
+#[derive(Copy, Clone)]
+#[repr(u8)]
+pub enum ControllerDataCommand {
+    WriteConfig = 0x60,
 }
 
 /// Represents a PS2 device command opcode
@@ -67,7 +74,7 @@ pub fn command(cmd: ControllerCommand) -> Result<(), Ps2Error> {
 }
 
 /// Sends a controller command with data and without a return
-pub fn command_data(cmd: ControllerCommand, data: u8) -> Result<(), Ps2Error> {
+pub fn command_data(cmd: ControllerDataCommand, data: u8) -> Result<(), Ps2Error> {
     write(&COMMAND_PORT, cmd as u8)?;
     write(&DATA_PORT, data)?;
 

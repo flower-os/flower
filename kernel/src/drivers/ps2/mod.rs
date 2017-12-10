@@ -1,6 +1,6 @@
 pub mod io;
 
-use drivers::ps2::io::{ControllerCommand, ControllerReturnCommand, DeviceCommand, Ps2Error};
+use drivers::ps2::io::{ControllerCommand, ControllerReturnCommand, ControllerDataCommand, DeviceCommand, Ps2Error};
 use spin::Mutex;
 
 pub const RESEND: u8 = 0xFE;
@@ -78,7 +78,7 @@ impl Controller {
 
     /// Writes the given config to the PS2 controller
     pub fn write_config(&self, config: ConfigFlags) -> Result<(), Ps2Error> {
-        io::command_data(ControllerCommand::WriteConfig, config.bits())
+        io::command_data(ControllerDataCommand::WriteConfig, config.bits())
     }
 
     /// Reads the config from the PS2 controller
