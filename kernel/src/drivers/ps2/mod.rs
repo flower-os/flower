@@ -273,7 +273,7 @@ pub enum DeviceState {
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub enum DevicePort {
     /// The device is in the keyboard port
-    Keyboard(ControllerCommand::EnablePort1),
+    Keyboard,
     /// The device is in the mouse port
-    Mouse(ControllerCommand::EnablePort2),
+    Mouse,
 }
