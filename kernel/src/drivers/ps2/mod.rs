@@ -1,42 +1,44 @@
 pub mod io;
 
-use drivers::ps2::io::*;
+use drivers::ps2::io::{ControllerCommand, ControllerReturnCommand, DeviceCommand, Ps2Error};
 use spin::Mutex;
 
 pub const RESEND: u8 = 0xFE;
 pub const ACK: u8 = 0xFA;
 
 lazy_static! {
-    pub static ref PS2: Mutex<Ps2Controller> = Mutex::new(Ps2Controller::new());
+    pub static ref PS2: Mutex<Controller> = Mutex::new(Controller::new());
 }
 
 bitflags! {
-    pub struct Ps2ConfigFlags: u8 {
+    pub struct ConfigFlags: u8 {
+        /// If interrupts for Port 1 are enabled
         const PORT_INTERRUPT_1 = 1 << 0;
+        /// If interrupts for Port 2 are enabled
         const PORT_INTERRUPT_2 = 1 << 1;
-        const SYSTEM = 1 << 2;
-        const KEYBOARD_LOCK = 1 << 4;
-        const PORT_OUTPUT_FULL_2 = 1 << 5;
+        /// If the clock for Port 1 is disabled
+        const PORT_CLOCK_1 = 1 << 4;
+        /// If the clock for Port 2 is disabled
+        const PORT_CLOCK_2 = 1 << 5;
+        /// If the controller will transform scan set 2 to scan set 1
         const PORT_TRANSLATION_1 = 1 << 6;
     }
 }
 
 /// Represents the PS2 master controller
-pub struct Ps2Controller {
-    pub initialized: bool,
-    pub devices: [Ps2Device; 2],
-    config: Ps2ConfigFlags,
+pub struct Controller {
+    pub devices: (Device, Device),
+    config: ConfigFlags,
 }
 
-impl Ps2Controller {
+impl Controller {
     fn new() -> Self {
-        Ps2Controller {
-            initialized: false,
-            devices: [
-                Ps2Device::new(DevicePort::Keyboard),
-                Ps2Device::new(DevicePort::Mouse),
-            ],
-            config: Ps2ConfigFlags::empty(),
+        Controller {
+            devices: (
+                Device::new(DevicePort::Keyboard),
+                Device::new(DevicePort::Mouse),
+            ),
+            config: ConfigFlags::empty(),
         }
     }
 
@@ -44,14 +46,10 @@ impl Ps2Controller {
     pub fn initialize(&mut self) -> Result<(), Ps2Error> {
         println!("ps2c: initializing");
 
-        for device in self.devices.iter_mut() {
-            device.disable()?;
-            device.state = DeviceState::Unavailable;
-        }
-
+        self.prepare_devices()?;
         println!("ps2c: disabled devices");
 
-        flush_output()?;
+        io::flush_output()?;
 
         self.initialize_config()?;
 
@@ -59,43 +57,44 @@ impl Ps2Controller {
             println!("ps2c: controller test failed");
         }
 
-        // Test the first device
-        self.devices[0].test()?;
-
-        // Check if controller supports the second device
-        if !self.config.contains(Ps2ConfigFlags::PORT_OUTPUT_FULL_2) {
-            self.devices[1].enable()?;
-            self.read_config()?;
-            self.devices[1].disable()?;
-        }
-
-        // Test the second device
-        if self.config.contains(Ps2ConfigFlags::PORT_OUTPUT_FULL_2) {
-            self.devices[1].test()?;
-        } else {
-            println!("ps2c: second device unsupported");
-        }
-
-        let mut available_count: u8 = 0;
-        for device in self.devices.iter_mut() {
-            // Enable if device available
-            if device.state == DeviceState::Available {
-                device.enable()?;
-                device.reset()?;
-                available_count += 1;
-            }
+        println!("ps2c: testing devices");
+        match self.test_devices()? {
+            (false, _) => println!("ps2c: first device not supported"),
+            (_, false) => println!("ps2c: second device not supported"),
+            _ => (),
         }
 
         // Check if any devices are available
-        if available_count > 0 {
-            println!("ps2c: enabled devices");
+        if self.reset_devices()? > 0 {
+            println!("ps2c: prepared devices");
         } else {
             println!("ps2c: detected no available devices");
         }
 
-        flush_output()?;
+        io::flush_output()?;
 
-        self.initialized = true;
+        Ok(())
+    }
+
+    /// Writes the given config to the PS2 controller
+    pub fn write_config(&self, config: ConfigFlags) -> Result<(), Ps2Error> {
+        io::command_data(ControllerCommand::WriteConfig, config.bits())
+    }
+
+    /// Reads the config from the PS2 controller
+    pub fn read_config(&self) -> Result<ConfigFlags, Ps2Error> {
+        let read = io::command_ret(ControllerReturnCommand::ReadConfig)?;
+
+        Ok(ConfigFlags::from_bits_truncate(read))
+    }
+
+    /// Resets this controller's devices and prepares them for initialization
+    fn prepare_devices(&mut self) -> Result<(), Ps2Error> {
+        self.devices.0.disable()?;
+        self.devices.1.disable()?;
+
+        self.devices.0.state = DeviceState::Unavailable;
+        self.devices.1.state = DeviceState::Unavailable;
 
         Ok(())
     }
@@ -103,15 +102,15 @@ impl Ps2Controller {
     /// Initializes the config for this controller
     fn initialize_config(&mut self) -> Result<(), Ps2Error> {
         // Read the config from the controller
-        self.read_config()?;
+        self.config = self.read_config()?;
 
         // Set all required config flags
-        self.config.set(Ps2ConfigFlags::PORT_INTERRUPT_1, false);
-        self.config.set(Ps2ConfigFlags::PORT_INTERRUPT_2, false);
-        self.config.set(Ps2ConfigFlags::PORT_TRANSLATION_1, false);
+        self.config.set(ConfigFlags::PORT_INTERRUPT_1, false);
+        self.config.set(ConfigFlags::PORT_INTERRUPT_2, false);
+        self.config.set(ConfigFlags::PORT_TRANSLATION_1, false);
 
         // Write the updated config back to the controller
-        self.write_config()?;
+        self.write_config(self.config)?;
 
         println!("ps2c: initialized config");
 
@@ -119,33 +118,53 @@ impl Ps2Controller {
     }
 
     /// Tests this controller
-    fn test_controller(&mut self) -> Result<bool, Ps2Error> {
-        Ok(command_ret(ControllerReturnCommand::TestController)? == 0x55)
+    fn test_controller(&self) -> Result<bool, Ps2Error> {
+        Ok(io::command_ret(ControllerReturnCommand::TestController)? == 0x55)
     }
 
-    /// Writes the current config to the PS2 controller
-    pub fn write_config(&mut self) -> Result<(), Ps2Error> {
-        command_data(ControllerCommand::WriteConfig, self.config.bits())
+    /// Tests all of this controller's devices
+    fn test_devices(&mut self) -> Result<(bool, bool), Ps2Error> {
+        // Check if controller supports the second device
+        if self.config.contains(ConfigFlags::PORT_CLOCK_2) {
+            self.devices.1.enable()?;
+            self.config = self.read_config()?;
+            self.devices.1.disable()?;
+        }
+
+        // Test both devices
+        let first_supported = self.devices.0.test()?;
+        let second_supported = !self.config.contains(ConfigFlags::PORT_CLOCK_2) && self.devices.1.test()?;
+
+        Ok((first_supported, second_supported))
     }
 
-    /// Reads the config from the PS2 controller
-    pub fn read_config(&mut self) -> Result<(), Ps2Error> {
-        let read = command_ret(ControllerReturnCommand::ReadConfig)?;
-        self.config = Ps2ConfigFlags::from_bits_truncate(read);
+    /// Resets all devices and returns the count available
+    fn reset_devices(&mut self) -> Result<u8, Ps2Error> {
+        let mut available_count = 0;
 
-        Ok(())
+        if self.devices.0.state == DeviceState::Available {
+            self.devices.0.reset()?;
+            available_count += 1;
+        }
+
+        if self.devices.1.state == DeviceState::Available {
+            self.devices.1.reset()?;
+            available_count += 1;
+        }
+
+        Ok(available_count)
     }
 }
 
 /// Represents a PS2 device
-pub struct Ps2Device {
+pub struct Device {
     state: DeviceState,
     port: DevicePort,
 }
 
-impl Ps2Device {
+impl Device {
     const fn new(port: DevicePort) -> Self {
-        Ps2Device {
+        Device {
             state: DeviceState::Unavailable,
             port,
         }
@@ -153,11 +172,12 @@ impl Ps2Device {
 
     /// Tests this device to see if it is available
     pub fn test(&mut self) -> Result<bool, Ps2Error> {
-        let available = command_ret(if self.port == DevicePort::Mouse {
+        let cmd = if self.port == DevicePort::Mouse {
             ControllerReturnCommand::TestPort2
         } else {
             ControllerReturnCommand::TestPort1
-        })? == 0x0;
+        };
+        let available = io::command_ret(cmd)? == 0x0;
 
         if available {
             self.state = DeviceState::Available;
@@ -170,25 +190,27 @@ impl Ps2Device {
 
     /// Enables this device
     pub fn enable(&mut self) -> Result<(), Ps2Error> {
-        if self.state == DeviceState::Available {
-            command(if self.port == DevicePort::Mouse {
-                ControllerCommand::EnablePort2
-            } else {
-                ControllerCommand::EnablePort1
-            })?;
-            self.state = DeviceState::Enabled;
-        }
+        let cmd = if self.port == DevicePort::Mouse {
+            ControllerCommand::EnablePort2
+        } else {
+            ControllerCommand::EnablePort1
+        };
+        io::command(cmd)?;
+        self.state = DeviceState::Enabled;
+
         Ok(())
     }
 
     /// Disables this device
     pub fn disable(&mut self) -> Result<(), Ps2Error> {
-        command(if self.port == DevicePort::Mouse {
+        let cmd = if self.port == DevicePort::Mouse {
             ControllerCommand::DisablePort2
         } else {
             ControllerCommand::DisablePort1
-        })?;
+        };
+        io::command(cmd)?;
         self.state = DeviceState::Available;
+
         Ok(())
     }
 
@@ -200,33 +222,39 @@ impl Ps2Device {
     }
 
     /// Sends a command for this PS2 device and returns result
-    #[allow(dead_code)] // Used by drivers depending on PS/2
     pub fn command(&mut self, cmd: DeviceCommand) -> Result<u8, Ps2Error> {
-        // If second PS2 port, send context switch command
-        if self.port == DevicePort::Mouse {
-            command(ControllerCommand::WriteInputPort2)?;
-        }
-        for _ in 0..4 {
-            write_data(cmd as u8)?;
-            let result = read_data()?;
-            if result != RESEND {
-                return Ok(result)
+        if self.state != DeviceState::Unavailable {
+            // If second PS2 port, send context switch command
+            if self.port == DevicePort::Mouse {
+                io::command(ControllerCommand::WriteInputPort2)?;
             }
+            for _ in 0..4 {
+                io::write(&io::DATA_PORT, cmd as u8)?;
+                match io::read(&io::DATA_PORT) {
+                    Ok(RESEND) => continue,
+                    result => return result,
+                }
+            }
+            Err(Ps2Error::NoData)
+        } else {
+            Err(Ps2Error::DeviceUnavailable)
         }
-        Err(Ps2Error::NoData)
     }
 
     /// Sends a command for this PS2 device with data and returns a result
-    #[allow(dead_code)] // Used by drivers depending on PS/2
+    #[allow(dead_code)] // To be used by drivers interfacing with PS/2
     pub fn command_data(&mut self, cmd: DeviceCommand, data: u8) -> Result<u8, Ps2Error> {
-        self.command(cmd).and_then(|result| {
-            if result == ACK {
-                write_data(data as u8)?;
-                read_data()
-            } else {
-                Ok(result)
-            }
-        })
+        if self.state != DeviceState::Unavailable {
+            self.command(cmd).and_then(|result| match result {
+                ACK => {
+                    io::write(&io::DATA_PORT, data as u8)?;
+                    io::read(&io::DATA_PORT)
+                }
+                _ => Ok(result)
+            })
+        } else {
+            Err(Ps2Error::DeviceUnavailable)
+        }
     }
 }
 
@@ -245,7 +273,7 @@ pub enum DeviceState {
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub enum DevicePort {
     /// The device is in the keyboard port
-    Keyboard,
+    Keyboard(ControllerCommand::EnablePort1),
     /// The device is in the mouse port
-    Mouse,
+    Mouse(ControllerCommand::EnablePort2),
 }
