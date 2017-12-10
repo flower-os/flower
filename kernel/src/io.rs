@@ -1,3 +1,5 @@
+use core::marker::PhantomData;
+
 /// Reads u8 from given port
 pub unsafe fn inb(port: u16) -> u8 {
     let inb: u8;
@@ -34,9 +36,21 @@ pub unsafe fn outl(value: u32, port: u16) {
     asm!("outl %eax, %dx" :: "{dx}"(port), "{eax}"(value) :: "volatile");
 }
 
-/// Represents a port to be accessed through inb and outb
-pub struct IOPort {
+pub trait InOut {
+    unsafe fn port_in(port: u16) -> Self;
+    unsafe fn port_out(port: u16) -> Self;
+}
+
+//TODO add type implementors.
+
+/// Represents a port to be accessed through in/out instructions. The values read and written are
+/// `InOut` in size.
+#[derive(Debug)]
+pub struct IOPort<T: InOut>{
+    //Allows for very high port numbers.
     port: u16,
+    //Zero size type placeholder.
+    phantom: PhantomData<T>,
 }
 
 impl IOPort {
