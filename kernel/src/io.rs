@@ -53,20 +53,23 @@ pub struct IOPort<T: InOut>{
     phantom: PhantomData<T>,
 }
 
-impl IOPort {
-    pub const fn new(port: u16) -> Self {
+impl<T: InOut> IOPort<T> {
+    pub const unsafe fn new(port: u16) -> IOPort<T> {
         IOPort {
             port: port,
+            phantom: PhantomData,
         }
     }
 
-    /// Writes a byte to this port
-    pub fn write(&self, value: u8) {
-        unsafe { outb(self.port, value) }
+    /// Writes a value to this port
+    pub fn write(&mut self, value: T) {
+        unsafe {
+            T::port_out(self.port, value);
+        }
     }
 
-    /// Reads a byte from this port
-    pub fn read(&self) -> u8 {
-        unsafe { inb(self.port) }
+    /// Reads a value from this port
+    pub fn read(&mut self) -> T {
+        unsafe { T::port_in(self.port) }
     }
 }
