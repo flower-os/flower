@@ -7,7 +7,7 @@
 //! For it to be initialized, `initialize` must be called on it. This sets up all attached devices.
 //!
 //! The [Device] handles interface to a single PS/2 device. Its state can be checked and toggled through `enable` and `disable`.
-//! Devices can be obtained from the controller through `get_device` or `devices`.
+//! Devices can be obtained from the controller through `device(DevicePort)` or `devices`.
 
 pub mod io;
 
@@ -121,11 +121,12 @@ impl Controller {
     }
 
     /// Gets the device for the given port
+    #[allow(dead_code)] // To be used by drivers interfacing with PS/2
     pub fn device(&mut self, port: DevicePort) -> &mut Device {
         if port == DevicePort::Keyboard {
-            self.devices.0
+            &mut self.devices.0
         } else {
-            self.devices.1
+            &mut self.devices.1
         }
     }
 
