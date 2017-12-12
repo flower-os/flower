@@ -12,7 +12,7 @@
 pub mod io;
 
 use drivers::ps2::io::Ps2Error;
-use drivers::ps2::io::commands::{ControllerCommand, ControllerReturnCommand, ControllerDataCommand, DeviceCommand};
+use drivers::ps2::io::commands::{self, ControllerCommand, ControllerReturnCommand, ControllerDataCommand, DeviceCommand, DeviceDataCommand};
 use spin::Mutex;
 
 pub const RESEND: u8 = 0xFE;
@@ -110,12 +110,12 @@ impl Controller {
 
     /// Writes the given config to the PS2 controller
     pub fn write_config(&self, config: ConfigFlags) -> Result<(), Ps2Error> {
-        io::command_data(ControllerDataCommand::WriteConfig, config.bits())
+        commands::send_data(ControllerDataCommand::WriteConfig, config.bits())
     }
 
     /// Reads the config from the PS2 controller
     pub fn read_config(&self) -> Result<ConfigFlags, Ps2Error> {
-        let read = io::command_ret(ControllerReturnCommand::ReadConfig)?;
+        let read = commands::send_ret(ControllerReturnCommand::ReadConfig)?;
 
         Ok(ConfigFlags::from_bits_truncate(read))
     }
@@ -161,7 +161,7 @@ impl Controller {
 
     /// Tests this controller
     fn test_controller(&self) -> Result<bool, Ps2Error> {
-        Ok(io::command_ret(ControllerReturnCommand::TestController)? == 0x55)
+        Ok(commands::send_ret(ControllerReturnCommand::TestController)? == 0x55)
     }
 
     /// Tests all of this controller's devices
@@ -219,7 +219,7 @@ impl Device {
         } else {
             ControllerReturnCommand::TestPort1
         };
-        let available = io::command_ret(cmd)? == 0x0;
+        let available = commands::send_ret(cmd)? == 0x0;
 
         if available {
             self.state = DeviceState::Available;
@@ -237,7 +237,7 @@ impl Device {
         } else {
             ControllerCommand::EnablePort1
         };
-        io::command(cmd)?;
+        commands::send(cmd)?;
         self.state = DeviceState::Enabled;
 
         Ok(())
@@ -250,7 +250,7 @@ impl Device {
         } else {
             ControllerCommand::DisablePort1
         };
-        io::command(cmd)?;
+        commands::send(cmd)?;
         self.state = DeviceState::Available;
 
         Ok(())
@@ -265,35 +265,40 @@ impl Device {
 
     /// Sends a command for this PS2 device and returns result
     pub fn command(&mut self, cmd: DeviceCommand) -> Result<u8, Ps2Error> {
-        if self.state != DeviceState::Unavailable {
-            // If second PS2 port, send context switch command
-            if self.port == DevicePort::Mouse {
-                io::command(ControllerCommand::WriteInputPort2)?;
-            }
-            for _ in 0..4 {
-                io::write(&io::DATA_PORT, cmd as u8)?;
-                match io::read(&io::DATA_PORT) {
-                    Ok(RESEND) => continue,
-                    result => return result,
-                }
-            }
-            Err(Ps2Error::NoData)
-        } else {
-            Err(Ps2Error::DeviceUnavailable)
-        }
+        self.command_raw(cmd as u8)
     }
 
     /// Sends a command for this PS2 device with data and returns a result
     #[allow(dead_code)] // To be used by drivers interfacing with PS/2
-    pub fn command_data(&mut self, cmd: DeviceCommand, data: u8) -> Result<u8, Ps2Error> {
+    pub fn command_data(&mut self, cmd: DeviceDataCommand, data: u8) -> Result<u8, Ps2Error> {
         if self.state != DeviceState::Unavailable {
-            self.command(cmd).and_then(|result| match result {
+            self.command_raw(cmd as u8).and_then(|result| match result {
                 ACK => {
                     io::write(&io::DATA_PORT, data as u8)?;
                     io::read(&io::DATA_PORT)
                 }
                 _ => Ok(result)
             })
+        } else {
+            Err(Ps2Error::DeviceUnavailable)
+        }
+    }
+
+    /// Sends a raw command code to this device
+    fn command_raw(&mut self, cmd: u8) -> Result<u8, Ps2Error> {
+        if self.state != DeviceState::Unavailable {
+            // If second PS2 port, send context switch command
+            if self.port == DevicePort::Mouse {
+                commands::send(ControllerCommand::WriteInputPort2)?;
+            }
+            for _ in 0..4 {
+                io::write(&io::DATA_PORT, cmd)?;
+                match io::read(&io::DATA_PORT) {
+                    Ok(RESEND) => continue,
+                    result => return result,
+                }
+            }
+            Err(Ps2Error::NoData)
         } else {
             Err(Ps2Error::DeviceUnavailable)
         }

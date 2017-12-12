@@ -1,4 +1,6 @@
 pub mod commands {
+    use super::*;
+
     /// Represents a PS2 controller command without a return value
     #[allow(dead_code)] // Dead variants for completeness
     #[derive(Copy, Clone)]
@@ -31,7 +33,7 @@ pub mod commands {
         WriteConfig = 0x60,
     }
 
-    /// Represents a PS2 device command opcode
+    /// Represents a PS2 device command without data
     #[allow(dead_code)] // Dead variants for completeness
     #[derive(Copy, Clone)]
     #[repr(u8)]
@@ -39,8 +41,34 @@ pub mod commands {
         EnableScanning = 0xF4,
         DisableScanning = 0xF5,
         SetDefaults = 0xF6,
-        SetScancode = 0xF0,
         Reset = 0xFF,
+    }
+
+    /// Represents a PS2 device command with additional data
+    #[allow(dead_code)] // Dead variants for completeness
+    #[derive(Copy, Clone)]
+    #[repr(u8)]
+    pub enum DeviceDataCommand {
+        SetScancode = 0xF0,
+    }
+
+    /// Sends a controller command without a return
+    pub fn send(cmd: ControllerCommand) -> Result<(), Ps2Error> {
+        write(&COMMAND_PORT, cmd as u8)
+    }
+
+    /// Sends a controller command with data and without a return
+    pub fn send_data(cmd: ControllerDataCommand, data: u8) -> Result<(), Ps2Error> {
+        write(&COMMAND_PORT, cmd as u8)?;
+        write(&DATA_PORT, data)?;
+
+        Ok(())
+    }
+
+    /// Sends a controller command with a return
+    pub fn send_ret(cmd: ControllerReturnCommand) -> Result<u8, Ps2Error> {
+        write(&COMMAND_PORT, cmd as u8)?;
+        read(&DATA_PORT)
     }
 }
 
@@ -68,25 +96,6 @@ bitflags! {
 pub enum Ps2Error {
     NoData,
     DeviceUnavailable,
-}
-
-/// Sends a controller command without a return
-pub fn command(cmd: commands::ControllerCommand) -> Result<(), Ps2Error> {
-    write(&COMMAND_PORT, cmd as u8)
-}
-
-/// Sends a controller command with data and without a return
-pub fn command_data(cmd: commands::ControllerDataCommand, data: u8) -> Result<(), Ps2Error> {
-    write(&COMMAND_PORT, cmd as u8)?;
-    write(&DATA_PORT, data)?;
-
-    Ok(())
-}
-
-/// Sends a controller command with a return
-pub fn command_ret(cmd: commands::ControllerReturnCommand) -> Result<u8, Ps2Error> {
-    write(&COMMAND_PORT, cmd as u8)?;
-    read(&DATA_PORT)
 }
 
 /// Writes to the given port, or waits until available
