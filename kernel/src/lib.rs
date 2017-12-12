@@ -14,12 +14,19 @@ extern crate volatile;
 extern crate spin;
 extern crate x86_64;
 
+#[macro_use]
+extern crate bitflags;
+
+#[macro_use]
+extern crate lazy_static;
+
 mod lang;
 mod io;
 #[macro_use]
 mod drivers;
 
 use drivers::vga::{self, VgaColor, Color};
+use drivers::ps2;
 
 const FLOWER: &'static str = include_str!("resources/art/flower.txt");
 const FLOWER_STEM: &'static str = include_str!("resources/art/flower_stem.txt");
@@ -54,7 +61,7 @@ pub extern fn kmain() -> ! {
          VgaColor::new(Color::Green, Color::Black)
     ).expect("Color code should be valid");
 
-    drivers::ps2::PS2.lock().initialize();
+    ps2::CONTROLLER.lock().initialize().expect("PS/2 should successfully initialize");
 
     halt()
 }
