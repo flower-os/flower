@@ -16,11 +16,7 @@ extern crate volatile;
 extern crate spin;
 extern crate x86_64;
 #[macro_use]
-extern crate lazy_static;
-
-#[macro_use]
 extern crate bitflags;
-
 #[macro_use]
 extern crate lazy_static;
 
@@ -94,6 +90,7 @@ pub extern fn kmain() -> ! {
         println!("kbd: enable unsuccessful");
     }
     ps2::PS2.lock().initialize().expect("PS/2 should successfully initialize");
+    ps2::CONTROLLER.lock().initialize().expect("PS/2 should successfully initialize");
 
     unsafe { halt() }
 }
