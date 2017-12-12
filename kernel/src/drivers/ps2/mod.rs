@@ -1,13 +1,25 @@
+//! # PS/2 Driver
+//!
+//! The PS/2 driver provides interface into the PS/2 controller, allowing access to devices using this protocol.
+//! The controller is accessed through the static `CONTROLLER` field.
+//!
+//! The [Controller] handles all interface with the controller for devices.
+//! For it to be initialized, `initialize` must be called on it. This sets up all attached devices.
+//!
+//! The [Device] handles interface to a single PS/2 device. Its state can be checked and toggled through `enable` and `disable`.
+//! Devices can be obtained from the controller through `get_device` or `devices`.
+
 pub mod io;
 
-use drivers::ps2::io::{ControllerCommand, ControllerReturnCommand, ControllerDataCommand, DeviceCommand, Ps2Error};
+use drivers::ps2::io::Ps2Error;
+use drivers::ps2::io::commands::{ControllerCommand, ControllerReturnCommand, ControllerDataCommand, DeviceCommand};
 use spin::Mutex;
 
 pub const RESEND: u8 = 0xFE;
 pub const ACK: u8 = 0xFA;
 
 lazy_static! {
-    pub static ref PS2: Mutex<Controller> = Mutex::new(Controller::new());
+    pub static ref CONTROLLER: Mutex<Controller> = Mutex::new(Controller::new());
 }
 
 bitflags! {
@@ -25,10 +37,30 @@ bitflags! {
     }
 }
 
+/// Represents the state of a device.
+#[derive(Copy, Clone, Eq, PartialEq)]
+pub enum DeviceState {
+    /// The device does not exist or hasn't been detected yet
+    Unavailable,
+    /// The device has been detected but is not enabled
+    Available,
+    /// The device has been enabled
+    Enabled,
+}
+
+/// Represents the port of a device
+#[derive(Copy, Clone, Eq, PartialEq)]
+pub enum DevicePort {
+    /// The device is in the keyboard port
+    Keyboard,
+    /// The device is in the mouse port
+    Mouse,
+}
+
 /// Represents the PS2 master controller
 pub struct Controller {
     pub devices: (Device, Device),
-    config: ConfigFlags,
+    pub config: ConfigFlags,
 }
 
 impl Controller {
@@ -86,6 +118,15 @@ impl Controller {
         let read = io::command_ret(ControllerReturnCommand::ReadConfig)?;
 
         Ok(ConfigFlags::from_bits_truncate(read))
+    }
+
+    /// Gets the device for the given port
+    pub fn device(&mut self, port: DevicePort) -> &mut Device {
+        if port == DevicePort::Keyboard {
+            self.devices.0
+        } else {
+            self.devices.1
+        }
     }
 
     /// Resets this controller's devices and prepares them for initialization
@@ -256,24 +297,4 @@ impl Device {
             Err(Ps2Error::DeviceUnavailable)
         }
     }
-}
-
-/// Represents the state of a device.
-#[derive(Copy, Clone, Eq, PartialEq)]
-pub enum DeviceState {
-    /// The device does not exist or hasn't been detected yet
-    Unavailable,
-    /// The device has been detected but is not enabled
-    Available,
-    /// The device has been enabled
-    Enabled,
-}
-
-/// Represents the port of a device
-#[derive(Copy, Clone, Eq, PartialEq)]
-pub enum DevicePort {
-    /// The device is in the keyboard port
-    Keyboard,
-    /// The device is in the mouse port
-    Mouse,
 }

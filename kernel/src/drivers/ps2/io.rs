@@ -1,3 +1,49 @@
+pub mod commands {
+    /// Represents a PS2 controller command without a return value
+    #[allow(dead_code)] // Dead variants for completeness
+    #[derive(Copy, Clone)]
+    #[repr(u8)]
+    pub enum ControllerCommand {
+        DisablePort2 = 0xA7,
+        EnablePort2 = 0xA8,
+        DisablePort1 = 0xAD,
+        EnablePort1 = 0xAE,
+        WriteInputPort2 = 0xD4,
+    }
+
+    /// Represents a PS2 controller command with a return value
+    #[allow(dead_code)] // Dead variants for completeness
+    #[derive(Copy, Clone)]
+    #[repr(u8)]
+    pub enum ControllerReturnCommand {
+        ReadConfig = 0x20,
+        TestController = 0xAA,
+        TestPort1 = 0xAB,
+        TestPort2 = 0xA9,
+        IdentifyDevice = 0xF2,
+    }
+
+    /// Represents a PS2 controller command with a data value
+    #[allow(dead_code)] // Dead variants for completeness
+    #[derive(Copy, Clone)]
+    #[repr(u8)]
+    pub enum ControllerDataCommand {
+        WriteConfig = 0x60,
+    }
+
+    /// Represents a PS2 device command opcode
+    #[allow(dead_code)] // Dead variants for completeness
+    #[derive(Copy, Clone)]
+    #[repr(u8)]
+    pub enum DeviceCommand {
+        EnableScanning = 0xF4,
+        DisableScanning = 0xF5,
+        SetDefaults = 0xF6,
+        SetScancode = 0xF0,
+        Reset = 0xFF,
+    }
+}
+
 use io::IOPort;
 
 pub static DATA_PORT: IOPort = unsafe { IOPort::new(0x60) };
@@ -17,50 +63,6 @@ bitflags! {
     }
 }
 
-/// Represents a PS2 controller command without a return value
-#[allow(dead_code)] // Dead variants for completeness
-#[derive(Copy, Clone)]
-#[repr(u8)]
-pub enum ControllerCommand {
-    DisablePort2 = 0xA7,
-    EnablePort2 = 0xA8,
-    DisablePort1 = 0xAD,
-    EnablePort1 = 0xAE,
-    WriteInputPort2 = 0xD4,
-}
-
-/// Represents a PS2 controller command with a return value
-#[allow(dead_code)] // Dead variants for completeness
-#[derive(Copy, Clone)]
-#[repr(u8)]
-pub enum ControllerReturnCommand {
-    ReadConfig = 0x20,
-    TestController = 0xAA,
-    TestPort1 = 0xAB,
-    TestPort2 = 0xA9,
-    IdentifyDevice = 0xF2,
-}
-
-/// Represents a PS2 controller command with a data value
-#[allow(dead_code)] // Dead variants for completeness
-#[derive(Copy, Clone)]
-#[repr(u8)]
-pub enum ControllerDataCommand {
-    WriteConfig = 0x60,
-}
-
-/// Represents a PS2 device command opcode
-#[allow(dead_code)] // Dead variants for completeness
-#[derive(Copy, Clone)]
-#[repr(u8)]
-pub enum DeviceCommand {
-    EnableScanning = 0xF4,
-    DisableScanning = 0xF5,
-    SetDefaults = 0xF6,
-    SetScancode = 0xF0,
-    Reset = 0xFF,
-}
-
 /// Represents an error returned by PS/2
 #[derive(Copy, Clone, Debug)]
 pub enum Ps2Error {
@@ -69,12 +71,12 @@ pub enum Ps2Error {
 }
 
 /// Sends a controller command without a return
-pub fn command(cmd: ControllerCommand) -> Result<(), Ps2Error> {
+pub fn command(cmd: commands::ControllerCommand) -> Result<(), Ps2Error> {
     write(&COMMAND_PORT, cmd as u8)
 }
 
 /// Sends a controller command with data and without a return
-pub fn command_data(cmd: ControllerDataCommand, data: u8) -> Result<(), Ps2Error> {
+pub fn command_data(cmd: commands::ControllerDataCommand, data: u8) -> Result<(), Ps2Error> {
     write(&COMMAND_PORT, cmd as u8)?;
     write(&DATA_PORT, data)?;
 
@@ -82,7 +84,7 @@ pub fn command_data(cmd: ControllerDataCommand, data: u8) -> Result<(), Ps2Error
 }
 
 /// Sends a controller command with a return
-pub fn command_ret(cmd: ControllerReturnCommand) -> Result<u8, Ps2Error> {
+pub fn command_ret(cmd: commands::ControllerReturnCommand) -> Result<u8, Ps2Error> {
     write(&COMMAND_PORT, cmd as u8)?;
     read(&DATA_PORT)
 }

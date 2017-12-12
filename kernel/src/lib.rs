@@ -61,7 +61,7 @@ pub extern fn kmain() -> ! {
          VgaColor::new(Color::Green, Color::Black)
     ).expect("Color code should be valid");
 
-    ps2::PS2.lock().initialize().expect("PS/2 should successfully initialize");
+    ps2::CONTROLLER.lock().initialize().expect("PS/2 should successfully initialize");
 
     halt()
 }
