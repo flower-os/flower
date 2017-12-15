@@ -14,6 +14,64 @@ use drivers::ps2::{self, Device, DeviceState};
 use drivers::ps2::io::Ps2Error;
 use drivers::ps2::io::commands::{DeviceCommand, DeviceDataCommand};
 
+bitflags! {
+    pub struct ModifierFlags: u8 {
+        /// If a CTRL modifier is active
+        const CTRL = 1 << 0;
+        /// If an ALT modifier is active
+        const ALT = 1 << 1;
+        /// If a SHIFT modifier is active
+        const SHIFT = 1 << 2;
+    }
+}
+
+impl ModifierFlags {
+    /// Creates `ModifierFlags` from the given contained booleans
+    fn from_modifiers(ctrl: bool, alt: bool, shift: bool) -> Self {
+        let mut flags = ModifierFlags::empty();
+        flags.set(ModifierFlags::CTRL, ctrl);
+        flags.set(ModifierFlags::ALT, alt);
+        flags.set(ModifierFlags::SHIFT, shift);
+        flags
+    }
+}
+
+/// Contains data relating to a key press event
+#[derive(Copy, Clone, Debug)]
+pub struct KeyEvent {
+    pub keycode: u8,
+    pub char: Option<char>,
+    pub event_type: KeyEventType,
+    pub modifiers: ModifierFlags,
+}
+
+/// The type of key event that occurred
+#[repr(u8)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum KeyEventType {
+    /// When the key is initially pressed
+    Make,
+    /// When the key is released
+    Break,
+    /// When the key is held down, and a repeat is fired
+    Repeat,
+}
+
+/// An error for a PS/2 keyboard
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum Ps2KeyboardError {
+    /// If an error occurred while reading from PS/2
+    ReadError(Ps2Error),
+    /// If the keyboard is disabled and cannot be used
+    KeyboardDisabled,
+    /// If setting the scancode fails
+    ScancodeNotSet(u8),
+    /// If enabling scanning fails
+    ScanningNotEnabled,
+    /// If no data can be read from the keyboard
+    DataUnavailable,
+}
+
 /// Interface to a generic keyboard.
 pub trait Keyboard {
     type Error;
@@ -33,40 +91,11 @@ pub trait Keyboard {
     fn disable(&mut self) -> Result<(), Self::Error>;
 
     /// Polls the device for state events.
-    /// TODO: This should eventually use interrupts and hold a queue
+    // TODO: This should eventually use interrupts and hold a queue
     fn read_event(&mut self) -> Result<KeyEvent, Self::Error>;
 
     /// Returns true if the given keycode is currently being pressed
     fn pressed(&self, keycode: u8) -> bool;
-}
-
-/// Contains data relating to a key press event.
-#[derive(Copy, Clone, Debug)]
-pub struct KeyEvent {
-    pub keycode: u8,
-    pub char: Option<char>,
-    pub event_type: KeyEventType,
-    pub ctrl: bool,
-    pub alt: bool,
-    pub shift: bool,
-}
-
-/// The type of key event occurring
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub enum KeyEventType {
-    Make,
-    Break,
-    Repeat,
-}
-
-/// An error for a PS/2 keyboard
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub enum Ps2KeyboardError {
-    ReadError(Ps2Error),
-    KeyboardDisabled,
-    ScancodeNotSet(u8),
-    ScanningNotEnabled,
-    DataUnavailable,
 }
 
 /// Handles interface to a PS/2 keyboard, if available
@@ -83,7 +112,7 @@ impl<'a> Ps2Keyboard<'a> {
         }
     }
 
-    /// Reads a single scancode from this
+    /// Reads a single scancode from this PS/2 keyboard
     fn read_scancode(&self) -> Result<Ps2Scancode, Ps2KeyboardError> {
         self.check_enabled()?;
 
@@ -119,6 +148,7 @@ impl<'a> Ps2Keyboard<'a> {
         let ctrl = self.pressed(keymap::codes::LEFT_CONTROL) || self.pressed(keymap::codes::RIGHT_CONTROL);
         let alt = self.pressed(keymap::codes::LEFT_ALT) || self.pressed(keymap::codes::RIGHT_ALT);
         let shift = self.pressed(keymap::codes::LEFT_SHIFT) || self.pressed(keymap::codes::RIGHT_SHIFT);
+        let modifiers = ModifierFlags::from_modifiers(ctrl, alt, shift);
 
         let keycode = *keymap::PS2_SET_1.get(scancode.code as usize).unwrap_or(&0x0);
         let char = keymap::get_us_qwerty_char(keycode)
@@ -135,7 +165,7 @@ impl<'a> Ps2Keyboard<'a> {
             false => KeyEventType::Break,
         };
 
-        KeyEvent { keycode, char, event_type, ctrl, alt, shift }
+        KeyEvent { keycode, char, event_type, modifiers }
     }
 }
 

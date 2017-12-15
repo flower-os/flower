@@ -1,5 +1,9 @@
 pub mod codes {
-    //! A list of US QWERTY key code constants
+    //! # Codes
+    //!
+    //! This module contains a list of US QWERTY key code constants, based around rows/columns on a keyboard.
+    //! This is used because, for example, in a game using WASD, you're looking for the characters in that position, not those characters specifically.
+    //! All non-character codes can represent the same key on any keyboard layout.
 
     use super::*;
 
@@ -107,9 +111,15 @@ pub mod codes {
     pub const NUM_PAD_0: u8 = code(11, 5);
     pub const NUM_PAD_DELETE: u8 = code(12, 5);
     pub const NUM_PAD_ENTER: u8 = code(13, 5);
+
+    /// Gets the Flower keycode for a key based on its row and column.
+    const fn code(column: u8, row: u8) -> u8 {
+        (column & 0x1F) | (row & 0x7) << 5
+    }
 }
 
 // TODO: Handle NumPad Numlock
+/// Gets the US QWERTY character(s) for the given Flower keycode. The first element represents the lower-case, and the second the upper.
 pub fn get_us_qwerty_char(keycode: u8) -> Option<(char, char)> {
     match keycode {
         codes::KEY_1 => Some(('1', '!')),
@@ -168,7 +178,7 @@ pub fn get_us_qwerty_char(keycode: u8) -> Option<(char, char)> {
 }
 
 pub static PS2_SET_1: [u8; 89] = [
-    0x0u8,
+    0,
     codes::ESCAPE,
     codes::KEY_1,
     codes::KEY_2,
@@ -252,11 +262,7 @@ pub static PS2_SET_1: [u8; 89] = [
     codes::NUM_PAD_3,
     codes::NUM_PAD_0,
     codes::NUM_PAD_DELETE,
-    0x0u8, 0x0u8, 0x0u8,
+    0, 0, 0,
     codes::F11,
     codes::F12,
 ];
-
-const fn code(column: u8, row: u8) -> u8 {
-    (column & 0x1F) | (row & 0x7) << 5
-}
