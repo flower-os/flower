@@ -3,7 +3,7 @@ pub mod commands {
 
     /// Represents a PS2 controller command without a return value
     #[allow(dead_code)] // Dead variants for completeness
-    #[derive(Copy, Clone)]
+    #[derive(Copy, Clone, Debug)]
     #[repr(u8)]
     pub enum ControllerCommand {
         DisablePort2 = 0xA7,
@@ -15,7 +15,7 @@ pub mod commands {
 
     /// Represents a PS2 controller command with a return value
     #[allow(dead_code)] // Dead variants for completeness
-    #[derive(Copy, Clone)]
+    #[derive(Copy, Clone, Debug)]
     #[repr(u8)]
     pub enum ControllerReturnCommand {
         ReadConfig = 0x20,
@@ -27,7 +27,7 @@ pub mod commands {
 
     /// Represents a PS2 controller command with a data value
     #[allow(dead_code)] // Dead variants for completeness
-    #[derive(Copy, Clone)]
+    #[derive(Copy, Clone, Debug)]
     #[repr(u8)]
     pub enum ControllerDataCommand {
         WriteConfig = 0x60,
@@ -35,7 +35,7 @@ pub mod commands {
 
     /// Represents a PS2 device command without data
     #[allow(dead_code)] // Dead variants for completeness
-    #[derive(Copy, Clone)]
+    #[derive(Copy, Clone, Debug)]
     #[repr(u8)]
     pub enum DeviceCommand {
         EnableScanning = 0xF4,
@@ -46,7 +46,7 @@ pub mod commands {
 
     /// Represents a PS2 device command with additional data
     #[allow(dead_code)] // Dead variants for completeness
-    #[derive(Copy, Clone)]
+    #[derive(Copy, Clone, Debug)]
     #[repr(u8)]
     pub enum DeviceDataCommand {
         SetScancode = 0xF0,
@@ -78,7 +78,8 @@ pub static DATA_PORT: IOPort = unsafe { IOPort::new(0x60) };
 pub static STATUS_PORT: IOPort = unsafe { IOPort::new(0x64) };
 pub static COMMAND_PORT: IOPort = unsafe { IOPort::new(0x64) };
 
-pub const WAIT_TIMEOUT: u16 = 1000;
+/// The number of iterations before assuming no data to be read. Should be changed to a timeout as of #26
+pub const WAIT_TIMEOUT: u32 = 1000000;
 
 bitflags! {
     pub struct StatusFlags: u8 {
@@ -92,7 +93,7 @@ bitflags! {
 }
 
 /// Represents an error returned by PS/2
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum Ps2Error {
     NoData,
     DeviceUnavailable,
@@ -113,7 +114,7 @@ pub fn write(port: &IOPort, value: u8) -> Result<(), Ps2Error> {
 
 /// Reads from the given port, returning an optional value. `NoData` returned if nothing could be read
 pub fn read(port: &IOPort) -> Result<u8, Ps2Error> {
-    for _i in 0..WAIT_TIMEOUT {
+    for _ in 0..WAIT_TIMEOUT {
         // Check if the output status bit is full
         if can_read()? {
             return Ok(port.read());
@@ -145,4 +146,14 @@ pub fn can_write() -> Result<bool, Ps2Error> {
 /// Returns true if the read status bit is 1
 pub fn can_read() -> Result<bool, Ps2Error> {
     read_status().map(|status| status.contains(StatusFlags::OUTPUT_FULL))
+}
+
+/// Returns true if output port bit is 0, meaning the next data will be read from the keyboard
+pub fn can_read_keyboard() -> Result<bool, Ps2Error> {
+    read_status().map(|status| !status.contains(StatusFlags::OUTPUT_PORT_2))
+}
+
+/// Returns true if output port bit is 1, meaning the next data will be read from the mouse
+pub fn can_read_mouse() -> Result<bool, Ps2Error> {
+    read_status().map(|status| status.contains(StatusFlags::OUTPUT_PORT_2))
 }

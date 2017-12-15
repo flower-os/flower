@@ -200,8 +200,8 @@ impl Controller {
 
 /// Represents a PS2 device
 pub struct Device {
-    state: DeviceState,
-    port: DevicePort,
+    pub state: DeviceState,
+    pub port: DevicePort,
 }
 
 impl Device {
