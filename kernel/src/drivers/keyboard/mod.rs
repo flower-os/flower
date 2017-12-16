@@ -5,6 +5,19 @@
 //!
 //! The driver is event based, and events are received through the `read_event` method, which blocks until an event is received.
 //! The event contains the keycode pressed, which can be compared to `keymap::codes`, an optional `char`, the type of press, and various modifier flags.
+//!
+//! # Examples
+//!
+//! ```rust,no_run
+//! let device = drivers::ps2::CONTROLLER.device(drivers::ps2::DevicePort::Keyboard);
+//! let mut keyboard = Ps2Keyboard::new(device);
+//!
+//! keyboard.enable()?;
+//! loop {
+//!     let event = keyboard.read_event()?;
+//!     handle_event(event);
+//! }
+//! ```
 
 pub mod keymap;
 
@@ -27,6 +40,13 @@ bitflags! {
 
 impl ModifierFlags {
     /// Creates `ModifierFlags` from the given contained booleans
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// let modifiers = ModifierFlags::from_modifiers(true, true, true);
+    /// assert_eq!(modifiers, ModifierFlags::CTRL | ModifierFlags::ALT | ModifierFlags::SHIFT);
+    /// ```
     fn from_modifiers(ctrl: bool, alt: bool, shift: bool) -> Self {
         let mut flags = ModifierFlags::empty();
         flags.set(ModifierFlags::CTRL, ctrl);
@@ -81,6 +101,18 @@ pub trait Keyboard {
     /// # Note
     ///
     /// The keyboard should not be accessed while not enabled!
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// let device = drivers::ps2::CONTROLLER.device(drivers::ps2::DevicePort::Keyboard);
+    /// let mut keyboard = Ps2Keyboard::new(device);
+    ///
+    /// match keyboard.enable() {
+    ///     Ok(_) => println!("Keyboard successfully enabled"),
+    ///     Err(err) => println!("Keyboard enable failed with error: {:?}", err),
+    /// }
+    /// ```
     fn enable(&mut self) -> Result<(), Self::Error>;
 
     /// Disables this keyboard, making use unavailable.
@@ -88,13 +120,47 @@ pub trait Keyboard {
     /// # Note
     ///
     /// Until `enable` is called again, this keyboard should not be used
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// let device = drivers::ps2::CONTROLLER.device(drivers::ps2::DevicePort::Keyboard);
+    /// let mut keyboard = Ps2Keyboard::new(device);
+    ///
+    /// match keyboard.disable() {
+    ///     Ok(_) => println!("Keyboard successfully disabled"),
+    ///     Err(err) => println!("Keyboard disable failed with error: {:?}", err),
+    /// }
+    /// ```
     fn disable(&mut self) -> Result<(), Self::Error>;
 
-    /// Polls the device for state events.
+    /// Polls the device for a new key state event, or returns `None` if none have occurred since the last poll.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// let device = drivers::ps2::CONTROLLER.device(drivers::ps2::DevicePort::Keyboard);
+    /// let mut keyboard = Ps2Keyboard::new(device);
+    ///
+    /// if let Some(event) = keyboard.read_event()? {
+    ///     println!("Event occurred for char: {}", event.char.unwrap_or(' '));
+    /// }
+    /// ```
     // TODO: This should eventually use interrupts and hold a queue
     fn read_event(&mut self) -> Result<Option<KeyEvent>, Self::Error>;
 
-    /// Returns true if the given keycode is currently being pressed
+    /// Returns `true` if the given keycode is currently being pressed
+    ///
+    /// ```rust,no_run
+    /// let device = drivers::ps2::CONTROLLER.device(drivers::ps2::DevicePort::Keyboard);
+    /// let mut keyboard = Ps2Keyboard::new(device);
+    ///
+    /// if keyboard.pressed(keymap::codes::LEFT_SHIFT) {
+    ///     println!("Left shift pressed");
+    /// } else {
+    ///     println!("Left shift not pressed");
+    /// }
+    /// ```
     fn pressed(&self, keycode: u8) -> bool;
 }
 
@@ -105,6 +171,14 @@ pub struct Ps2Keyboard<'a> {
 }
 
 impl<'a> Ps2Keyboard<'a> {
+    /// Creates a new Ps2Keyboard from the given PS/2 device
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// let device = drivers::ps2::CONTROLLER.device(drivers::ps2::DevicePort::Keyboard);
+    /// let mut keyboard = Ps2Keyboard::new(device);
+    /// ```
     pub fn new(device: &'a mut Device) -> Self {
         Ps2Keyboard {
             device,
@@ -113,6 +187,17 @@ impl<'a> Ps2Keyboard<'a> {
     }
 
     /// Reads a single scancode from this PS/2 keyboard
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// let device = drivers::ps2::CONTROLLER.device(drivers::ps2::DevicePort::Keyboard);
+    /// let mut keyboard = Ps2Keyboard::new(device);
+    ///
+    /// if let Some(scancode) = keyboard.read_scancode()? {
+    ///     print!(scancode);
+    /// }
+    /// ```
     fn read_scancode(&self) -> Result<Option<Ps2Scancode>, Ps2KeyboardError> {
         if self.device.state == DeviceState::Enabled {
             if ps2::io::can_read()? && ps2::io::can_read_keyboard()? {
@@ -145,6 +230,16 @@ impl<'a> Ps2Keyboard<'a> {
     }
 
     /// Creates a [KeyEvent] from the given scancode and key state
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// let scancode = Ps2Scancode::new(0x15, false, true);
+    /// let event = keyboard.create_event(&scancode).unwrap();
+    /// assert_eq!(event.keycode, keymap::codes::Q);
+    /// assert_eq!(event.char, Some('q'));
+    /// assert_eq!(event.event_type, KeyEventType::Make);
+    /// ```
     fn create_event(&self, scancode: &Ps2Scancode) -> Option<KeyEvent> {
         let ctrl = self.pressed(keymap::codes::LEFT_CONTROL) || self.pressed(keymap::codes::RIGHT_CONTROL);
         let alt = self.pressed(keymap::codes::LEFT_ALT) || self.pressed(keymap::codes::RIGHT_ALT);
@@ -224,11 +319,19 @@ struct Ps2Scancode {
 }
 
 impl Ps2Scancode {
+    /// Constructs a new [Ps2Scancode]
     fn new(scancode: u8, extended: bool, make: bool) -> Self {
         Ps2Scancode { code: scancode, extended, make }
     }
 
     /// Gets the Flower keycode for this scancode
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// let scancode = Ps2Scancode::new(0x01, false, true);
+    /// assert_eq!(scancode.keycode(), Some(keymap::codes::KEY_F9));
+    /// ```
     fn keycode(&self) -> Option<u8> {
         if self.extended {
             keymap::get_extended_code_ps2_set_2(self.code)
