@@ -149,11 +149,13 @@ pub fn can_read() -> Result<bool, Ps2Error> {
 }
 
 /// Returns true if output port bit is 0, meaning the next data will be read from the keyboard
+#[allow(dead_code)] // To be used by drivers interfacing with PS/2
 pub fn can_read_keyboard() -> Result<bool, Ps2Error> {
     read_status().map(|status| !status.contains(StatusFlags::OUTPUT_PORT_2))
 }
 
 /// Returns true if output port bit is 1, meaning the next data will be read from the mouse
+#[allow(dead_code)] // To be used by drivers interfacing with PS/2
 pub fn can_read_mouse() -> Result<bool, Ps2Error> {
     read_status().map(|status| status.contains(StatusFlags::OUTPUT_PORT_2))
 }
