@@ -1,11 +1,10 @@
+#[allow(dead_code)] // Dead variants for completeness
 pub mod codes {
     //! # Codes
     //!
     //! This module contains a list of US QWERTY key code constants, based around rows/columns on a keyboard.
     //! This is used because, for example, in a game using WASD, you're looking for the characters in that position, not those characters specifically.
     //! All non-character codes can represent the same key on any keyboard layout.
-
-    use super::*;
 
     pub const ESCAPE: u8 = code(0, 0);
     pub const F1: u8 = code(1, 0);

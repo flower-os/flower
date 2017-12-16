@@ -73,7 +73,7 @@ pub extern fn kmain() -> ! {
     if let Ok(_) = keyboard.enable() {
         println!("kbd: successfully enabled");
         loop {
-            if let Ok(event) = keyboard.read_event() {
+            if let Ok(Some(event)) = keyboard.read_event() {
                 if event.event_type != KeyEventType::Break {
                     if let Some(char) = event.char {
                         print!("{}", char);

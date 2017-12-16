@@ -64,12 +64,12 @@ pub enum Ps2KeyboardError {
     ReadError(Ps2Error),
     /// If the keyboard is disabled and cannot be used
     KeyboardDisabled,
+    /// If enabling the keyboard fails
+    KeyboardEnableFailed,
     /// If setting the scancode fails
-    ScancodeNotSet(u8),
+    ScancodeSetFailed,
     /// If enabling scanning fails
-    ScanningNotEnabled,
-    /// If no data can be read from the keyboard
-    DataUnavailable,
+    ScanningEnableFailed,
 }
 
 /// Interface to a generic keyboard.
@@ -92,7 +92,7 @@ pub trait Keyboard {
 
     /// Polls the device for state events.
     // TODO: This should eventually use interrupts and hold a queue
-    fn read_event(&mut self) -> Result<KeyEvent, Self::Error>;
+    fn read_event(&mut self) -> Result<Option<KeyEvent>, Self::Error>;
 
     /// Returns true if the given keycode is currently being pressed
     fn pressed(&self, keycode: u8) -> bool;
@@ -113,34 +113,30 @@ impl<'a> Ps2Keyboard<'a> {
     }
 
     /// Reads a single scancode from this PS/2 keyboard
-    fn read_scancode(&self) -> Result<Ps2Scancode, Ps2KeyboardError> {
-        self.check_enabled()?;
-
-        if ps2::io::can_read()? && ps2::io::can_read_keyboard()? {
-            // Check scancode present
-            let scancode = ps2::io::read(&ps2::io::DATA_PORT)?;
-
-            // Check not extended scancode (ignored)
-            if scancode != 0 && scancode != 0xE0 && scancode != 0xE1 {
-                // If not key release (break) code
-                if scancode < 0x80 {
-                    return Ok(Ps2Scancode::new(scancode, true));
-                } else {
-                    return Ok(Ps2Scancode::new(scancode - 0x80, false));
-                }
-            }
-        }
-
-        Err(Ps2KeyboardError::DataUnavailable)
-    }
-
-    /// Checks if this keyboard is enabled, and returns an error if not
-    fn check_enabled(&self) -> Result<(), Ps2KeyboardError> {
+    fn read_scancode(&self) -> Result<Option<Ps2Scancode>, Ps2KeyboardError> {
         if self.device.state == DeviceState::Enabled {
-            Ok(())
+            if ps2::io::can_read()? && ps2::io::can_read_keyboard()? {
+                Ok(self.parse_scancode(ps2::io::read(&ps2::io::DATA_PORT)?))
+            } else {
+                Ok(None)
+            }
         } else {
             Err(Ps2KeyboardError::KeyboardDisabled)
         }
+    }
+
+    /// Parses the given scancode id to a `Ps2Scancode`
+    fn parse_scancode(&self, scancode: u8) -> Option<Ps2Scancode> {
+        // Check not extended scancode (ignored)
+        if scancode != 0 && scancode != 0xE0 && scancode != 0xE1 {
+            // If not key release (break) code
+            if scancode < 0x80 {
+                return Some(Ps2Scancode::new(scancode, true));
+            } else {
+                return Some(Ps2Scancode::new(scancode - 0x80, false));
+            }
+        }
+        None
     }
 
     /// Creates a [KeyEvent] from the given scancode and key state
@@ -175,12 +171,16 @@ impl<'a> Keyboard for Ps2Keyboard<'a> {
     fn enable(&mut self) -> Result<(), Ps2KeyboardError> {
         self.device.enable()?;
 
+        if self.device.state != DeviceState::Enabled {
+            return Err(Ps2KeyboardError::KeyboardEnableFailed);
+        }
+
         if self.device.command_data(DeviceDataCommand::SetScancode, 1)? != ps2::ACK {
-            return Err(Ps2KeyboardError::ScancodeNotSet(1));
+            return Err(Ps2KeyboardError::ScancodeSetFailed);
         }
 
         if self.device.command(DeviceCommand::EnableScanning)? != ps2::ACK {
-            return Err(Ps2KeyboardError::ScanningNotEnabled);
+            return Err(Ps2KeyboardError::ScanningEnableFailed);
         }
 
         Ok(())
@@ -192,15 +192,13 @@ impl<'a> Keyboard for Ps2Keyboard<'a> {
         Ok(())
     }
 
-    fn read_event(&mut self) -> Result<KeyEvent, Self::Error> {
-        match self.read_scancode() {
-            Ok(scancode) => {
-                let event = self.create_event(&scancode);
-                self.key_states[event.keycode as usize] = scancode.make;
-                Ok(event)
-            }
-            Err(error) => Err(error),
-        }
+    fn read_event(&mut self) -> Result<Option<KeyEvent>, Self::Error> {
+        let event = self.read_scancode()?.map(|scancode| {
+            let event = self.create_event(&scancode);
+            self.key_states[event.keycode as usize] = scancode.make;
+            event
+        });
+        Ok(event)
     }
 
     fn pressed(&self, keycode: u8) -> bool {
