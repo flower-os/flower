@@ -116,52 +116,60 @@ impl<'a> Ps2Keyboard<'a> {
     fn read_scancode(&self) -> Result<Option<Ps2Scancode>, Ps2KeyboardError> {
         if self.device.state == DeviceState::Enabled {
             if ps2::io::can_read()? && ps2::io::can_read_keyboard()? {
-                Ok(self.parse_scancode(ps2::io::read(&ps2::io::DATA_PORT)?))
-            } else {
-                Ok(None)
+                let mut make = true;
+                let mut extended = false;
+
+                // Get all scancode modifiers, and return when the actual scancode is received
+                let scancode = loop {
+                    let data = ps2::io::read(&ps2::io::DATA_PORT)?;
+                    match data {
+                        0xE0 ... 0xE1 => extended = true,
+                        0xF0 => make = false,
+                        _ => {
+                            break data;
+                        }
+                    }
+                };
+
+                // If scancode is present, return it with modifiers
+                return Ok(if scancode != 0 {
+                    Some(Ps2Scancode::new(scancode, extended, make))
+                } else {
+                    None
+                });
             }
+            Ok(None)
         } else {
             Err(Ps2KeyboardError::KeyboardDisabled)
         }
     }
 
-    /// Parses the given scancode id to a `Ps2Scancode`
-    fn parse_scancode(&self, scancode: u8) -> Option<Ps2Scancode> {
-        // Check not extended scancode (ignored)
-        if scancode != 0 && scancode != 0xE0 && scancode != 0xE1 {
-            // If not key release (break) code
-            if scancode < 0x80 {
-                return Some(Ps2Scancode::new(scancode, true));
-            } else {
-                return Some(Ps2Scancode::new(scancode - 0x80, false));
-            }
-        }
-        None
-    }
-
     /// Creates a [KeyEvent] from the given scancode and key state
-    fn create_event(&self, scancode: &Ps2Scancode) -> KeyEvent {
+    fn create_event(&self, scancode: &Ps2Scancode) -> Option<KeyEvent> {
         let ctrl = self.pressed(keymap::codes::LEFT_CONTROL) || self.pressed(keymap::codes::RIGHT_CONTROL);
         let alt = self.pressed(keymap::codes::LEFT_ALT) || self.pressed(keymap::codes::RIGHT_ALT);
         let shift = self.pressed(keymap::codes::LEFT_SHIFT) || self.pressed(keymap::codes::RIGHT_SHIFT);
         let modifiers = ModifierFlags::from_modifiers(ctrl, alt, shift);
 
-        let keycode = *keymap::PS2_SET_1.get(scancode.code as usize).unwrap_or(&0x0);
-        let char = keymap::get_us_qwerty_char(keycode)
-            .map(|chars| if shift {
-                chars.1
-            } else {
-                chars.0
-            });
+        if let Some(keycode) = scancode.keycode() {
+            let char = keymap::get_us_qwerty_char(keycode)
+                .map(|chars| if shift {
+                    chars.1
+                } else {
+                    chars.0
+                });
 
-        // If the key was already pressed and make was sent, this is a repeat event
-        let event_type = match scancode.make {
-            true if self.pressed(keycode) => KeyEventType::Repeat,
-            true => KeyEventType::Make,
-            false => KeyEventType::Break,
-        };
+            // If the key was already pressed and make was sent, this is a repeat event
+            let event_type = match scancode.make {
+                true if self.pressed(keycode) => KeyEventType::Repeat,
+                true => KeyEventType::Make,
+                false => KeyEventType::Break,
+            };
 
-        KeyEvent { keycode, char, event_type, modifiers }
+            return Some(KeyEvent { keycode, char, event_type, modifiers });
+        }
+
+        None
     }
 }
 
@@ -175,7 +183,7 @@ impl<'a> Keyboard for Ps2Keyboard<'a> {
             return Err(Ps2KeyboardError::KeyboardEnableFailed);
         }
 
-        if self.device.command_data(DeviceDataCommand::SetScancode, 1)? != ps2::ACK {
+        if self.device.command_data(DeviceDataCommand::SetScancode, 2)? != ps2::ACK {
             return Err(Ps2KeyboardError::ScancodeSetFailed);
         }
 
@@ -193,9 +201,11 @@ impl<'a> Keyboard for Ps2Keyboard<'a> {
     }
 
     fn read_event(&mut self) -> Result<Option<KeyEvent>, Self::Error> {
-        let event = self.read_scancode()?.map(|scancode| {
+        let event = self.read_scancode()?.and_then(|scancode| {
             let event = self.create_event(&scancode);
-            self.key_states[event.keycode as usize] = scancode.make;
+            if event.is_some() {
+                self.key_states[event.unwrap().keycode as usize] = scancode.make;
+            }
             event
         });
         Ok(event)
@@ -209,14 +219,21 @@ impl<'a> Keyboard for Ps2Keyboard<'a> {
 /// Represents a PS/2 scancode received from the device
 struct Ps2Scancode {
     pub code: u8,
+    pub extended: bool,
     pub make: bool,
 }
 
 impl Ps2Scancode {
-    fn new(scancode: u8, make: bool) -> Self {
-        Ps2Scancode {
-            code: scancode,
-            make,
+    fn new(scancode: u8, extended: bool, make: bool) -> Self {
+        Ps2Scancode { code: scancode, extended, make }
+    }
+
+    /// Gets the Flower keycode for this scancode
+    fn keycode(&self) -> Option<u8> {
+        if self.extended {
+            keymap::get_extended_code_ps2_set_2(self.code)
+        } else {
+            keymap::get_code_ps2_set_2(self.code)
         }
     }
 }
