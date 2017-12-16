@@ -117,7 +117,6 @@ pub mod codes {
     }
 }
 
-// TODO: Handle NumPad Numlock
 /// Gets the US QWERTY character(s) for the given Flower keycode. The first element represents the lower-case, and the second the upper.
 pub fn get_us_qwerty_char(keycode: u8) -> Option<(char, char)> {
     match keycode {
