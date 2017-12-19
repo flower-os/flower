@@ -19,6 +19,11 @@ spin = "^0.4.6"
 x86_64 = "^0.1.2"
 bitflags = "^1.0"
 
+[dependencies.array-init]
+git = "https://github.com/Restioson/array-init"
+branch = "fix-nodrop-std"
+features = ["nightly"]
+
 [dependencies.lazy_static]
 version = "0.2.4"
 features = ["spin_no_std"]

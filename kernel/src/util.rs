@@ -58,3 +58,9 @@ pub trait FromDiscriminator {
     type Output;
     fn from_discriminator(discriminator: u64) -> Result<Self::Output, UnknownDiscriminator>;
 }
+
+/// Halts the CPU and diverges
+pub fn halt() -> ! {
+    unsafe { asm!("hlt") }
+    loop {} // Required to trick rust
+}

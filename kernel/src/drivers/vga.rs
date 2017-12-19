@@ -3,17 +3,22 @@ use core::{cmp, fmt};
 use core::convert::TryFrom;
 use core::ptr::Unique;
 use core::result::Result;
+use spin::Mutex;
 
 use util::{self, FromDiscriminator};
-use color::Color;
-use terminal::{TerminalWriter, SizedTerminalWriter, Point, TerminalCharacter, TerminalColor};
+use color::{Color, ColorPair};
+use terminal::*;
 
-pub const RESOLUTION_X: usize = 80;
-pub const RESOLUTION_Y: usize = 25;
+pub static WRITER: Mutex<VgaWriter> = Mutex::new(VgaWriter::new());
+
+/// The resolution of VGA
+pub const RESOLUTION: Resolution = Resolution::new(80, 25);
 
 /// Interface to VGA, allowing write
 pub struct VgaWriter {
     buffer: Unique<VgaBuffer>,
+    cursor: Point,
+    color: ColorPair,
 }
 
 impl fmt::Debug for VgaWriter {
@@ -22,69 +27,147 @@ impl fmt::Debug for VgaWriter {
     }
 }
 
-#[derive(Debug)]
-pub enum VgaWriteError {
-}
-
 impl VgaWriter {
     pub const fn new() -> Self {
         VgaWriter {
             buffer: unsafe { Unique::new_unchecked(0xb8000 as *mut _) },
+            cursor: Point::new(0, RESOLUTION.y - 1),
+            color: color!(White on Black),
         }
     }
 
-    fn buffer(&mut self) -> &mut VgaBuffer {
+    // TODO nonpublic
+    pub fn buffer(&mut self) -> &mut VgaBuffer {
         unsafe { self.buffer.as_mut() }
     }
+}
 
-    /// Fills the screen 4 pixels at a time
-    pub fn fill_screen(&mut self, fill_colour: Color) {
-        let blank = VgaChar {
-            color: VgaColor::new(Color::Black, fill_colour),
-            character: b' ',
-        };
+impl TerminalOutput<()> for VgaWriter {
 
-        for row in 0..RESOLUTION_Y {
-            for column in 0..RESOLUTION_X {
-                self.buffer().set_char(column, row, blank);
-            }
+    fn resolution(&self) -> Resolution {
+        RESOLUTION
+    }
+
+    fn color_supported(&self, _color: Color) -> bool {
+        true // For now, the color scheme is the vga color scheme
+    }
+
+    fn cursor_pos(&self) -> Point {
+        self.cursor
+    }
+
+    fn set_cursor_pos(&mut self, cursor: Point) -> Result<(), TerminalOutputError<()>> {
+        if self.in_bounds(cursor) {
+            self.cursor = cursor;
+            Ok(())
+        } else {
+            // TODO
+            let x = cursor.x;
+            let y = cursor.y;
+            Err(TerminalOutputError::OutOfBounds(cursor))
         }
     }
-}
 
-impl TerminalWriter for VgaWriter {
-    type Error = VgaWriteError;
+    fn color(&self) -> ColorPair {
+        self.color
+    }
 
-    fn write(&mut self, char: TerminalCharacter) -> Result<(), Self::Error> {
-        self.buffer().set_char(0, 0, VgaChar::new(VgaColor::from(char.color), char.character as u8));
+    fn set_color(&mut self, color: ColorPair) -> Result<(), TerminalOutputError<()>> {
+        if !self.color_supported(color.foreground) {
+            return Err(TerminalOutputError::ColorUnsupported(color.foreground));
+        }
+        if !self.color_supported(color.background) {
+            return Err(TerminalOutputError::ColorUnsupported(color.background));
+        }
+
+        self.color = color;
+
         Ok(())
     }
-}
 
-impl SizedTerminalWriter for VgaWriter {
-    fn set(&mut self, point: Point, char: TerminalCharacter) -> Result<(), Self::Error> {
-        self.buffer().set_char(point.x, point.y, VgaChar::new(VgaColor::from(char.color), char.character as u8));
+    fn set_char(&mut self, char: TerminalCharacter, point: Point) -> Result<(), TerminalOutputError<()>> {
+
+        let point = Point::new(point.x, RESOLUTION.y - 1 - point.y);
+
+        if !self.color_supported(char.color.foreground) {
+            return Err(TerminalOutputError::ColorUnsupported(char.color.foreground));
+        }
+        if !self.color_supported(char.color.background) {
+            return Err(TerminalOutputError::ColorUnsupported(char.color.background));
+        }
+
+        if !self.in_bounds(point) {
+            return Err(TerminalOutputError::OutOfBounds(point));
+        }
+
+        self.buffer().set_char(
+            point.x,
+            point.y,
+            VgaChar::new(
+                VgaColor::from(char.color),
+                char.character as u8
+            )
+        );
+        Ok(())
+    }
+
+    fn write_raw(&mut self, char: TerminalCharacter) -> Result<(), TerminalOutputError<()>> {
+        let mut pos = self.cursor_pos();
+        self.set_char(char, pos)?;
+        // TODO something fishy in set_char
+        pos.x += 1;
+
+        // If the x point went out of bounds, wrap
+        if pos.x >= RESOLUTION.x {
+            self.new_line()?;
+        } else {
+            self.set_cursor_pos(pos)?;
+        }
+
+        Ok(())
+    }
+
+    fn clear_line(&mut self, y: usize) -> Result<(), TerminalOutputError<()>> {
+        let color = self.color().background;
+
+        if self.in_bounds(Point::new(0, y)) {
+            self.buffer().clear_row(y, color);
+            Ok(())
+        } else {
+            Err(TerminalOutputError::OutOfBounds(Point::new(0, y)))
+        }
+    }
+
+    fn clear(&mut self) -> Result<(), TerminalOutputError<()>> {
+        for line in 0..self.resolution().y {
+            self.clear_line(line)?;
+        }
+
+        Ok(())
+    }
+
+    fn scroll_down(&mut self, amount: usize) -> Result<(), TerminalOutputError<()>> {
+        let background = self.color.background;
+        self.buffer().scroll_down(amount, background);
+
         Ok(())
     }
 }
 
 /// Represents the complete VGA character buffer, containing a 2D array of VgaChar
-struct VgaBuffer([[Volatile<VgaChar>; RESOLUTION_X]; RESOLUTION_Y]);
+// TODO nonpublic
+#[repr(C)]
+pub struct VgaBuffer([[Volatile<VgaChar>; RESOLUTION.x]; RESOLUTION.y]);
 
 impl VgaBuffer {
     pub fn set_char(&mut self, x: usize, y: usize, value: VgaChar) {
         self.0[y][x].write(value);
     }
 
-    #[allow(dead_code)] // Part of API
-    pub fn get_char(&mut self, x: usize, y: usize) -> VgaChar {
-        self.0[y][x].read()
-    }
-
     pub fn scroll_down(&mut self, amount: usize, background_color: Color) {
-        let amount = cmp::min(amount, RESOLUTION_Y);
+        let amount = cmp::min(amount, RESOLUTION.y);
 
-        // Shift elements left by amount only if amount < Y resolution
+        // Shift lines left (up) by amount only if amount < Y resolution
         // If amount is any more then the data will be cleared anyway
         if amount != RESOLUTION_Y {
             self.0.rotate_left(amount);
@@ -92,7 +175,7 @@ impl VgaBuffer {
 
         // Clear rows up to the amount
         for row in 0..amount {
-            self.clear_row((RESOLUTION_Y - 1) - row, background_color);
+            self.clear_row((RESOLUTION.y - 1) - row, background_color);
         }
     }
 
@@ -102,7 +185,7 @@ impl VgaBuffer {
             b' '
         );
 
-        for x in 0..RESOLUTION_X {
+        for x in 0..RESOLUTION.x {
             self.0[y][x].write(blank);
         }
     }
@@ -117,28 +200,27 @@ pub struct VgaChar {
 }
 
 impl VgaChar {
-    fn new(color: VgaColor, character: u8) -> Self {
-        VgaChar {
-            color: color,
-            character: character
-        }
+    // TODO nonpublic
+    pub fn new(color: VgaColor, character: u8) -> Self {
+        VgaChar { color, character }
     }
 }
 
 /// Represents a VGA colour, with both a foreground and background
 #[derive(Clone, Copy)]
+#[repr(C)]
 pub struct VgaColor(u8);
 
 impl VgaColor {
     /// Creates a new VgaColor for the given foreground and background
-    pub const fn new(foreground: Color, background: Color) -> VgaColor {
+    pub const fn new(foreground: Color, background: Color) -> Self {
         VgaColor((background as u8) << 4 | (foreground as u8))
     }
 }
 
-/// Converts a [TerminalColor] to a [VgaColor] to be displayed
-impl From<TerminalColor> for VgaColor {
-    fn from(color: TerminalColor) -> Self {
+/// Converts a [ColorPair] to a [VgaColor] to be displayed
+impl From<ColorPair> for VgaColor {
+    fn from(color: ColorPair) -> Self {
         VgaColor::new(color.foreground, color.background)
     }
 }

@@ -22,3 +22,38 @@ from_discriminator! {
         White = 15,
     }
 }
+
+#[derive(Debug, Copy, Clone)]
+pub struct ColorPair {
+    pub foreground: Color,
+    pub background: Color,
+}
+
+impl ColorPair {
+    #[allow(dead_code)] // Completeness
+    pub const fn new(foreground: Color, background: Color) -> Self {
+        ColorPair { foreground, background }
+    }
+}
+
+impl Default for ColorPair {
+    fn default() -> Self {
+        ColorPair {
+            foreground: Color::White,
+            background: Color::Black
+        }
+    }
+}
+
+macro_rules! color {
+    ($foreground:ident, $background:ident) => {
+        ::color::ColorPair {
+            foreground: ::color::Color::$foreground,
+            background: ::color::Color::$background,
+        }
+    };
+
+    ($foreground:ident on $background:ident) => {
+        color!($foreground, $background)
+    };
+}
