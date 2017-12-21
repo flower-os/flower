@@ -21,9 +21,11 @@ extern crate bitflags;
 extern crate lazy_static;
 
 mod lang;
-mod io;
+#[macro_use]
+mod util;
 #[macro_use]
 mod drivers;
+mod io;
 
 use drivers::ps2;
 use drivers::keyboard::{Keyboard, KeyEventType, Ps2Keyboard};
