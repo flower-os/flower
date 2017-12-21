@@ -49,3 +49,10 @@ macro_rules! from_discriminator {
         }
     };
 }
+
+pub struct UnknownDiscriminator(pub u64);
+
+pub trait FromDiscriminator {
+    type Output;
+    fn from_discriminator(discriminator: u64) -> Result<Self::Output, UnknownDiscriminator>;
+}
