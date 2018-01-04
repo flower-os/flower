@@ -20,6 +20,10 @@ You will need:
 You can make the iso with `make iso`, and launch qemu and run it with `make run`. To enable debug symbols,
 add `debug=1` to the make command.
 
+## Contributing
+
+If you wish to PR something to Flower, thanks so much! Just note to please **pull request into development, not master**.
+
 ## Thanks
 
 Much thanks to:
@@ -30,6 +34,7 @@ Much thanks to:
  - the people over on the [Rust discord](https://discord.me/rust-lang), such as:
    - toor,
    - rep nop,
-   - and nyrox;
+   - nyrox,
+   - and cult pony;
  - the [OsDev wiki](http://wiki.osdev.org)
  - [Wikipedia](https://wikipedia.org) (of course!)
