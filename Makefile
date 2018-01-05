@@ -21,25 +21,27 @@ target := x86_64-unknown-flower-none
 asm_source_files := $(wildcard $(asm_dir)/*.asm)
 asm_obj_files = $(patsubst $(asm_dir)/%.asm,  $(out_dir)/%.o, $(asm_source_files))
 
-kernel = $(out_dir)/kernel.bin
-iso = $(out_dir)/flower.iso
+kernel = $(out_dir)/kernel.elf
+grub_iso = $(out_dir)/flower.iso
 
-default: $(iso)
+default: build
 
-.PHONY: clean run $(rust_kernel)
-$(iso): $(kernel) $(grub_cfg)
+.PHONY: clean run build
+$(grub_iso): $(kernel) $(grub_cfg)
 	@cp $(grub_cfg) $(out_dir)/isofiles/boot/grub/
 	@cp $(kernel) $(out_dir)/isofiles/boot/
 	@grub-mkrescue -o $(out_dir)/flower.iso $(out_dir)/isofiles
 
-run: $(iso)
-	@qemu-system-x86_64 -cdrom $(iso) $(qemu_flags)
+build: $(kernel)
+
+# Run with qemu
+run: $(grub_iso)
+	@qemu-system-x86_64 -cdrom $(grub_iso) $(qemu_flags)
 
 # Clean build dir
 clean:
 	@rm -rf build
 	@cd $(rust_crate_dir) && xargo clean
-
 
 # Make build directories
 makedirs:
@@ -53,8 +55,8 @@ $(rust_kernel): $(rust_crate_dir)/Cargo.toml
       xargo build --target $(target) $(xargo_flags)
 	@mv $(rust_crate_dir)/target/$(target)/$(build_type)/libflower_kernel.a $(rust_kernel)
 
-# Compile kernel.bin
-$(out_dir)/kernel.bin: $(asm_obj_files) $(linker_script) $(rust_kernel)
+# Compile kernel.elf
+$(kernel): $(asm_obj_files) $(linker_script) $(rust_kernel)
 	@ld -n -T $(linker_script) -o $(kernel) $(asm_obj_files) $(rust_kernel) --gc-sections
     
 # Compile asm files
