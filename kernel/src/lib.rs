@@ -92,6 +92,7 @@ pub extern fn kmain() -> ! {
 
 // TODO move somewhere else
 fn halt() -> ! {
-    unsafe { asm!("hlt") }
-    loop {} // Required to trick rust
+    loop {
+        unsafe { asm!("hlt") }
+    }
 }
