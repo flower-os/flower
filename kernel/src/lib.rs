@@ -87,12 +87,13 @@ pub extern fn kmain() -> ! {
         println!("kbd: enable unsuccessful");
     }
 
-    halt()
+    unsafe { halt() }
 }
 
-// TODO move somewhere else
-fn halt() -> ! {
+unsafe fn halt() -> ! {
+    asm!("cli");
+
     loop {
-        unsafe { asm!("hlt") }
+        asm!("hlt")
     }
 }
