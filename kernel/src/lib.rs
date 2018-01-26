@@ -88,8 +88,7 @@ pub extern fn kmain() -> ! {
     } else {
         println!("kbd: enable unsuccessful");
     }
-    ps2::PS2.lock().initialize().expect("PS/2 should successfully initialize");
-    ps2::CONTROLLER.lock().initialize().expect("PS/2 should successfully initialize");
+
     let mut controller = ps2::CONTROLLER.lock();
     match controller.initialize() {
         Ok(_) => println!("ps2c: successful initialization"),
@@ -101,7 +100,7 @@ pub extern fn kmain() -> ! {
     if let Ok(_) = keyboard.enable() {
         println!("kbd: successfully enabled");
         loop {
-            if let Ok(event) = keyboard.read_event() {
+            if let Ok(Some(event)) = keyboard.read_event() {
                 if event.event_type != KeyEventType::Break {
                     if let Some(char) = event.char {
                         print!("{}", char);
