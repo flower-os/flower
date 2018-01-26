@@ -12,7 +12,9 @@ section .text
 bits 32
 
 start:
-    
+    ; Disable interrupts
+    cli
+
     ; Checks
     call check_multiboot ; Check if booted correctly
     call check_cpuid  ; Check if cpuid supported

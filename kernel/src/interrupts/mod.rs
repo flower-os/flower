@@ -2,6 +2,7 @@
 
 use x86_64::structures::idt::Idt;
 
+mod legacy_pic;
 mod exceptions;
 mod irqs;
 
@@ -13,7 +14,9 @@ lazy_static! {
     };
 }
 
-/// Implicitly invoke the lazy initializer of the IDT and load it
+/// Implicitly invoke the lazy initializer of the IDT & load it, as well as disable PICs and set up
+/// APICs
 pub fn init() {
     IDT.load();
+    legacy_pic::CHAINED_PICS.lock().remap_and_disable();
 }
