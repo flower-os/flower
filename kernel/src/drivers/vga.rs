@@ -191,7 +191,7 @@ impl VgaBuffer {
         // Shift elements left by amount only if amount < Y resolution
         // If amount is any more then the data will be cleared anyway
         if amount != RESOLUTION_Y {
-            self.0.rotate(amount);
+            self.0.rotate_left(amount);
         }
 
         // Clear rows up to the amount
