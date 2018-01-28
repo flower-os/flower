@@ -8,6 +8,7 @@
 #![feature(slice_rotate)]
 #![feature(try_from)]
 #![feature(type_ascription)]
+#![feature(ptr_internals)]
 
 extern crate rlibc;
 extern crate volatile;
