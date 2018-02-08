@@ -1,3 +1,5 @@
+use core::marker::PhantomData;
+
 /// Reads u8 from given port
 pub unsafe fn inb(port: u16) -> u8 {
     let inb: u8;
@@ -10,25 +12,94 @@ pub unsafe fn outb(port: u16, value: u8) {
     asm!("outb %al, %dx" :: "{dx}"(port), "{al}"(value));
 }
 
-/// Represents a port to be accessed through inb and outb
-pub struct IOPort {
-    port: u16,
+//Read word from port.
+pub unsafe fn inw(port: u16) -> u16 {
+    let result: u16;
+    asm!("inw %dx, %ax" : "={ax}"(result) : "{dx}"(port) :: "volatile");
+    result
 }
 
-impl IOPort {
-    pub const fn new(port: u16) -> Self {
+///Write a word to the port.
+pub unsafe fn outw(value: u16, port: u16) {
+    asm!("outw %ax, %dx" :: "{dx}"(port), "{ax}"(value) :: "volatile");
+}
+
+///Read a dword from the port.
+pub unsafe fn inl(port: u16) -> u32 {
+    let result: u32;
+    asm!("inl %dx, %eax" : "={eax}"(result) : "{dx}"(port) :: "volatile");
+    result
+}
+
+///Write a dword to the port.
+pub unsafe fn outl(value: u32, port: u16) {
+    asm!("outl %eax, %dx" :: "{dx}"(port), "{eax}"(value) :: "volatile");
+}
+
+pub trait InOut {
+    unsafe fn port_in(port: u16) -> Self;
+    unsafe fn port_out(port: u16) -> Self;
+}
+
+//TODO add type implementors.
+
+impl InOut for u8 {
+    unsafe fn port_in(port: u16) -> u8 {
+        inb(port)
+    }
+
+    unsafe fn port_out(port: u16, value: u8) {
+        outb(value, port);
+    }
+}
+
+impl InOut for u16 {
+    unsafe fn port_in(port: u16) -> u16 {
+        inw(port)
+    }
+
+    unsafe fn port_out(port: u16, value: u16) {
+        outw(port);
+    }
+}
+
+impl InOut for u32 {
+    unsafe fn port_in(port: u16) -> u32 {
+        inl(port)
+    }
+
+    unsafe fn port_out(port: u16, value: u32) {
+        outl(port, value);
+    } 
+}
+
+/// Represents a port to be accessed through in/out instructions. The values read and written are
+/// `InOut` in size.
+#[derive(Debug)]
+pub struct IOPort<T: InOut>{
+    //Allows for very high port numbers.
+    port: u16,
+    //Zero size type placeholder.
+    phantom: PhantomData<T>,
+}
+
+impl<T: InOut> IOPort<T> {
+    pub const unsafe fn new(port: u16) -> IOPort<T> {
         IOPort {
             port: port,
+            phantom: PhantomData,
         }
     }
 
-    /// Writes a byte to this port
-    pub fn write(&self, value: u8) {
-        unsafe { outb(self.port, value) }
+    /// Writes a value to this port
+    pub fn write(&mut self, value: T) {
+        unsafe {
+            T::port_out(self.port, value);
+        }
     }
 
-    /// Reads a byte from this port
-    pub fn read(&self) -> u8 {
-        unsafe { inb(self.port) }
+    /// Reads a value from this port
+    pub fn read(&mut self) -> T {
+        unsafe { T::port_in(self.port) }
     }
 }
