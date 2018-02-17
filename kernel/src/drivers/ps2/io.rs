@@ -72,7 +72,7 @@ pub mod commands {
     }
 }
 
-use io::IOPort;
+use io::Port;
 
 pub static DATA_PORT: IOPort = unsafe { IOPort::new(0x60) };
 pub static STATUS_PORT: IOPort = unsafe { IOPort::new(0x64) };
