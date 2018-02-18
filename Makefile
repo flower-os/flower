@@ -50,7 +50,7 @@ makedirs:
 	@mkdir -p $(out_dir)/isofiles/boot/grub
 
 # Compile rust
-$(rust_kernel): $(rust_crate_dir)/Cargo.toml
+$(rust_kernel): $(rust_crate_dir)/Cargo.toml $(rust_crate_dir)/src/*
 	@cd $(rust_crate_dir) && \
       RUST_TARGET_PATH=$(shell pwd)/$(rust_crate_dir) xargo build --target $(target) $(xargo_flags)
 	@mv $(rust_crate_dir)/target/$(target)/$(build_type)/libflower_kernel.a $(rust_kernel)
