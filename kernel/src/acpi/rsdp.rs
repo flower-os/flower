@@ -1,21 +1,34 @@
-use core::{fmt::{self, Display}, ptr, mem};
+//! RSDP (Root System Description Pointer) module
+
+use core::{fmt::{self, Display}, ptr, mem, ops::Deref};
 use either::Either;
 use util::CChar;
 
+/// The pointer to the EBDA (Extended Bios Data Area) start segment pointer
 const EBDA_START_SEGMENT_PTR: usize = 0x40e;
+/// The earliest (lowest) memory address an EBDA (Extended Bios Data Area) can start
 const EBDA_EARLIEST_START: usize = 0x80000;
+/// The end of the EBDA (Extended Bios Data Area)
 const EBDA_END: usize = 0x9ffff;
+/// The start of the main bios area below 1mb in which to search for the RSDP
+/// (Root System Description Pointer)
 const RSDP_BIOS_AREA_START: usize = 0xe0000;
+/// The end of the main bios area below 1mb in which to search for the RSDP
+/// (Root System Description Pointer)
 const RSDP_BIOS_AREA_END: usize = 0xfffff;
-const RSDP_SIGNATURE: [CChar; 8] = cchar_string!('R', 'S', 'D', ' ', 'P', 'T', 'R', ' ');
+/// The RSDP (Root System Description Pointer)'s signature, "RSD PTR " (note trailing space)
+const RSDP_SIGNATURE: [CChar; 8] = cchar_string!['R', 'S', 'D', ' ', 'P', 'T', 'R', ' '];
 
+/// A structure describing an area of memory to search
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 struct SearchArea {
-    begin: usize,
-    end: usize,
+    pub begin: usize,
+    pub end: usize,
 }
 
+/// Find the begining of the EBDA (Extended Bios Data Area)
 fn find_ebda_start() -> usize {
+    // Read base from BIOS area. This is not always given by the bios, so it needs to be checked
     let base = (unsafe { ptr::read(EBDA_START_SEGMENT_PTR as *const u16) } as usize) << 4;
 
     // Check if base segment ptr is in valid range valid
@@ -34,11 +47,12 @@ fn find_ebda_start() -> usize {
     }
 }
 
-/// Search for the rsdp, returning either RSDP from v1 acpi or RSDP from v2 acpi alone with
-/// where it was found, else nothing.
+/// Search for the RSDP, returning either the RSDP from v1 acpi or the RSDP from v2 acpi along
+/// with where it was found. If it could not be found, then `None` is returned.
 pub fn search_for_rsdp() -> Option<(Either<RsdpV1, RsdpV2>, usize)> {
     let ebda_start = find_ebda_start();
 
+    // The areas that will be searched for the RSDP
     let areas = [
         // Main bios area below 1 mb
         // In practice RSDP is more often here than in ebda
@@ -72,6 +86,7 @@ pub fn search_for_rsdp() -> Option<(Either<RsdpV1, RsdpV2>, usize)> {
             continue;
         }
 
+        // If revision is > 1 then use v2 RSDP
         if rsdp_v1.revision > 1 {
             let rsdp_v2: RsdpV2 = unsafe { ptr::read(address as *const _) };
 
@@ -91,11 +106,13 @@ pub fn search_for_rsdp() -> Option<(Either<RsdpV1, RsdpV2>, usize)> {
     rsdp_and_addr
 }
 
+/// The root system description pointer in ACPI v1. This is different to the RSDP in ACPI v2 and
+/// above in that newer versions also point to the XSDT (eXtended System Description Table)
 #[derive(Copy, Clone, Debug)]
 #[repr(C, packed)]
 pub struct RsdpV1 {
-    pub signature: [CChar; 8],
-    pub _checksum: u8,
+    signature: [CChar; 8],
+    _checksum: u8,
     pub oem_id: [CChar; 6],
     pub revision: u8,
     pub rsdt_address: u32,
@@ -126,6 +143,8 @@ RSDT Address: {:#x}"#, revision, rsdt_address)
 }
 
 impl RsdpV1 {
+    /// Validates the RSDP by summing all bytes (first bit interpreted as sign) together and
+    /// checking that the lowest byte is 0
     pub fn validate(&self) -> bool {
         let bytes: [u8; mem::size_of::<Self>()] = unsafe { mem::transmute_copy(&self) };
 
@@ -134,6 +153,8 @@ impl RsdpV1 {
     }
 }
 
+/// The root system description pointer in ACPI v1. This is different to the RSDP in ACPI v1 in that
+/// newer versions also point to the XSDT (eXtended System Description Table)
 #[derive(Copy, Clone, Debug)]
 #[repr(C, packed)]
 pub struct RsdpV2 {
@@ -145,6 +166,8 @@ pub struct RsdpV2 {
 }
 
 impl RsdpV2 {
+    /// Validates the RSDP by summing all bytes (first bit interpreted as sign) together and
+    /// checking that the lowest byte is 0
     pub fn validate(&self) -> bool {
         let bytes: [u8; mem::size_of::<Self>()] = unsafe { mem::transmute_copy(&self) };
 
