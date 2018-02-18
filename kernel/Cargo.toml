@@ -22,3 +22,7 @@ bitflags = "^1.0"
 [dependencies.lazy_static]
 version = "0.2.4"
 features = ["spin_no_std"]
+
+[dependencies.either]
+version = "1.4"
+default-features = false

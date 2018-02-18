@@ -8,11 +8,15 @@
 #![feature(slice_rotate)]
 #![feature(try_from)]
 #![feature(type_ascription)]
+#![feature(range_contains)]
+#![feature(iterator_step_by)]
+#![feature(use_nested_groups)]
 
 extern crate rlibc;
 extern crate volatile;
 extern crate spin;
 extern crate x86_64;
+extern crate either;
 
 #[macro_use]
 extern crate bitflags;
@@ -26,6 +30,7 @@ mod util;
 #[macro_use]
 mod drivers;
 mod io;
+mod acpi;
 
 use drivers::ps2;
 use drivers::keyboard::{Keyboard, KeyEventType, Ps2Keyboard};
@@ -63,6 +68,16 @@ pub extern fn kmain() -> ! {
         "Flower kernel boot!\n-------------------\n\n",
         VgaColor::new(Color::Green, Color::Black)
     ).expect("Color code should be valid");
+
+    let rsdp_search_result = acpi::rsdp::search_for_rsdp();
+
+    match rsdp_search_result {
+        Some((rsdp, address)) => {
+            println!("acpi: rsdp found at {:#x}", address);
+            println!("\n{}\n", rsdp);
+        },
+        None => println!("acpi: rsdp not found"),
+    };
 
     let mut controller = ps2::CONTROLLER.lock();
     match controller.initialize() {
