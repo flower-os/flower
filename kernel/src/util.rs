@@ -77,9 +77,9 @@ impl Display for CChar {
     }
 }
 
-/// Creates a cchar string (array) without a null terminator
+/// Macro for creating a [CChar] string (array of [CChar]) without a null terminator
 macro_rules! cchar_string {
-    ($($c:expr),*) => (
+    [$($c:expr),*] => (
         [$(::util::CChar::from_char($c)),*]
     )
 }
