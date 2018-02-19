@@ -25,6 +25,10 @@ extern crate bitflags;
 #[macro_use]
 extern crate lazy_static;
 
+use drivers::keyboard::{Keyboard, KeyEventType, Ps2Keyboard};
+use drivers::ps2;
+use drivers::vga::{self, Color, VgaColor};
+
 mod lang;
 #[macro_use]
 mod util;
@@ -32,10 +36,6 @@ mod util;
 mod drivers;
 mod io;
 mod acpi;
-
-use drivers::ps2;
-use drivers::keyboard::{Keyboard, KeyEventType, Ps2Keyboard};
-use drivers::vga::{self, VgaColor, Color};
 
 const FLOWER: &'static str = include_str!("resources/art/flower.txt");
 const FLOWER_STEM: &'static str = include_str!("resources/art/flower_stem.txt");
@@ -67,7 +67,7 @@ pub extern fn kmain() -> ! {
     // Print boot message
     vga::WRITER.lock().write_str_colored(
         "Flower kernel boot!\n-------------------\n\n",
-        VgaColor::new(Color::Green, Color::Black)
+        VgaColor::new(Color::Green, Color::Black),
     ).expect("Color code should be valid");
 
     let rsdp_search_result = acpi::rsdp::search_for_rsdp();
@@ -76,7 +76,7 @@ pub extern fn kmain() -> ! {
         Some((rsdp, address)) => {
             println!("acpi: rsdp found at {:#x}", address);
             println!("\n{}\n", rsdp);
-        },
+        }
         None => println!("acpi: rsdp not found"),
     };
 
