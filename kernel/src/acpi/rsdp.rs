@@ -1,6 +1,6 @@
 //! RSDP (Root System Description Pointer) module
 
-use core::{fmt::{self, Display}, ptr, mem, ops::Deref};
+use core::{fmt::{self, Display}, ptr, mem};
 use either::Either;
 use util::CChar;
 
@@ -17,7 +17,7 @@ const RSDP_BIOS_AREA_START: usize = 0xe0000;
 /// (Root System Description Pointer)
 const RSDP_BIOS_AREA_END: usize = 0xfffff;
 /// The RSDP (Root System Description Pointer)'s signature, "RSD PTR " (note trailing space)
-const RSDP_SIGNATURE: [CChar; 8] = cchar_string!['R', 'S', 'D', ' ', 'P', 'T', 'R', ' '];
+const RSDP_SIGNATURE: &'static [CChar; 8] = b"RSD PTR ";
 
 /// A structure describing an area of memory to search
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -74,7 +74,7 @@ pub fn search_for_rsdp() -> Option<(Either<RsdpV1, RsdpV2>, usize)> {
     for address in areas.iter().flat_map(|area| area.begin..area.end).step_by(16) {
         let signature: [CChar; 8] = unsafe { ptr::read(address as *const _) };
 
-        if signature != RSDP_SIGNATURE {
+        if signature != *RSDP_SIGNATURE {
             continue;
         }
 
@@ -82,12 +82,11 @@ pub fn search_for_rsdp() -> Option<(Either<RsdpV1, RsdpV2>, usize)> {
 
         if !rsdp_v1.validate() {
             println!("acpi: found invalid v1 rsdp\n      at {:#x}", address);
-                    //RSDT Address: {:#x}
             continue;
         }
 
-        // If revision is > 1 then use v2 RSDP
-        if rsdp_v1.revision > 1 {
+        // If revision is > 0 (0 = ACPI v1) then use v2 and above RSDP
+        if rsdp_v1.revision > 0 {
             let rsdp_v2: RsdpV2 = unsafe { ptr::read(address as *const _) };
 
             if !rsdp_v2.validate() {
@@ -114,31 +113,27 @@ pub struct RsdpV1 {
     signature: [CChar; 8],
     _checksum: u8,
     pub oem_id: [CChar; 6],
+    /// The ACPI revision. ACPI v1 revision is 0 for RSDP
     pub revision: u8,
     pub rsdt_address: u32,
 }
 
 impl Display for RsdpV1 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f,
-               "RSDP Table
-----------
-")?;
-
+        write!(f, "RSDP Table\n----------")?;
         write!(f, "OEM ID: \"")?;
 
         for c in self.oem_id.iter() {
-            write!(f, "{}", c)?;
+            write!(f, "{}", *c as char)?;
         }
+
+        write!(f, "\"")?;
 
         // Copy from struct to avoid referencing to packed value
         let revision = self.revision;
         let rsdt_address = self.rsdt_address;
 
-        write!(f,
-               r#""
-Revision: {}
-RSDT Address: {:#x}"#, revision, rsdt_address)
+        write!(f, "Revision: {}\nRSDT Address: {:#x}", revision, rsdt_address)
     }
 }
 
@@ -160,7 +155,7 @@ impl RsdpV1 {
 pub struct RsdpV2 {
     pub v1: RsdpV1,
     pub len: u32,
-    pub xsdt_address: u32,
+    pub xsdt_address: u64,
     pub _extended_checksum: u8,
     pub _reserved: [u8; 3],
 }
@@ -184,9 +179,6 @@ impl Display for RsdpV2 {
         let len = self.len;
         let xsdt_address = self.xsdt_address;
 
-        write!(f,
-               r#"
-Length: {}
-XSDT Adress: {:#x}"#, len, xsdt_address)
+        write!(f, "Length: {}\nXSDT Adress: {:#x}", len, xsdt_address)
     }
 }

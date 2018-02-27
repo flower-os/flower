@@ -25,9 +25,12 @@ extern crate bitflags;
 #[macro_use]
 extern crate lazy_static;
 
+use core::convert::TryInto;
+use either::{Left, Right};
 use drivers::keyboard::{Keyboard, KeyEventType, Ps2Keyboard};
 use drivers::ps2;
 use drivers::vga::{self, Color, VgaColor};
+use acpi::sdt::{SdtHeader, rsdt::TableAddresses};
 
 mod lang;
 #[macro_use]
@@ -70,15 +73,61 @@ pub extern fn kmain() -> ! {
         VgaColor::new(Color::Green, Color::Black),
     ).expect("Color code should be valid");
 
-    let rsdp_search_result = acpi::rsdp::search_for_rsdp();
+    let acpi_res: Result<(), &str> = catch! {
+        let (rsdp, address) = match acpi::rsdp::search_for_rsdp() {
+            Some(ret) => ret,
+            None => return Err("acpi: rsdp not found"),
+        };
 
-    match rsdp_search_result {
-        Some((rsdp, address)) => {
-            println!("acpi: rsdp found at {:#x}", address);
-            println!("\n{}\n", rsdp);
+        println!("acpi: rsdp found at {:#x}", address);
+
+        let mut temp = rsdp
+            .map_left(|rsdp_v1| {
+                println!("acpi: using rsdt");
+                rsdp_v1.try_into().map_err(|_| "acpi: invalid rsdt")
+            })
+            .map_right(|rsdp_v2| {
+                println!("acpi: using xsdt");
+                rsdp_v2.try_into().map_err(|_| "acpi: invalid xsdt")
+            });
+
+        let (header, sdt_addresses) = match temp {
+            Left(Ok((ref mut header, ref mut addresses))) => {
+                (header, addresses as &mut Iterator<Item=usize>)
+            },
+            Right(Ok((ref mut header, ref mut addresses))) => {
+                (header, addresses as &mut Iterator<Item=usize>)
+            },
+            Left(Err(ref mut err)) => return Err(*err),
+            Right(Err(ref mut err)) => return Err(*err)
+        };
+
+        print!("acpi: oem: \"");
+        for c in header.oem_id.iter() {
+            print!("{}", *c as char);
         }
-        None => println!("acpi: rsdp not found"),
+        println!("\"");
+
+        println!("acpi: {} tables found", sdt_addresses.size_hint().0);
+        println!("acpi: table signatures:");
+
+        for address in sdt_addresses {
+            let header = unsafe { *(address as *const SdtHeader ) };
+
+            print!("    \"");
+            for c in header.signature.iter() {
+                print!("{}", *c as char);
+            }
+
+            println!("\" at {:#x}", address);
+        }
+
+        Ok(())
     };
+
+    if let Err(msg) = acpi_res {
+        println!("{}", msg);
+    }
 
     let mut controller = ps2::CONTROLLER.lock();
     match controller.initialize() {
