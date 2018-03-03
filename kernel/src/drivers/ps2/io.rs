@@ -54,29 +54,35 @@ pub mod commands {
 
     /// Sends a controller command without a return
     pub fn send(cmd: ControllerCommand) -> Result<(), Ps2Error> {
-        write(&COMMAND_PORT, cmd as u8)
+        write(&mut COMMAND_PORT.lock(), cmd as u8)
     }
 
     /// Sends a controller command with data and without a return
     pub fn send_data(cmd: ControllerDataCommand, data: u8) -> Result<(), Ps2Error> {
-        write(&COMMAND_PORT, cmd as u8)?;
-        write(&DATA_PORT, data)?;
+        let mut command_port = COMMAND_PORT.lock();
+        let mut data_port = DATA_PORT.lock();
+
+        write(&mut command_port, cmd as u8)?;
+        write(&mut data_port, data)?;
 
         Ok(())
     }
 
     /// Sends a controller command with a return
     pub fn send_ret(cmd: ControllerReturnCommand) -> Result<u8, Ps2Error> {
-        write(&COMMAND_PORT, cmd as u8)?;
-        read(&DATA_PORT)
+        let mut command_port = COMMAND_PORT.lock();
+        let mut data_port = DATA_PORT.lock();
+
+        write(&mut command_port, cmd as u8)?;
+        read(&mut data_port)
     }
 }
 
-use io::Port;
+use io::{Port, SynchronizedPort};
 
-pub static DATA_PORT: IOPort = unsafe { IOPort::new(0x60) };
-pub static STATUS_PORT: IOPort = unsafe { IOPort::new(0x64) };
-pub static COMMAND_PORT: IOPort = unsafe { IOPort::new(0x64) };
+pub static DATA_PORT: SynchronizedPort<u8> = unsafe { SynchronizedPort::new(0x60) };
+pub static STATUS_PORT: SynchronizedPort<u8> = unsafe { SynchronizedPort::new(0x64) };
+pub static COMMAND_PORT: SynchronizedPort<u8> = unsafe { SynchronizedPort::new(0x64) };
 
 /// The number of iterations before assuming no data to be read. Should be changed to a timeout as of #26
 pub const WAIT_TIMEOUT: u32 = 1000000;
@@ -100,7 +106,7 @@ pub enum Ps2Error {
 }
 
 /// Writes to the given port, or waits until available
-pub fn write(port: &IOPort, value: u8) -> Result<(), Ps2Error> {
+pub fn write(port: &mut Port<u8>, value: u8) -> Result<(), Ps2Error> {
     loop {
         // Check if the input status bit is empty
         if can_write()? {
@@ -113,7 +119,7 @@ pub fn write(port: &IOPort, value: u8) -> Result<(), Ps2Error> {
 }
 
 /// Reads from the given port, returning an optional value. `NoData` returned if nothing could be read
-pub fn read(port: &IOPort) -> Result<u8, Ps2Error> {
+pub fn read(port: &mut Port<u8>) -> Result<u8, Ps2Error> {
     for _ in 0..WAIT_TIMEOUT {
         // Check if the output status bit is full
         if can_read()? {
@@ -127,9 +133,14 @@ pub fn read(port: &IOPort) -> Result<u8, Ps2Error> {
 /// Flushes the controller's output buffer
 pub fn flush_output() -> Result<(), Ps2Error> {
     // Read until the output status bit is empty
-    while can_read()? {
-        DATA_PORT.read();
-    }
+    DATA_PORT.with_lock(|mut data_port| {
+        while can_read()? {
+            data_port.read();
+        }
+
+        Ok(())
+    })?;
+
     Ok(())
 }
 

@@ -1,4 +1,5 @@
 use core::marker::PhantomData;
+use spin::{Mutex, MutexGuard};
 
 pub mod x86_io {
     /// Read a single byte from the port.
@@ -86,10 +87,10 @@ pub struct Port<T: InOut> {
 }
 
 impl<T: InOut> Port<T> {
-    ///Create a port which can handle values of `T` size.
+    /// Create a port which can handle values of `T` size.
     pub const unsafe fn new(port: u16) -> Port<T> {
         Port {
-            port: port,
+            port,
             phantom: PhantomData,
         }
     }
@@ -101,34 +102,42 @@ impl<T: InOut> Port<T> {
 
     /// Write a value to `self.port`.
     pub fn write(&mut self, value: T) {
-        unsafe {
-            T::port_out(self.port, value);
-        }
+        unsafe { T::port_out(self.port, value); }
     }
 }
 
-#[derive(Debug)]
-pub struct UnsafePort<T: InOut> {
-    port: u16,
-    phantom: PhantomData<T>,
+/// An `InOut` sized port that is synchronized using a spinlock. See [Port]
+pub struct SynchronizedPort<T: InOut> {
+    inner: Mutex<Port<T>>,
 }
 
-impl<T: InOut> UnsafePort<T> {
-    /// Create a new unsafe port.
-    pub const unsafe fn new(port: u16) -> UnsafePort<T> {
-        UnsafePort {
-            port: port,
-            phantom: PhantomData,
+impl<'a, T: InOut> SynchronizedPort<T> {
+    ///Create a port which can handle values of `T` size.
+    pub const unsafe fn new(port: u16) -> SynchronizedPort<T> {
+        SynchronizedPort {
+            inner: Mutex::new(Port::new(port))
         }
     }
 
-    /// Read a value from `self.port`.
-    pub unsafe fn read(&mut self) -> T {
-        T::port_in(self.port)
+    /// Read a value from `self.port`. Synchronized over context of this read.
+    pub fn read(&self) -> T {
+        self.inner.lock().read()
     }
 
-    /// Write a value to `self.port`.
-    pub unsafe fn write(&mut self, value: T) {
-        T::port_out(self.port, value);
+    /// Write a value to `self.port`. Synchronized over context of this write.
+    #[allow(dead_code)] // Part of API
+    pub fn write(&self, value: T) {
+        self.inner.lock().write(value)
+    }
+
+    /// Operates a closure on the synchronised port. Synchronized over the whole context of the
+    /// closure.
+    pub fn with_lock<R, F: FnOnce(MutexGuard<'a, Port<T>>) -> R>(&'a self, f: F) -> R {
+        f(self.inner.lock())
+    }
+
+    /// Locks the port and returns a mutex guard over the port
+    pub fn lock(&'a self) -> MutexGuard<'a, Port<T>> {
+        self.inner.lock()
     }
 }
