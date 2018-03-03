@@ -130,7 +130,7 @@ impl<'a, T: InOut> SynchronizedPort<T> {
         self.inner.lock().write(value)
     }
 
-    /// Operates a closure on the synchronised port. Synchronized over the whole context of the
+    /// Operates a closure on the synchronized port. Synchronized over the whole context of the
     /// closure.
     pub fn with_lock<R, F: FnOnce(MutexGuard<'a, Port<T>>) -> R>(&'a self, f: F) -> R {
         f(self.inner.lock())
