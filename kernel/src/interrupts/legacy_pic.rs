@@ -84,17 +84,17 @@ impl ChainedPics {
         wait_port.write(0);
 
         // Tell both of the PICs to initialise
-        for pic in self.inner {
+        for pic in self.inner.iter() {
             pic.initialise();
         }
 
-        for (pic, data) in self.inner.zip([4, 2]) {
-            pic.data_port_write(data);
+        for (pic, data) in self.inner.iter().zip([4u8, 2u8].iter()) {
+            pic.data_port.write(*data);
             wait_port.write(0);
         }
 
         // Set PICs to 8086/88 (MCS-80/85) mode
-        for pic in self.inner {
+        for pic in self.inner.iter() {
             pic.set_mode(0x1);
         }
 
