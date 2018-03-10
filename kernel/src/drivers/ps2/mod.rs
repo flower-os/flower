@@ -274,8 +274,10 @@ impl Device {
         if self.state != DeviceState::Unavailable {
             self.command_raw(cmd as u8).and_then(|result| match result {
                 ACK => {
-                    io::write(&io::DATA_PORT, data as u8)?;
-                    io::read(&io::DATA_PORT)
+                    io::DATA_PORT.with_lock(|mut data_port| {
+                        io::write(&mut data_port, data as u8)?;
+                        io::read(&mut data_port)
+                    })
                 }
                 _ => Ok(result)
             })
@@ -291,14 +293,18 @@ impl Device {
             if self.port == DevicePort::Mouse {
                 commands::send(ControllerCommand::WriteInputPort2)?;
             }
-            for _ in 0..4 {
-                io::write(&io::DATA_PORT, cmd)?;
-                match io::read(&io::DATA_PORT) {
-                    Ok(RESEND) => continue,
-                    result => return result,
+
+            io::DATA_PORT.with_lock(|mut data_port| {
+                for _ in 0..4 {
+                    io::write(&mut data_port, cmd)?;
+                    match io::read(&mut data_port) {
+                        Ok(RESEND) => continue,
+                        result => return result,
+                    }
                 }
-            }
-            Err(Ps2Error::NoData)
+
+                Err(Ps2Error::NoData)
+            })
         } else {
             Err(Ps2Error::DeviceUnavailable)
         }

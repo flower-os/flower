@@ -8,6 +8,8 @@
 #![feature(try_from)]
 #![feature(nll)]
 #![feature(inclusive_range_syntax)]
+#![feature(type_ascription)]
+#![feature(ptr_internals)]
 
 extern crate rlibc;
 extern crate volatile;
@@ -82,7 +84,7 @@ pub extern fn kmain() -> ! {
         println!("kbd: enable unsuccessful");
     }
 
-    unsafe { halt() }
+    halt()
 }
 
 fn print_flower() -> Result<(), terminal::TerminalOutputError<()>> {
@@ -98,10 +100,14 @@ fn print_flower() -> Result<(), terminal::TerminalOutputError<()>> {
     stdout.set_cursor_pos(old)
 }
 
-unsafe fn halt() -> ! {
-    asm!("cli");
+fn halt() -> ! {
+    unsafe {
+        // Disable interrupts
+        asm!("cli");
 
-    loop {
-        asm!("hlt")
+        // Halt forever...
+        loop {
+            asm!("hlt");
+        }
     }
 }
