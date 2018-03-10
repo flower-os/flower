@@ -26,7 +26,7 @@ grub_iso = $(out_dir)/flower.iso
 
 default: build
 
-.PHONY: clean run build
+.PHONY: clean run build $(rust_kernel)
 $(grub_iso): $(kernel) $(grub_cfg)
 	@cp $(grub_cfg) $(out_dir)/isofiles/boot/grub/
 	@cp $(kernel) $(out_dir)/isofiles/boot/
@@ -50,7 +50,7 @@ makedirs:
 	@mkdir -p $(out_dir)/isofiles/boot/grub
 
 # Compile rust
-$(rust_kernel): $(rust_crate_dir)/*
+$(rust_kernel): $(rust_crate_dir)/**/*
 	@cd $(rust_crate_dir) && \
       RUST_TARGET_PATH=$(shell pwd)/$(rust_crate_dir) xargo build --target $(target) $(xargo_flags)
 	@mv $(rust_crate_dir)/target/$(target)/$(build_type)/libflower_kernel.a $(rust_kernel)

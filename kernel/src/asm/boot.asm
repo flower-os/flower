@@ -226,7 +226,7 @@ p2_table:
 
 ; Stack grows the other way
 stack_bottom:
-    resb 4096
+    resb 1024 * 64 ; 64 kilobytes
 stack_top:
 
 section .rodata
@@ -258,5 +258,5 @@ long_mode_start:
     mov esp, stack_top
     
     call kmain
-    
+
     hlt
