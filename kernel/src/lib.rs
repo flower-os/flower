@@ -23,6 +23,11 @@ extern crate bitflags;
 #[macro_use]
 extern crate lazy_static;
 
+use drivers::keyboard::{Keyboard, KeyEventType, Ps2Keyboard};
+use drivers::keyboard::keymap;
+use drivers::ps2;
+use terminal::TerminalOutput;
+
 mod lang;
 #[macro_use]
 mod util;
@@ -33,16 +38,9 @@ mod io;
 mod terminal;
 mod drivers;
 
-use terminal::{TerminalOutput, TerminalCharacter};
-use drivers::ps2;
-use drivers::keyboard::{Keyboard, KeyEventType, Ps2Keyboard};
-use drivers::keyboard::keymap;
-use drivers::vga;
-
 /// Kernel main function
 #[no_mangle]
 pub extern fn kmain() -> ! {
-
     terminal::STDOUT.write().clear().expect("Screen clear failed");
 
     print_flower().expect("Flower print failed");
@@ -90,7 +88,6 @@ pub extern fn kmain() -> ! {
 fn print_flower() -> Result<(), terminal::TerminalOutputError<()>> {
     const FLOWER: &'static str = include_str!("resources/art/flower.txt");
     const FLOWER_STEM: &'static str = include_str!("resources/art/flower_stem.txt");
-    const SIZE: terminal::Resolution = terminal::Resolution::new(47, 25);
 
     let mut stdout = terminal::STDOUT.write();
     let old = stdout.cursor_pos();

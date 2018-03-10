@@ -1,25 +1,25 @@
 //! # Terminal Driver
 //!
-//! The terminal driver's goal is to provide simple text writer access to outputs such as VGA.
-//! The driver accomplishes this through two traits:
-//!  - [TerminalWriter] : The terminal writer handles raw access to an output, such as raw access to write to a point in the VGA buffer
-//!  - [Terminal] : The terminal is a high-level wrapper of the [TerminalWriter], handling the cursor or tasks such as line-wrapping
+//! The terminal driver's goal is to provide text writer access to outputs such as VGA.
+//! The driver accomplishes this through two trait categories
+//!  - [TerminalWriter]- The terminal writer handles raw access to an output, for instance raw
+//!    access to the vga buffer
+//!  - [Terminal] - The terminal is a high-level wrapper of the [TerminalWriter],
+//!    handling the cursor or tasks such as line-wrapping
 //!
-//! The terminal driver also has an `STDOUT`, which is the standard output for terminals, generally writing to VGA.
-//! This can be invoked through the `print!` and `println!` macros, or directly referencing it through `drivers::terminal::STDOUT`
+//!
+//! The terminal driver also has an `STDOUT`, which is the standard output for terminals,
+//! generally writing to VGA. This can be invoked through the `print!` and `println!` macros,
+//! or directly referencing it through `drivers::terminal::STDOUT`
 
+use color::{Color, ColorPair};
+use core::fmt::{self, Debug, Write};
 use core::ops::Add;
-use core::fmt;
 use core::result::Result;
-use spin::Mutex;
-use drivers::vga::{self, VgaWriter};
-use color::Color;
+use drivers::vga;
+use spin::RwLock;
 
-pub static WRITER: Mutex<VgaWriter> = Mutex::new(VgaWriter::new());
-
-/// A standard output terminal, generally writing to VGA
-pub static STDOUT: Mutex<TextArea<VgaWriter>> = Mutex::new(TextArea::new(&WRITER, Point::new(0, 0), Point::new(vga::RESOLUTION_X, vga::RESOLUTION_Y)));
-
+// Macros up here to allow use in submodules for debugging
 macro_rules! print {
     ($($arg:tt)*) => ({
         $crate::terminal::stdout_print(format_args!($($arg)*));
@@ -34,44 +34,108 @@ macro_rules! println {
 /// Writes formatted string to stdout, for print macro use
 pub fn stdout_print(args: fmt::Arguments) {
     use core::fmt::Write;
-    STDOUT.lock().write_fmt(args).unwrap();
+    STDOUT.write().write_fmt(args).unwrap();
 }
 
-/// A general error terminal error
-#[derive(Debug)]
-pub enum TerminalWriteError<T: TerminalWriter> {
-    OutputError(T::Error),
-    BackspaceUnsupported,
-    BackspaceUnavailable,
-    OutOfBounds(Point),
-}
+/// A standard output terminal
+pub static STDOUT: RwLock<Stdout> = RwLock::new(Stdout(&vga::WRITER));
 
-/// Represents a character in a terminal, containing a character and color.
-#[derive(Debug, Copy, Clone)]
-pub struct TerminalCharacter {
-    pub character: char,
-    pub color: TerminalColor,
-}
+/// The standard output. You should not assume that the `Other` variant will
+/// always carry a `()`.
+// Crate public writer for `panic_fmt` to construct
+pub struct Stdout<'a>(pub(crate) &'a RwLock<vga::VgaWriter>);
 
-/// Represents a full color in the terminal with a background and foreground color.
-#[derive(Debug, Copy, Clone)]
-pub struct TerminalColor {
-    pub foreground: Color,
-    pub background: Color,
-}
+impl<'a> TerminalOutput<()> for Stdout<'a> {
+    fn color_supported(&self, color: Color) -> bool {
+        self.0.read().color_supported(color)
+    }
 
-impl TerminalColor {
-    /// Creates a new terminal color with a foreground and background
-    pub const fn new(foreground: Color, background: Color) -> Self {
-        TerminalColor {
-            foreground: foreground,
-            background: background,
-        }
+    fn resolution(&self) -> Resolution {
+        self.0.read().resolution()
+    }
+
+    fn cursor_pos(&self) -> Point {
+        self.0.read().cursor_pos()
+    }
+
+    fn set_cursor_pos(&mut self, point: Point) -> Result<(), TerminalOutputError<()>> {
+        self.0.write().set_cursor_pos(point)
+    }
+
+    fn color(&self) -> ColorPair {
+        self.0.read().color()
+    }
+
+    fn set_color(&mut self, color: ColorPair) -> Result<(), TerminalOutputError<()>> {
+        self.0.write().set_color(color)
+    }
+
+    fn set_char(&mut self, char: TerminalCharacter, point: Point) -> Result<(), TerminalOutputError<()>> {
+        self.0.write().set_char(char, point)
+    }
+
+    fn write_colored(&mut self, character: char, color: ColorPair) -> Result<(), TerminalOutputError<()>> {
+        self.0.write().write_colored(character, color)
+    }
+
+    fn clear_line(&mut self, y: usize) -> Result<(), TerminalOutputError<()>> {
+        self.0.write().clear_line(y)
+    }
+
+    fn clear(&mut self) -> Result<(), TerminalOutputError<()>> {
+        self.0.write().clear()
+    }
+
+    fn scroll_down(&mut self, lines: usize) -> Result<(), TerminalOutputError<()>> {
+        self.0.write().scroll_down(lines)
     }
 }
 
-/// Represents a 2d point in a terminal.
-#[derive(Debug, Copy, Clone)]
+impl<'a> Write for Stdout<'a> {
+    fn write_str(&mut self, s: &str) -> Result<(), fmt::Error> {
+        self.write_string(s).map_err(|_| fmt::Error)
+    }
+}
+
+/// A general [TerminalOutput] error
+#[derive(Debug)]
+#[allow(dead_code)] // Dead variants for completeness
+pub enum TerminalOutputError<E: Debug> {
+    /// Backspacing is not supported by the terminal
+    BackspaceUnsupported,
+    /// Backspacing is unavailable
+    BackspaceUnavailable(BackspaceUnavailableCause),
+    /// The given point was attempted to be accessed but is out of bounds
+    OutOfBounds(Point),
+    Debug(Point, Point, Point),
+    /// The given color is not supported by the terminal
+    ColorUnsupported(Color),
+    /// An error with no other representation
+    Other(E),
+}
+
+#[derive(Debug)]
+#[allow(dead_code)] // Dead variants for completeness
+pub enum BackspaceUnavailableCause {
+    Disabled,
+    TopOfTerminal,
+}
+
+/// Represents a character in a terminal, containing a character and color
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub struct TerminalCharacter {
+    pub character: char,
+    pub color: ColorPair,
+}
+
+impl TerminalCharacter {
+    pub const fn new(character: char, color: ColorPair) -> Self {
+        TerminalCharacter { character, color }
+    }
+}
+
+/// Represents a 2d point in a terminal. Origin is __bottom left__
+#[derive(Default, Debug, Copy, Clone, Eq, PartialOrd, PartialEq)]
 pub struct Point {
     pub x: usize,
     pub y: usize,
@@ -80,10 +144,7 @@ pub struct Point {
 impl Point {
     /// Creates a new point at the given coordinate
     pub const fn new(x: usize, y: usize) -> Self {
-        Point {
-            x: x,
-            y: y,
-        }
+        Point { x, y }
     }
 }
 
@@ -91,243 +152,144 @@ impl Add<Point> for Point {
     type Output = Point;
 
     fn add(self, rhs: Point) -> Point {
-        Point {
-            x: self.x + rhs.x,
-            y: self.y + rhs.y,
-        }
+        Point::new(self.x + rhs.x, self.y + rhs.y)
     }
 }
 
-/// A writable unsized terminal. Works as a stream without character positions.
-pub trait Terminal<'a, T: TerminalWriter + 'a> {
+/// Represents a terminal's resolution.
+///
+/// # Note
+/// although the fields are the same as [Point], they *are* semantically different
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub struct Resolution {
+    pub x: usize,
+    pub y: usize,
+}
+
+impl Resolution {
+    pub const fn new(x: usize, y: usize) -> Self {
+        Resolution { x, y }
+    }
+}
+
+/// A writable terminal
+///
+/// # Note
+///
+/// The default implementations may not be the most efficient possible for your usecase - if you can
+/// implement it more efficiently, then do.
+pub trait TerminalOutput<E: Debug> {
+    /// Check if a color is supported by this terminal
+    fn color_supported(&self, color: Color) -> bool;
+
+    /// The resolution of the [TerminalWriter].
+    fn resolution(&self) -> Resolution;
+
+    /// Checks if a point is in bounds of the text area
+    fn in_bounds(&self, p: Point) -> bool {
+        p.x < self.resolution().x && p.y < self.resolution().y
+    }
+
+    /// Gets position of this terminal's cursor
+    fn cursor_pos(&self) -> Point;
+
+    /// Sets the position of this terminal's cursor
+    ///
+    /// # Implementation Note
+    ///
+    /// This should check whether the point is in bounds
+    fn set_cursor_pos(&mut self, point: Point) -> Result<(), TerminalOutputError<E>>;
+
+    /// Gets the color this terminal is using
+    fn color(&self) -> ColorPair;
+
     /// Sets the color for this terminal to use
-    fn set_color(&mut self, color: TerminalColor) -> Result<(), TerminalWriteError<T>>;
+    ///
+    /// # Implementation Note
+    ///
+    /// This should check whether the color is supported by this terminal
+    fn set_color(&mut self, color: ColorPair) -> Result<(), TerminalOutputError<E>>;
 
-    /// Writes a character to this terminal with the current set color
-    fn write(&mut self, char: char) -> Result<(), TerminalWriteError<T>>;
-
-    /// Writes a string to this terminal with the current set color
-    fn write_string(&mut self, str: &str) -> Result<(), TerminalWriteError<T>>;
+    /// Sets the character at a position
+    ///
+    /// # Implementation Note
+    ///
+    /// This should check whether the point is in bounds
+    fn set_char(&mut self, char: TerminalCharacter, point: Point) -> Result<(), TerminalOutputError<E>>;
 
     /// Writes a colored character to this terminal
-    fn write_colored(&mut self, char: char, color: TerminalColor) -> Result<(), TerminalWriteError<T>>;
+    fn write_colored(&mut self, character: char, color: ColorPair) -> Result<(), TerminalOutputError<E>>;
+
+    /// Writes a character to this terminal with the current set color
+    fn write(&mut self, character: char) -> Result<(), TerminalOutputError<E>> {
+        self.write_colored(character, self.color())
+    }
+
+    /// Writes a string to this terminal with the current set color
+    fn write_string(&mut self, str: &str) -> Result<(), TerminalOutputError<E>> {
+        self.write_string_colored(str, self.color())
+    }
 
     /// Writes a colored string to this terminal
-    fn write_string_colored(&mut self, str: &str, color: TerminalColor) -> Result<(), TerminalWriteError<T>>;
-
-    /// Backspaces the previously written character in this terminal
-    fn backspace(&mut self) -> Result<(), TerminalWriteError<T>>;
-}
-
-/// A writable terminal with bounds and a 2d cursor that can be moved.
-pub trait SizedTerminal<'a, T: TerminalWriter + 'a>: Terminal<'a, T> {
-    /// Sets the position of this terminal's cursor
-    fn set_cursor(&mut self, point: Point) -> Result<(), TerminalWriteError<T>>;
-
-    /// Moves the cursor down on y and returns to origin on x
-    fn new_line(&mut self) -> Result<(), TerminalWriteError<T>>;
-
-    /// Returns true if the given point is inside this terminal
-    fn is_valid(&self, point: Point) -> bool;
-}
-
-/// A raw interface that unsized terminals can write to.
-pub trait TerminalWriter {
-    type Error;
-
-    /// Writes a character through this writer
-    fn write(&mut self, char: TerminalCharacter) -> Result<(), Self::Error>;
-}
-
-/// A raw interface that sized terminals can write to.
-pub trait SizedTerminalWriter: TerminalWriter {
-    /// Sets a character at the given position through this writer
-    fn set(&mut self, point: Point, char: TerminalCharacter) -> Result<(), Self::Error>;
-}
-
-/// A terminal with a constant stream of characters.
-#[allow(dead_code)] // to be used as API
-pub struct StreamTerminal<'a, T: TerminalWriter + 'a> {
-    writer: &'a Mutex<T>,
-    color: TerminalColor,
-}
-
-#[allow(dead_code)] // to be used as API
-impl<'a, T: TerminalWriter + 'a> StreamTerminal<'a, T> {
-    /// Creates a new terminal with a writer Mutex for the terminal to write to
-    pub const fn new(writer: &'a Mutex<T>) -> Self {
-        StreamTerminal {
-            writer: writer,
-            color: TerminalColor::new(Color::White, Color::Black),
+    fn write_string_colored(&mut self, str: &str, color: ColorPair) -> Result<(), TerminalOutputError<E>> {
+        for character in str.chars() {
+            self.write_colored(character, color)?;
         }
-    }
-}
-
-impl<'a, T: TerminalWriter + 'a> Terminal<'a, T> for StreamTerminal<'a, T> {
-    fn set_color(&mut self, color: TerminalColor) -> Result<(), TerminalWriteError<T>> {
-        self.color = color;
-        Ok(())
-    }
-
-    fn write(&mut self, char: char) -> Result<(), TerminalWriteError<T>> {
-        let color = self.color;
-        self.write_colored(char, color)
-    }
-
-    fn write_string(&mut self, str: &str) -> Result<(), TerminalWriteError<T>> {
-        let color = self.color;
-        self.write_string_colored(str, color)
-    }
-
-    fn write_colored(&mut self, char: char, color: TerminalColor) -> Result<(), TerminalWriteError<T>> {
-        self.writer.lock().write(TerminalCharacter {
-            character: char,
-            color: color,
-        }).map_err(|e| TerminalWriteError::OutputError(e))?;
 
         Ok(())
     }
 
-    fn write_string_colored(&mut self, str: &str, color: TerminalColor) -> Result<(), TerminalWriteError<T>> {
-        for char in str.chars() {
-            self.write_colored(char, color)?;
-        }
-        Ok(())
-    }
+    /// Clears one line with the current background color
+    ///
+    /// # Note
+    ///
+    /// This is not defaultedly implemented
+    fn clear_line(&mut self, y: usize) -> Result<(), TerminalOutputError<E>>;
 
-    fn backspace(&mut self) -> Result<(), TerminalWriteError<T>> {
-        Err(TerminalWriteError::BackspaceUnsupported)
-    }
-}
+    /// Clears the screen with the current background color
+    fn clear(&mut self) -> Result<(), TerminalOutputError<E>>;
 
-/// A sized terminal text area.
-pub struct TextArea<'a, T: SizedTerminalWriter + 'a> {
-    writer: &'a Mutex<T>,
-    min_point: Point,
-    max_point: Point,
-    cursor: Point,
-    color: TerminalColor,
-}
+    /// Scrolls the terminal down
+    fn scroll_down(&mut self, lines: usize) -> Result<(), TerminalOutputError<E>>;
 
-impl<'a, T: SizedTerminalWriter + 'a> TextArea<'a, T> {
-    /// Creates a new TextArea with a writer Mutex for the terminal to write to and the given bounds
-    pub const fn new(writer: &'a Mutex<T>, origin: Point, resolution: Point) -> Self {
-        TextArea {
-            writer: writer,
-            min_point: origin,
-            max_point: Point {
-                x: origin.x + resolution.x,
-                y: origin.y + resolution.y,
-            },
-            cursor: origin,
-            color: TerminalColor::new(Color::White, Color::Black),
-        }
-    }
-}
+    /// Writes a newline to this terminal, resetting cursor position
+    fn new_line(&mut self) -> Result<(), TerminalOutputError<E>> {
+        let mut pos = self.cursor_pos();
+        pos.x = 0;
 
-impl<'a, T: SizedTerminalWriter + 'a> Terminal<'a, T> for TextArea<'a, T> {
-    fn set_color(&mut self, color: TerminalColor) -> Result<(), TerminalWriteError<T>> {
-        self.color = color;
-        Ok(())
-    }
-
-    fn write(&mut self, char: char) -> Result<(), TerminalWriteError<T>> {
-        let color = self.color;
-        self.write_colored(char, color)
-    }
-
-    fn write_string(&mut self, str: &str) -> Result<(), TerminalWriteError<T>> {
-        let color = self.color;
-        self.write_string_colored(str, color)
-    }
-
-    fn write_colored(&mut self, char: char, color: TerminalColor) -> Result<(), TerminalWriteError<T>> {
-        let cursor = self.cursor;
-
-        if self.is_valid(cursor) {
-            match char {
-                '\n' => self.new_line()?,
-                c => {
-                    self.writer.lock().set(cursor, TerminalCharacter {
-                        character: c,
-                        color: color,
-                    }).map_err(|e| TerminalWriteError::OutputError(e))?;
-
-                    self.cursor.x += 1;
-
-                    // If cursor exceeded x limit, wrap to next line
-                    if self.cursor.x > self.max_point.x {
-                        self.new_line()?;
-                    }
-                }
-            }
-
-            Ok(())
+        if pos.y > 0 {
+            pos.y -= 1;
         } else {
-            Err(TerminalWriteError::OutOfBounds(cursor))
-        }
-    }
-
-    fn write_string_colored(&mut self, str: &str, color: TerminalColor) -> Result<(), TerminalWriteError<T>> {
-        for char in str.chars() {
-            self.write_colored(char, color)?;
+            self.scroll_down(1)?;
         }
 
-        Ok(())
+        self.set_cursor_pos(pos)
     }
 
-    fn backspace(&mut self) -> Result<(), TerminalWriteError<T>> {
-        // If backspace is possible
-        if self.cursor.x > self.min_point.x || self.cursor.y > self.min_point.y {
-            // If at start of line, move up a line, else move back in the current line
-            if self.cursor.x == self.min_point.x {
-                self.cursor.x = self.max_point.x;
-                self.cursor.y -= 1;
-            } else {
-                self.cursor.x -= 1;
-            }
+    /// Backspaces one character
+    fn backspace(&mut self) -> Result<(), TerminalOutputError<E>> {
+        if self.cursor_pos() == Point::new(0, 0) {
+            return Err(TerminalOutputError::BackspaceUnavailable(
+                BackspaceUnavailableCause::TopOfTerminal)
+            );
+        }
 
-            self.writer.lock().set(self.cursor, TerminalCharacter {
-                character: ' ',
-                color: self.color,
-            }).map_err(|e| TerminalWriteError::OutputError(e))?;
-
-            Ok(())
+        if self.cursor_pos().x == 0 {
+            self.set_cursor_pos(Point {
+                x: self.resolution().x - 1,
+                y: self.cursor_pos().y - 1,
+            })?;
         } else {
-            Err(TerminalWriteError::BackspaceUnavailable)
+            self.set_cursor_pos(Point {
+                x: self.cursor_pos().x - 1,
+                ..self.cursor_pos()
+            })?;
         }
-    }
-}
 
-impl<'a, T: SizedTerminalWriter + 'a> SizedTerminal<'a, T> for TextArea<'a, T> {
-    fn set_cursor(&mut self, point: Point) -> Result<(), TerminalWriteError<T>> {
-        if self.is_valid(point) {
-            self.cursor = point;
-            Ok(())
-        } else {
-            Err(TerminalWriteError::OutOfBounds(point))
-        }
-    }
+        let blank = TerminalCharacter::new(' ', ColorPair::new(
+            self.color().background, self.color().background,
+        ));
 
-    fn new_line(&mut self) -> Result<(), TerminalWriteError<T>> {
-        if self.cursor.y < self.max_point.y {
-            self.cursor.x = self.min_point.x;
-            self.cursor.y += 1;
-            Ok(())
-        } else {
-            Err(TerminalWriteError::OutOfBounds(self.cursor))
-        }
-    }
-
-    fn is_valid(&self, point: Point) -> bool {
-        point.x >= self.min_point.x && point.y >= self.min_point.y && point.x < self.max_point.x && point.y < self.max_point.y
-    }
-}
-
-/// Implemented to allow formatted strings to be written to text areas
-impl<'a, T: SizedTerminalWriter + 'a> fmt::Write for TextArea<'a, T> {
-    fn write_str(&mut self, str: &str) -> Result<(), fmt::Error> {
-        self.write_string(str).map_err(|_| fmt::Error)?;
-        Ok(())
+        self.set_char(blank, self.cursor_pos())
     }
 }
