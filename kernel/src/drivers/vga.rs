@@ -3,13 +3,13 @@ use core::{cmp, fmt};
 use core::convert::TryFrom;
 use core::ptr::Unique;
 use core::result::Result;
-use spin::Mutex;
+use spin::RwLock;
 
 use util::{self, FromDiscriminator};
 use color::{Color, ColorPair};
 use terminal::*;
 
-pub static WRITER: Mutex<VgaWriter> = Mutex::new(VgaWriter::new());
+pub static WRITER: RwLock<VgaWriter> = RwLock::new(VgaWriter::new());
 
 /// The resolution of VGA
 pub const RESOLUTION: Resolution = Resolution::new(80, 25);
@@ -36,8 +36,7 @@ impl VgaWriter {
         }
     }
 
-    // TODO nonpublic
-    pub fn buffer(&mut self) -> &mut VgaBuffer {
+    fn buffer(&mut self) -> &mut VgaBuffer {
         unsafe { self.buffer.as_mut() }
     }
 }
@@ -61,9 +60,6 @@ impl TerminalOutput<()> for VgaWriter {
             self.cursor = cursor;
             Ok(())
         } else {
-            // TODO
-            let x = cursor.x;
-            let y = cursor.y;
             Err(TerminalOutputError::OutOfBounds(cursor))
         }
     }
@@ -85,8 +81,28 @@ impl TerminalOutput<()> for VgaWriter {
         Ok(())
     }
 
-    fn set_char(&mut self, char: TerminalCharacter, point: Point) -> Result<(), TerminalOutputError<()>> {
+    fn write_colored(&mut self, character: char, color: ColorPair) -> Result<(), TerminalOutputError<()>> {
+        match character {
+            '\n' => self.new_line(),
+            _ => {
+                let mut pos = self.cursor_pos();
+                self.set_char(TerminalCharacter::new(character, color), pos)?;
 
+                pos.x += 1;
+
+                // If the x point went out of bounds, wrap
+                if pos.x >= RESOLUTION.x {
+                    self.new_line()?;
+                } else {
+                    self.set_cursor_pos(pos)?;
+                }
+
+                Ok(())
+            }
+        }
+    }
+
+    fn set_char(&mut self, char: TerminalCharacter, point: Point) -> Result<(), TerminalOutputError<()>> {
         let point = Point::new(point.x, RESOLUTION.y - 1 - point.y);
 
         if !self.color_supported(char.color.foreground) {
@@ -111,27 +127,10 @@ impl TerminalOutput<()> for VgaWriter {
         Ok(())
     }
 
-    fn write_raw(&mut self, char: TerminalCharacter) -> Result<(), TerminalOutputError<()>> {
-        let mut pos = self.cursor_pos();
-        self.set_char(char, pos)?;
-        // TODO something fishy in set_char
-        pos.x += 1;
-
-        // If the x point went out of bounds, wrap
-        if pos.x >= RESOLUTION.x {
-            self.new_line()?;
-        } else {
-            self.set_cursor_pos(pos)?;
-        }
-
-        Ok(())
-    }
-
     fn clear_line(&mut self, y: usize) -> Result<(), TerminalOutputError<()>> {
-        let color = self.color().background;
-
         if self.in_bounds(Point::new(0, y)) {
-            self.buffer().clear_row(y, color);
+            let background = self.color.background;
+            self.buffer().clear_row(y, background);
             Ok(())
         } else {
             Err(TerminalOutputError::OutOfBounds(Point::new(0, y)))
@@ -155,9 +154,8 @@ impl TerminalOutput<()> for VgaWriter {
 }
 
 /// Represents the complete VGA character buffer, containing a 2D array of VgaChar
-// TODO nonpublic
 #[repr(C)]
-pub struct VgaBuffer([[Volatile<VgaChar>; RESOLUTION.x]; RESOLUTION.y]);
+struct VgaBuffer([[Volatile<VgaChar>; RESOLUTION.x]; RESOLUTION.y]);
 
 impl VgaBuffer {
     pub fn set_char(&mut self, x: usize, y: usize, value: VgaChar) {
@@ -165,11 +163,9 @@ impl VgaBuffer {
     }
 
     pub fn scroll_down(&mut self, amount: usize, background_color: Color) {
-        let amount = cmp::min(amount, RESOLUTION.y);
-
         // Shift lines left (up) by amount only if amount < Y resolution
         // If amount is any more then the data will be cleared anyway
-        if amount != RESOLUTION_Y {
+        if cmp::min(amount, RESOLUTION.y) < RESOLUTION.y {
             self.0.rotate_left(amount);
         }
 
@@ -200,8 +196,7 @@ pub struct VgaChar {
 }
 
 impl VgaChar {
-    // TODO nonpublic
-    pub fn new(color: VgaColor, character: u8) -> Self {
+    fn new(color: VgaColor, character: u8) -> Self {
         VgaChar { color, character }
     }
 }

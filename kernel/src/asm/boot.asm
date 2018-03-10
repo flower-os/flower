@@ -283,5 +283,5 @@ long_mode_start:
     mov esp, stack_top
     
     call kmain
-    
+
     hlt

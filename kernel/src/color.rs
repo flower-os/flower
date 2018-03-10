@@ -1,7 +1,7 @@
 from_discriminator! {
     /// Represents generic flower colors, based off of VGA's color set
     #[allow(dead_code)] // dead variants for completeness
-    #[derive(Debug, Copy, Clone)]
+    #[derive(Debug, Copy, Clone, Eq, PartialEq)]
     #[repr(u8)]
     pub enum Color {
         Black = 0,
@@ -23,7 +23,7 @@ from_discriminator! {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct ColorPair {
     pub foreground: Color,
     pub background: Color,
