@@ -114,28 +114,40 @@ error_print:
 ; Thanks to https://intermezzos.github.io/book/paging.html
 setup_paging:
 
-    ; Point entry #1 of page 4 to entry #1 of page 3
-    mov eax, p3_table + 0 ; set eax to 1st entry of p3 table
-    or eax, 0b11
-    mov [p4_table + 0], eax ; set 1st entry of p4 table to 1st entry of p3 table
+    ; Point 1st entry of p4 table to p3 table
+    mov eax, p3_table + 0 ; set eax to p3 table
+    or eax, 0b11 ; present & writable
+    mov [p4_table + 0], eax ; set 1st entry of p4 table to p3 table
     
-    ; Point entry #1 of page 3 to entry #1 of page 2
-    mov eax, p2_table + 0 ; set eax to 1st entry of p3 table
-    or eax, 0b11
-    mov [p3_table + 0], eax ; set 1st entry of p4 table to 1st entry of p3 table
-    
+    ; Map p3 table
     mov ecx, 0
-    .map_p2_table_loop:
+    .map_p3_table_loop:
+        ; set eax to nth p2 table
+        mov eax, ecx
+        mov ebx, 4096
+        mul ebx
+        mov ebx, p2_tables
+        add eax, ebx
+
+        or eax, 0b11 ; present & writable
+        mov [p3_table + ecx * 8], eax ; set 1st entry of p4 table to 1st entry of p3 table
+        inc ecx
+        cmp ecx, 4
+        jne .map_p3_table_loop
+
+    ; Map p2 tables
+    mov ecx, 0
+    .map_p2_tables_loop:
         
-        mov eax, 0x200000 ; 2mib (page size) TODO 4kib page size?
+        mov eax, 0x200000 ; 2mib (page size)
         mul ecx ; multiply by counter
         or eax, 0b10000011 ; first 1 is huge page bit
         
-        mov [p2_table + ecx * 8], eax
+        mov [p2_tables + ecx * 8], eax
         
         inc ecx
-        cmp ecx, 512
-        jne .map_p2_table_loop
+        cmp ecx, 512 * 4 ; map all 4 at once
+        jne .map_p2_tables_loop
     
     ; Set page table address to cr3
     mov eax, p4_table ; cr3 must be mov'd to from another register
@@ -246,7 +258,10 @@ p4_table:
     resb 4096
 p3_table:
     resb 4096
-p2_table:
+p2_tables: ; 4 p2 tables
+    resb 4096
+    resb 4096
+    resb 4096
     resb 4096
 
 ; Stack grows the other way

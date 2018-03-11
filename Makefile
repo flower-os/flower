@@ -4,7 +4,7 @@ debug ?= 0
 ifeq ($(debug), 1)
     nasm_flags := -f elf64 -F dwarf -g
     build_type := debug
-    qemu_flags := -s -S
+    qemu_flags := -s -S -d int -no-reboot
 else
     nasm_flags := -f elf64
     xargo_flags := --release

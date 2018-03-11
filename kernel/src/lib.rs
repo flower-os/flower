@@ -30,7 +30,7 @@ use either::{Left, Right};
 use drivers::keyboard::{Keyboard, KeyEventType, Ps2Keyboard};
 use drivers::ps2;
 use drivers::vga::{self, Color, VgaColor};
-use acpi::sdt::{SdtHeader, rsdt::TableAddresses};
+use acpi::sdt::SdtHeader;
 
 mod lang;
 #[macro_use]
