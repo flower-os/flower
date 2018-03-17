@@ -24,7 +24,7 @@ asm_obj_files = $(patsubst $(asm_dir)/%.asm,  $(out_dir)/%.o, $(asm_source_files
 kernel = $(out_dir)/kernel.elf
 grub_iso = $(out_dir)/flower.iso
 
-default: build
+default: build $(rust_kernel)
 
 .PHONY: clean run build iso
 $(grub_iso): $(kernel) $(grub_cfg)
@@ -51,7 +51,7 @@ makedirs:
 	@mkdir -p $(out_dir)/isofiles/boot/grub
 
 # Compile rust
-$(rust_kernel): $(rust_crate_dir)/**/*
+$(rust_kernel): $(rust_crate_dir)/src/**/* $(rust_crate_dir)/*
 	@cd $(rust_crate_dir) && \
       RUST_TARGET_PATH=$(shell pwd)/$(rust_crate_dir) xargo build --target $(target) $(xargo_flags)
 	@mv $(rust_crate_dir)/target/$(target)/$(build_type)/libflower_kernel.a $(rust_kernel)

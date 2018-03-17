@@ -1,10 +1,51 @@
-use core::fmt::{self, Display};
+use core::{num::Wrapping, fmt::{self, Display}};
 use util::CChar;
 
 pub mod rsdt;
+pub mod madt;
+
+/// Validate an SDT by checking if the signature is correct and checking if all bytes in the table
+/// add to 0
+fn validate(
+    header: SdtHeader,
+    address: usize,
+    expected_signature: &'static [CChar; 4]
+) -> Result<(), ValidationError> {
+    // Check the signature is correct
+    if header.signature != *expected_signature {
+        return Err(ValidationError::UnexpectedSignature {
+            expected: expected_signature,
+            read: header.signature,
+        });
+    }
+
+    // Checksum the MADT by adding all the bytes together and checking if equal to 0
+    let base_address = address as *const u8;
+    let sum = (0..header.len)
+        .map(|offset| Wrapping(unsafe { *base_address.offset(offset as isize) }))
+        .sum::<Wrapping<u8>>().0;
+
+    if sum == 0 {
+        Ok(())
+    } else {
+        Err(ValidationError::InvalidByteSum(sum))
+    }
+}
+
+/// An enum representing an error validating an SDT
+#[derive(Debug)]
+pub enum ValidationError {
+    /// The sum of all the bytes in the table was not zero
+    InvalidByteSum(u8),
+    /// The signature was unexpected
+    UnexpectedSignature {
+        expected: &'static [CChar; 4],
+        read: [CChar; 4],
+    }
+}
 
 /// The raw ACPI layout of the SDT header
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 #[repr(C, packed)]
 pub struct SdtHeader {
     /// The signature of the table, e.g "RSDT"

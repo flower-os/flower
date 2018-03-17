@@ -1,7 +1,7 @@
-use core::{num::Wrapping, mem, convert::TryFrom};
+use core::{mem, convert::TryFrom};
 use util::CChar;
 use acpi::rsdp::{RsdpV1, RsdpV2};
-use super::SdtHeader;
+use super::{SdtHeader, ValidationError};
 
 const RSDT_HEADER: &'static [CChar; 4] = b"RSDT";
 const XSDT_HEADER: &'static [CChar; 4] = b"XSDT";
@@ -56,18 +56,6 @@ impl<W: TablePtrWidth> Iterator for TableAddresses<W> {
     }
 }
 
-/// An enum representing an error validating an RSDT/XSDT
-#[derive(Debug)]
-pub enum ValidationError {
-    /// The sum of all the bytes in the table was not zero
-    InvalidByteSum(u8),
-    /// The signature was unexpected
-    UnexpectedSignature {
-        expected: &'static [CChar; 4],
-        read: [CChar; 4],
-    }
-}
-
 /// Validates an RSDT/XSDT based on its header and address
 fn validate(header: SdtHeader, address: usize, is_extended: bool) -> Result<(), ValidationError> {
 
@@ -77,25 +65,7 @@ fn validate(header: SdtHeader, address: usize, is_extended: bool) -> Result<(), 
         RSDT_HEADER
     };
 
-    // Check the signature is correct
-    if header.signature != *expected_signature {
-        return Err(ValidationError::UnexpectedSignature {
-            expected: expected_signature,
-            read: header.signature,
-        });
-    }
-
-    // Checksum the RSDT/XSDT by adding all the bytes together and checking if equal to 0
-    let base_address = address as *const u8;
-    let sum = (0..header.len)
-        .map(|offset| Wrapping(unsafe { *base_address.offset(offset as isize) }))
-        .sum::<Wrapping<u8>>().0;
-
-    if sum == 0 {
-        Ok(())
-    } else {
-        Err(ValidationError::InvalidByteSum(sum))
-    }
+    super::validate(header, address, expected_signature)
 }
 
 impl TryFrom<RsdpV1> for (SdtHeader, TableAddresses<u32>) {

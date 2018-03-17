@@ -7,6 +7,7 @@
 #![feature(unique)]
 #![feature(slice_rotate)]
 #![feature(try_from)]
+#![feature(try_trait)]
 #![feature(type_ascription)]
 #![feature(range_contains)]
 #![feature(iterator_step_by)]
@@ -25,12 +26,12 @@ extern crate bitflags;
 #[macro_use]
 extern crate lazy_static;
 
-use core::convert::TryInto;
+use core::{ops::Try, convert::TryInto};
 use either::{Left, Right};
-use drivers::keyboard::{Keyboard, KeyEventType, Ps2Keyboard};
+use drivers::keyboard::{Keyboard, KeyEventType, Ps2Keyboard, keymap};
 use drivers::ps2;
 use drivers::vga::{self, Color, VgaColor};
-use acpi::sdt::SdtHeader;
+use acpi::sdt::{SdtHeader, madt::{Madt, MADT_HEADER}};
 
 mod lang;
 #[macro_use]
@@ -73,10 +74,24 @@ pub extern fn kmain() -> ! {
         VgaColor::new(Color::Green, Color::Black),
     ).expect("Color code should be valid");
 
+    let mut controller = ps2::CONTROLLER.lock();
+    match controller.initialize() {
+        Ok(_) => println!("ps2c: successful initialization"),
+        Err(error) => println!("ps2c: threw error: {:?}", error),
+    }
+
+    let keyboard_device = controller.device(ps2::DevicePort::Keyboard);
+    let mut keyboard = Ps2Keyboard::new(keyboard_device);
+    if let Ok(_) = keyboard.enable() {
+        println!("kbd: successfully enabled");
+    } else {
+        println!("kbd: enable unsuccessful");
+    }
+
     let acpi_res: Result<(), &str> = catch! {
         let (rsdp, address) = match acpi::rsdp::search_for_rsdp() {
             Some(ret) => ret,
-            None => return Err("acpi: rsdp not found"),
+            None => return Err("rsdp not found"),
         };
 
         println!("acpi: rsdp found at {:#x}", address);
@@ -84,11 +99,11 @@ pub extern fn kmain() -> ! {
         let mut temp = rsdp
             .map_left(|rsdp_v1| {
                 println!("acpi: using rsdt");
-                rsdp_v1.try_into().map_err(|_| "acpi: invalid rsdt")
+                rsdp_v1.try_into().map_err(|_| "invalid rsdt")
             })
             .map_right(|rsdp_v2| {
                 println!("acpi: using xsdt");
-                rsdp_v2.try_into().map_err(|_| "acpi: invalid xsdt")
+                rsdp_v2.try_into().map_err(|_| "invalid xsdt")
             });
 
         let (header, sdt_addresses) = match temp {
@@ -111,8 +126,10 @@ pub extern fn kmain() -> ! {
         println!("acpi: {} tables found", sdt_addresses.size_hint().0);
         println!("acpi: table signatures:");
 
+        let mut madt_address: Option<usize> = None;
+
         for address in sdt_addresses {
-            let header = unsafe { *(address as *const SdtHeader ) };
+            let header = unsafe { *(address as *const SdtHeader) };
 
             print!("    \"");
             for c in header.signature.iter() {
@@ -120,36 +137,48 @@ pub extern fn kmain() -> ! {
             }
 
             println!("\" at {:#x}", address);
+
+            if header.signature == *MADT_HEADER {
+                madt_address = Some(address);
+            }
+        }
+
+        let madt_address = madt_address
+            .into_result()
+            .map_err(|_| "MADT not found")?;
+
+        let madt = unsafe { Madt::from_address(madt_address) }
+            .map_err(|_| "Error validating MADT")?;
+
+        println!("acpi: press S for next madt entry");
+
+        for entry in madt.entries {
+            loop {
+                if let Ok(Some(event)) = keyboard.read_event() {
+                    if event.event_type == KeyEventType::Break && event.keycode == keymap::codes::S {
+                            break;
+                    }
+                }
+            }
+
+            println!("{:#?}", entry);
         }
 
         Ok(())
     };
 
     if let Err(msg) = acpi_res {
-        println!("{}", msg);
+        println!("acpi: {}", msg);
     }
 
-    let mut controller = ps2::CONTROLLER.lock();
-    match controller.initialize() {
-        Ok(_) => println!("ps2c: successful initialization"),
-        Err(error) => println!("ps2c: threw error: {:?}", error),
-    }
-
-    let keyboard_device = controller.device(ps2::DevicePort::Keyboard);
-    let mut keyboard = Ps2Keyboard::new(keyboard_device);
-    if let Ok(_) = keyboard.enable() {
-        println!("kbd: successfully enabled");
-        loop {
-            if let Ok(Some(event)) = keyboard.read_event() {
-                if event.event_type != KeyEventType::Break {
-                    if let Some(char) = event.char {
-                        print!("{}", char);
-                    }
+    loop {
+        if let Ok(Some(event)) = keyboard.read_event() {
+            if event.event_type != KeyEventType::Break {
+                if let Some(char) = event.char {
+                    print!("{}", char);
                 }
             }
         }
-    } else {
-        println!("kbd: enable unsuccessful");
     }
 
     unsafe { halt() }
