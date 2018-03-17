@@ -60,7 +60,6 @@ macro_rules! debug {
     }
 }
 
-#[allow(dead_code)] // Not used *yet*
 macro_rules! trace {
     ($thing:expr, $($extra:tt)*) => {
         #[cfg(feature = "trace")]
