@@ -30,6 +30,8 @@ use terminal::TerminalOutput;
 
 mod lang;
 #[macro_use]
+mod log;
+#[macro_use]
 mod util;
 #[macro_use]
 mod color;
@@ -58,14 +60,14 @@ pub extern fn kmain() -> ! {
 
     let mut controller = ps2::CONTROLLER.lock();
     match controller.initialize() {
-        Ok(_) => println!("ps2c: successful initialization"),
-        Err(error) => println!("ps2c: threw error: {:?}", error),
+        Ok(_) => info!("ps2c: init successful"),
+        Err(error) => error!("ps2c: {:?}", error),
     }
 
     let keyboard_device = controller.device(ps2::DevicePort::Keyboard);
     let mut keyboard = Ps2Keyboard::new(keyboard_device);
     if let Ok(_) = keyboard.enable() {
-        println!("kbd: successfully enabled");
+        info!("kbd: successfully enabled");
         loop {
             if let Ok(Some(event)) = keyboard.read_event() {
                 if event.event_type != KeyEventType::Break {
@@ -79,7 +81,7 @@ pub extern fn kmain() -> ! {
             }
         }
     } else {
-        println!("kbd: enable unsuccessful");
+        error!("kbd: enable unsuccessful");
     }
 
     halt()

@@ -1,16 +1,26 @@
 build_containing_dir := build
 debug ?= 0
 
+ifneq ($(debug), 1)
+else ifndef log_level
+    log_level := debug
+endif
+
+ifndef log_level
+    log_level := ""
+endif
+
 ifeq ($(debug), 1)
     nasm_flags := -f elf64 -F dwarf -g
     build_type := debug
     qemu_flags := -s -S
+    xargo_flags := --features $(log_level)
 else
     nasm_flags := -f elf64
-    xargo_flags := --release
+    xargo_flags := --release --features $(log_level)
     build_type := release
 endif
-    
+
 linker_script := cfg/linker.ld
 grub_cfg := cfg/grub.cfg
 out_dir = $(build_containing_dir)/$(build_type)

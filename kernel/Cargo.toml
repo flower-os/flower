@@ -27,3 +27,9 @@ features = ["nightly"]
 [dependencies.lazy_static]
 version = "1.0.0"
 features = ["spin_no_std"]
+
+[features]
+default = []
+
+debug = []
+trace = ["debug"]

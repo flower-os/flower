@@ -5,7 +5,7 @@ use color::{Color, ColorPair};
 use core::fmt::{self, Write};
 use drivers::vga::VgaWriter;
 use spin::RwLock;
-use terminal::{self, Stdout, TerminalOutput};
+use terminal::{Stdout, TerminalOutput};
 
 #[lang = "eh_personality"]
 #[no_mangle]

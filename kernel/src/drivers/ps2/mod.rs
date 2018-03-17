@@ -76,31 +76,31 @@ impl Controller {
 
     /// Initializes this PS2 controller
     pub fn initialize(&mut self) -> Result<(), Ps2Error> {
-        println!("ps2c: initializing");
+        info!("ps2c: initializing");
 
         self.prepare_devices()?;
-        println!("ps2c: disabled devices");
+        debug!("ps2c: disabled devices");
 
         io::flush_output()?;
 
         self.initialize_config()?;
 
         if !self.test_controller()? {
-            println!("ps2c: controller test failed");
+            error!("ps2c: controller test failed");
         }
 
-        println!("ps2c: testing devices");
+        debug!("ps2c: testing devices");
         match self.test_devices()? {
-            (false, _) => println!("ps2c: first device not supported"),
-            (_, false) => println!("ps2c: second device not supported"),
+            (false, _) => warn!("ps2c: first device not supported"),
+            (_, false) => warn!("ps2c: second device not supported"),
             _ => (),
         }
 
         // Check if any devices are available
         if self.reset_devices()? > 0 {
-            println!("ps2c: prepared devices");
+            debug!("ps2c: prepared devices");
         } else {
-            println!("ps2c: detected no available devices");
+            info!("ps2c: detected no available devices");
         }
 
         io::flush_output()?;
@@ -154,7 +154,7 @@ impl Controller {
         // Write the updated config back to the controller
         self.write_config(self.config)?;
 
-        println!("ps2c: initialized config");
+        debug!("ps2c: initialized config");
 
         Ok(())
     }
