@@ -2,7 +2,7 @@ macro_rules! error {
     ($thing:expr, $($extra:tt)*) => {
         {
             use terminal::TerminalOutput;
-            ::terminal::STDOUT.write().write_string_colored("[Error] ", color!(Red on Black))
+            ::terminal::STDOUT.write().write_string_colored("[error] ", color!(Red on Black))
                 .expect("Error logging");
             println!($thing, $($extra)*);
         }
@@ -18,7 +18,7 @@ macro_rules! warn {
     ($thing:expr, $($extra:tt)*) => {
         {
             use terminal::TerminalOutput;
-            ::terminal::STDOUT.write().write_string_colored("[Warn] ", color!(LightRed on Black))
+            ::terminal::STDOUT.write().write_string_colored("[warn] ", color!(LightRed on Black))
                 .expect("Error logging");
             println!($thing, $($extra)*);
         }
@@ -33,7 +33,7 @@ macro_rules! info {
     ($thing:expr, $($extra:tt)*) => {
         {
             use terminal::TerminalOutput;
-            ::terminal::STDOUT.write().write_string_colored("[Info] ", color!(LightBlue on Black))
+            ::terminal::STDOUT.write().write_string_colored("[info] ", color!(LightBlue on Black))
                 .expect("Error logging");
             println!($thing, $($extra)*);
         }
@@ -49,7 +49,7 @@ macro_rules! debug {
         #[cfg(feature = "debug")]
         {
             use terminal::TerminalOutput;
-            ::terminal::STDOUT.write().write_string_colored("[Debug] ", color!(Cyan on Black))
+            ::terminal::STDOUT.write().write_string_colored("[debug] ", color!(Cyan on Black))
                 .expect("Error logging");
             println!($thing, $($extra)*);
         }
@@ -65,7 +65,7 @@ macro_rules! trace {
         #[cfg(feature = "trace")]
         {
             use terminal::TerminalOutput;
-            ::terminal::STDOUT.write().write_string_colored("[Trace] ", color!(White on Black))
+            ::terminal::STDOUT.write().write_string_colored("[trace] ", color!(White on Black))
                 .expect("Error logging");
             println!($thing, $($extra)*);
         }
