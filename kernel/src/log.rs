@@ -18,7 +18,7 @@ macro_rules! warn {
     ($thing:expr, $($extra:tt)*) => {
         {
             use terminal::TerminalOutput;
-            ::terminal::STDOUT.write().write_string_colored("[warn] ", color!(LightRed on Black))
+            ::terminal::STDOUT.write().write_string_colored("[warn]  ", color!(LightRed on Black))
                 .expect("Error logging");
             println!($thing, $($extra)*);
         }
@@ -33,7 +33,7 @@ macro_rules! info {
     ($thing:expr, $($extra:tt)*) => {
         {
             use terminal::TerminalOutput;
-            ::terminal::STDOUT.write().write_string_colored("[info] ", color!(LightBlue on Black))
+            ::terminal::STDOUT.write().write_string_colored("[info]  ", color!(LightBlue on Black))
                 .expect("Error logging");
             println!($thing, $($extra)*);
         }
