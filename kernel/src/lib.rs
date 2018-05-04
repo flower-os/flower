@@ -9,25 +9,34 @@
 #![feature(nll)]
 #![feature(inclusive_range_syntax)]
 #![feature(type_ascription)]
-#![feature(ptr_internals)]
+#![feature(ptr_internals, align_offset)]
 #![feature(abi_x86_interrupt)]
+
+#[cfg(test)]
+#[cfg_attr(test, macro_use)]
+extern crate std;
 
 extern crate rlibc;
 extern crate volatile;
 extern crate spin;
 extern crate x86_64;
 extern crate array_init; // Used as a workaround until const-generics arrives
-
+extern crate multiboot2;
+extern crate bit_field;
 #[macro_use]
 extern crate bitflags;
 #[macro_use]
 extern crate lazy_static;
 
+use core::mem;
 use drivers::keyboard::{Keyboard, KeyEventType, Ps2Keyboard};
 use drivers::keyboard::keymap;
 use drivers::ps2;
 use terminal::TerminalOutput;
+use memory::bootstrap_allocator;
+use memory::buddy_allocator::{Tree, BLOCKS_IN_TREE, Block};
 
+#[cfg(not(test))]
 mod lang;
 #[macro_use]
 mod log;
@@ -37,9 +46,9 @@ mod util;
 mod color;
 mod io;
 mod interrupts;
-
 #[macro_use]
 mod terminal;
+mod memory;
 mod drivers;
 
 /// Kernel main function
@@ -68,6 +77,22 @@ pub extern fn kmain() -> ! {
         Err(error) => error!("ps2c: {:?}", error),
     }
 
+    keyboard_echo_loop(controller)
+}
+
+fn print_flower() -> Result<(), terminal::TerminalOutputError<()>> {
+    const FLOWER: &'static str = include_str!("resources/art/flower.txt");
+    const FLOWER_STEM: &'static str = include_str!("resources/art/flower_stem.txt");
+
+    let mut stdout = terminal::STDOUT.write();
+    let old = stdout.cursor_pos();
+
+    stdout.write_string_colored(FLOWER, color!(LightBlue on Black))?;
+    stdout.write_string_colored(FLOWER_STEM, color!(Green on Black))?;
+    stdout.set_cursor_pos(old)
+}
+
+fn keyboard_echo_loop(controller: &mut ps2::Controller) {
     let keyboard_device = controller.device(ps2::DevicePort::Keyboard);
     let mut keyboard = Ps2Keyboard::new(keyboard_device);
     if let Ok(_) = keyboard.enable() {
@@ -87,20 +112,14 @@ pub extern fn kmain() -> ! {
     } else {
         error!("kbd: enable unsuccessful");
     }
-
-    halt()
 }
 
-fn print_flower() -> Result<(), terminal::TerminalOutputError<()>> {
-    const FLOWER: &'static str = include_str!("resources/art/flower.txt");
-    const FLOWER_STEM: &'static str = include_str!("resources/art/flower_stem.txt");
-
-    let mut stdout = terminal::STDOUT.write();
-    let old = stdout.cursor_pos();
-
-    stdout.write_string_colored(FLOWER, color!(LightBlue on Black))?;
-    stdout.write_string_colored(FLOWER_STEM, color!(Green on Black))?;
-    stdout.set_cursor_pos(old)
+fn print_memory_info(memory_map: &multiboot2::MemoryMapTag) {
+    debug!("mem: Usable memory areas: ");
+    for area in memory_map.memory_areas() {
+        debug!(" 0x{:x} to 0x{:x}",
+                 area.start_address(), area.end_address());
+    }
 }
 
 fn halt() -> ! {

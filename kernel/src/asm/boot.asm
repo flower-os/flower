@@ -15,6 +15,9 @@ start:
     ; Disable interrupts
     cli
 
+    ; Save multiboot2 information structure into edi to be passed into kmain
+    mov edi, ebx
+
     ; Checks
     call check_multiboot ; Check if booted correctly
     call check_cpuid  ; Check if cpuid supported
@@ -255,10 +258,14 @@ long_mode_start:
     mov es, ax
     mov fs, ax
     mov gs, ax
-    
+
     ; Setup stack
     mov esp, stack_top
-    
+
+    ; Clear top 32 bits of edi
+    mov rax, 0xffffffff
+    and rdi, rax
+
     call kmain
 
     hlt

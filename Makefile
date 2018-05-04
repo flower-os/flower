@@ -36,11 +36,15 @@ grub_iso = $(out_dir)/flower.iso
 
 default: build
 
-.PHONY: clean run build $(rust_kernel) iso
+.PHONY: clean run build $(rust_kernel) iso test
 $(grub_iso): $(kernel) $(grub_cfg)
 	@cp $(grub_cfg) $(out_dir)/isofiles/boot/grub/
 	@cp $(kernel) $(out_dir)/isofiles/boot/
 	@grub-mkrescue -o $(out_dir)/flower.iso $(out_dir)/isofiles
+
+test:
+	cd $(rust_crate_dir) && \
+        cargo test
 
 build: $(kernel)
 iso: $(grub_iso)
