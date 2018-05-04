@@ -18,7 +18,6 @@
 #[cfg(test)]
 #[cfg_attr(test, macro_use)]
 extern crate std;
-
 extern crate rlibc;
 extern crate volatile;
 extern crate spin;
@@ -31,10 +30,13 @@ extern crate bitflags;
 #[macro_use]
 extern crate lazy_static;
 
+use core::mem;
 use drivers::keyboard::{Keyboard, KeyEventType, Ps2Keyboard};
 use drivers::keyboard::keymap;
 use drivers::ps2;
 use terminal::TerminalOutput;
+use memory::bootstrap_allocator;
+use memory::buddy_allocator::{Tree, BLOCKS_IN_TREE, Block};
 
 #[cfg(not(test))]
 mod lang;
@@ -56,6 +58,7 @@ mod drivers;
 pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
     say_hello();
     interrupts::init();
+    keyboard_echo_loop(&mut controller);
 
     // Parse and print mb info
     let mb_info = unsafe { multiboot2::load(multiboot_info_addr) };
