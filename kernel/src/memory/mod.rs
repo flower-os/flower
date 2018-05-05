@@ -1,10 +1,10 @@
 use core::convert::From;
 
-pub mod bootstrap_allocator;
-pub mod buddy_allocator;
+pub mod bootstrap_heap;
+pub mod physical_allocator;
 
 /// The size of a physical frame
-pub const FRAME_SIZE: usize = 4 * 4096;
+pub const FRAME_SIZE: usize = 4096;
 
 /// A structure representing a physical address
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
