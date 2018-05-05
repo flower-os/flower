@@ -7,7 +7,7 @@ use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
 use spin::{RwLock, RwLockReadGuard, Mutex};
 use bit_field::BitField;
-use super::physical_allocator::{Block, BLOCKS_IN_TREE};
+use super::{physical_allocator::BLOCKS_IN_TREE, buddy_allocator::Block};
 
 /// How many 8 heap objects to allocate at maximum.
 const OBJECTS8_NUMBER: usize = 32; // 32 gives us 256GiB while taking 8MiB of memory
@@ -185,7 +185,7 @@ impl<'a, T> Drop for BootstrapHeapBox<'a, T> {
 #[cfg(test)]
 mod test {
     use super::*;
-    
+
     fn setup_heap() -> *mut u8{
         let area = unsafe { Box::new(
             mem::zeroed::<[u8; BootstrapAllocator::<u8>::space_taken()]>()
@@ -193,7 +193,7 @@ mod test {
         let start = Box::into_raw(area);
         start as *mut u8
     }
-    
+
     fn teardown_heap(ptr: *mut u8) {
         unsafe { drop(Box::from_raw(ptr)) };
     }
