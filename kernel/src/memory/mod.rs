@@ -41,7 +41,7 @@ pub fn init_memory(mb_info: &BootInformation) {
     let memory_map = mb_info.memory_map_tag()
         .expect("Expected a multiboot2 memory map tag, but it is not present!");
 
-    print_memory_info(memory_map);
+    print_usable_areas(memory_map);
 
     // Set up bootstrap heap
     let end_address = mb_info.end_address() as *const u8;
@@ -51,25 +51,41 @@ pub fn init_memory(mb_info: &BootInformation) {
     let heap_start = end_address;
     unsafe { bootstrap_heap::BOOTSTRAP_HEAP.init_unchecked(heap_start as usize); }
 
+    let highest_address = memory_map.memory_areas()
+        .map(|area| area.end_address() - 1)
+        .inspect(|i| { trace!("Looking at {}", i); })
+        .max()
+        .expect("No usable physical memory available!");
+
+    // Do round-up division by 2^30 = 1GiB in bytes
+    let gibbibytes = ((highest_address + (1 << 30) - 1) / (1 << 30)) as u8;
+
+    info!("{} GiB of RAM available", gibbibytes);
+
     // Set up physical frame allocator
-    PHYSICAL_ALLOCATOR.init(1, &[]); // TODO handle holes & # of GiB properly
+    PHYSICAL_ALLOCATOR.init(
+        gibbibytes,
+        memory_map.memory_areas()
+            .map(|area| (area.start_address() as usize, area.end_address() as usize))
+            .map(|(start, end)| start..=(end - 1))
+    );
 
-    let mut addr = 0x0 as *const u8; // Needed; rustc can't infer that for _ in 0..2 will
-                                               // run
+    let mut address = 0x0 as *const _;
 
+    // TODO just do this for fun, but remove later
     for _ in 0..2 {
-        addr = PHYSICAL_ALLOCATOR.allocate(0).unwrap();
-        debug!("Allocated {:?}", addr);
+        address = PHYSICAL_ALLOCATOR.allocate(0).unwrap();
+        debug!("Allocated {:?}", address);
     }
 
-    PHYSICAL_ALLOCATOR.deallocate(addr, 0);
-    debug!("Freed {:?}", addr);
+    PHYSICAL_ALLOCATOR.deallocate(address, 0);
+    debug!("Freed {:?}", address);
 
     debug!("Allocated {:?}", PHYSICAL_ALLOCATOR.allocate(0).unwrap());
 
 }
 
-fn print_memory_info(memory_map: &MemoryMapTag) {
+fn print_usable_areas(memory_map: &MemoryMapTag) {
     debug!("mem: Usable memory areas: ");
     for area in memory_map.memory_areas() {
         debug!(" 0x{:x} to 0x{:x}",

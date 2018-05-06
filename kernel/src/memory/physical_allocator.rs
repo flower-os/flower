@@ -27,18 +27,22 @@ pub struct PhysicalAllocator<'a> {
 impl<'a> PhysicalAllocator<'a> {
     /// Create a new, initialized allocator
     #[cfg(test)]
-    fn new(gibbibytes: u8, holes: &[RangeInclusive<usize>]) -> Self{
+    fn new<I>(gibbibytes: u8, usable: I) -> Self
+        where I: Iterator<Item=RangeInclusive<usize>> + Clone
+    {
         let allocator = PhysicalAllocator {
             trees: RwLock::new(None),
         };
 
-        allocator.init(gibbibytes, holes);
+        allocator.init(gibbibytes, usable);
 
         allocator
     }
 
     /// Initialize the allocator. Panics if already initialized.
-    pub fn init(&self, gibbibytes: u8, holes: &[RangeInclusive<usize>]) {
+    pub fn init<I>(&self, gibbibytes: u8, usable: I)
+        where I: Iterator<Item=RangeInclusive<usize>> + Clone
+    {
         if let Some(_) = *self.trees.read() {
             panic!("PhysicalAllocator already initialized!");
         }
@@ -46,11 +50,14 @@ impl<'a> PhysicalAllocator<'a> {
         let mut trees: [Option<Mutex<Tree<'a>>>; 256] = unsafe { mem::uninitialized() };
 
         for (i, slot) in trees.iter_mut().enumerate() {
-            if i > gibbibytes as usize {
+            if i >= gibbibytes as usize {
                 unsafe { ptr::write(slot as *mut _, None) };
             } else {
                 unsafe {
-                    ptr::write(slot as *mut _, Some(Mutex::new(Tree::new(&holes[..]))));
+                    ptr::write(
+                        slot as *mut _,
+                        Some(Mutex::new(Tree::new(usable.clone())))
+                    );
                 }
             }
         }
@@ -68,6 +75,7 @@ impl<'a> PhysicalAllocator<'a> {
         }
 
         let mut tried = [TryState::Untried; 256];
+        let lock = self.trees.read();
 
         // Try every tree. If it's locked, come back to it later.
         loop {
@@ -77,7 +85,6 @@ impl<'a> PhysicalAllocator<'a> {
                     || tried.iter().position(|i| *i == TryState::WasInUse)
                 )?;
 
-            let lock = self.trees.read();
             let trees = lock.as_ref().unwrap();
 
             if let Some(ref tree) = trees[index] {
@@ -113,11 +120,15 @@ impl<'a> PhysicalAllocator<'a> {
 
 #[cfg(test)]
 mod test {
+    use core::iter;
     use super::*;
 
     #[test]
     fn test_alloc_physical_allocator() {
-        let allocator = PhysicalAllocator::new(2, &[]);
+        let allocator = PhysicalAllocator::new(
+            2,
+            iter::once(0..=(1 << 30)),
+        );
 
         assert_eq!(allocator.allocate(0).unwrap(), 0x0 as *const u8);
 
@@ -130,7 +141,11 @@ mod test {
 
     #[test]
     fn test_dealloc_physical_allocator() {
-        let allocator = PhysicalAllocator::new(2, &[]);
+        let allocator = PhysicalAllocator::new(
+            2,
+             iter::once(0..=(1 << 30)),
+        );
+
         allocator.allocate(0).unwrap();
         allocator.deallocate(0x0 as *const u8, 0);
         assert_eq!(allocator.allocate(5).unwrap(), 0x0 as *const u8);
