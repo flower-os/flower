@@ -57,13 +57,19 @@ pub fn init_memory(mb_info: &BootInformation) {
         .expect("No usable physical memory available!");
 
     // Do round-up division by 2^30 = 1GiB in bytes
-    let gibbibytes = ((highest_address + (1 << 30) - 1) / (1 << 30)) as u8;
+    let trees = ((highest_address + (1 << 30) - 1) / (1 << 30)) as u8;
 
-    info!("{} GiB of RAM available", gibbibytes);
+    let bytes_available: usize = memory_map.memory_areas()
+        .map(|area| area.start_address() + area.end_address())
+        .sum();
+    let gibbibytes_available  = bytes_available as f64 / (1 << 30) as f64;
+
+    debug!("Allocating {} trees", trees);
+    info!("{:.2} GiB of RAM available", gibbibytes_available);
 
     // Set up physical frame allocator
     PHYSICAL_ALLOCATOR.init(
-        gibbibytes,
+        trees,
         memory_map.memory_areas()
             .map(|area| (area.start_address() as usize, area.end_address() as usize))
             .map(|(start, end)| start..=(end - 1))
