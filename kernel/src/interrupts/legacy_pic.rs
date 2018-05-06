@@ -1,6 +1,6 @@
 // Thanks to http://www.randomhacks.net/2015/11/16/bare-metal-rust-configure-your-pic-interrupts/
 
-use io::IOPort;
+use io::SynchronizedPort;
 use spin::Mutex;
 
 pub static CHAINED_PICS: Mutex<ChainedPics> = Mutex::new(ChainedPics::new((0x20, 0x28)));
@@ -14,12 +14,12 @@ enum Commands {
 /// Represents an 8295/8295A PIC (superseded by APIC)
 pub struct Pic {
     pub offset: u8,
-    pub command_port: IOPort,
-    pub data_port: IOPort,
+    pub command_port: SynchronizedPort<u8>,
+    pub data_port: SynchronizedPort<u8>,
 }
 
 impl Pic {
-    const fn new(offset: u8, command_port: IOPort, data_port: IOPort) -> Self {
+    const fn new(offset: u8, command_port: SynchronizedPort<u8>, data_port: SynchronizedPort<u8>) -> Self {
         Pic { offset, command_port, data_port }
     }
 
@@ -33,7 +33,7 @@ impl Pic {
 
     pub fn initialise(&self) {
         // Port used to pause execution temporarily
-        let wait_port = unsafe { IOPort::new(0x80) };
+        let wait_port: SynchronizedPort<u8> = unsafe { SynchronizedPort::new(0x80) };
 
         // Tell the PIC to initialise
         self.command_port.write(Commands::Init as u8);
@@ -46,7 +46,7 @@ impl Pic {
 
     pub fn set_mode(&self, mode: u8) {
         // Port used to pause execution temporarily
-        let wait_port = unsafe { IOPort::new(0x80) };
+        let wait_port: SynchronizedPort<u8> = unsafe { SynchronizedPort::new(0x80) };
 
         self.data_port.write(mode);
         wait_port.write(0);
@@ -64,13 +64,13 @@ impl ChainedPics {
             ChainedPics {
                 inner: [
                     Pic::new(offsets.0,
-                             IOPort::new(0x20),
-                             IOPort::new(0x21)
+                             SynchronizedPort::new(0x20),
+                             SynchronizedPort::new(0x21)
                     ),
                     Pic::new(
                         offsets.1,
-                        IOPort::new(0xA0),
-                        IOPort::new(0xA1)
+                        SynchronizedPort::new(0xA0),
+                        SynchronizedPort::new(0xA1)
                     ),
                 ],
             }
@@ -79,7 +79,7 @@ impl ChainedPics {
 
     pub fn remap_and_disable(&self) {
         // Port used to pause execution temporarily
-        let wait_port = unsafe { IOPort::new(0x80) };
+        let wait_port: SynchronizedPort<u8> = unsafe { SynchronizedPort::new(0x80) };
 
         wait_port.write(0);
 

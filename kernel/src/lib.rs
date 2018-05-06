@@ -45,6 +45,8 @@ mod drivers;
 /// Kernel main function
 #[no_mangle]
 pub extern fn kmain() -> ! {
+    interrupts::init();
+
     terminal::STDOUT.write().clear().expect("Screen clear failed");
 
     print_flower().expect("Flower print failed");
@@ -59,8 +61,6 @@ pub extern fn kmain() -> ! {
     // Reset colors
     terminal::STDOUT.write().set_color(color!(White on Black))
         .expect("Color should be supported");
-
-    interrupts::init();
 
     let mut controller = ps2::CONTROLLER.lock();
     match controller.initialize() {
