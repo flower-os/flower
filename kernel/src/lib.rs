@@ -10,6 +10,7 @@
 #![feature(inclusive_range_syntax)]
 #![feature(type_ascription)]
 #![feature(ptr_internals)]
+#![feature(abi_x86_interrupt)]
 
 extern crate rlibc;
 extern crate volatile;
@@ -19,7 +20,6 @@ extern crate array_init; // Used as a workaround until const-generics arrives
 
 #[macro_use]
 extern crate bitflags;
-
 #[macro_use]
 extern crate lazy_static;
 
@@ -36,6 +36,8 @@ mod util;
 #[macro_use]
 mod color;
 mod io;
+mod interrupts;
+
 #[macro_use]
 mod terminal;
 mod drivers;
@@ -43,6 +45,8 @@ mod drivers;
 /// Kernel main function
 #[no_mangle]
 pub extern fn kmain() -> ! {
+    interrupts::init();
+
     terminal::STDOUT.write().clear().expect("Screen clear failed");
 
     print_flower().expect("Flower print failed");
