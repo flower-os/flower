@@ -102,7 +102,6 @@ impl<T> BootstrapAllocator<T> {
 
                 if !objects8.get_bit(bit) {
                     objects8.set_bit(bit, true);
-                    drop(*objects8);
                     drop(lock);
 
                     let ptr = self.start().offset((objects8_index * 8 + bit) as isize);
