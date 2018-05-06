@@ -4,7 +4,6 @@ use x86_64::structures::idt::Idt;
 
 mod legacy_pic;
 mod exceptions;
-mod irqs;
 
 lazy_static! {
     static ref IDT: Idt = {

@@ -5,6 +5,9 @@ use spin::Mutex;
 
 pub static CHAINED_PICS: Mutex<ChainedPics> = Mutex::new(ChainedPics::new((0x20, 0x28)));
 
+/// Used to pause execution temporarily
+pub static IO_WAIT_PORT: SynchronizedPort<u8> = unsafe { SynchronizedPort::new(0x80) };
+
 #[repr(u8)]
 enum Commands {
     Init = 0x10,
@@ -27,29 +30,23 @@ impl Pic {
         self.offset <= interrupt_id && interrupt_id < self.offset + 8
     }
 
-    unsafe fn end_of_interrupt(&self) {
+    fn end_of_interrupt(&self) {
         self.command_port.write(Commands::EndOfInterrupt as u8);
     }
 
     pub fn initialise(&self) {
-        // Port used to pause execution temporarily
-        let wait_port: SynchronizedPort<u8> = unsafe { SynchronizedPort::new(0x80) };
-
         // Tell the PIC to initialise
         self.command_port.write(Commands::Init as u8);
-        wait_port.write(0);
+        IO_WAIT_PORT.write(0x0);
 
         // Set the PICs offset
         self.data_port.write(self.offset);
-        wait_port.write(0);
+        IO_WAIT_PORT.write(0x0);
     }
 
     pub fn set_mode(&self, mode: u8) {
-        // Port used to pause execution temporarily
-        let wait_port: SynchronizedPort<u8> = unsafe { SynchronizedPort::new(0x80) };
-
         self.data_port.write(mode);
-        wait_port.write(0);
+        IO_WAIT_PORT.write(0x0);
     }
 }
 
@@ -78,10 +75,7 @@ impl ChainedPics {
     }
 
     pub fn remap_and_disable(&self) {
-        // Port used to pause execution temporarily
-        let wait_port: SynchronizedPort<u8> = unsafe { SynchronizedPort::new(0x80) };
-
-        wait_port.write(0);
+        IO_WAIT_PORT.write(0x0);
 
         // Tell both of the PICs to initialise
         for pic in self.inner.iter() {
@@ -90,7 +84,7 @@ impl ChainedPics {
 
         for (pic, data) in self.inner.iter().zip([4u8, 2u8].iter()) {
             pic.data_port.write(*data);
-            wait_port.write(0);
+            IO_WAIT_PORT.write(0x0);
         }
 
         // Set PICs to 8086/88 (MCS-80/85) mode
