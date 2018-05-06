@@ -60,7 +60,7 @@ pub fn init_memory(mb_info: &BootInformation) {
     let trees = ((highest_address + (1 << 30) - 1) / (1 << 30)) as u8;
 
     let bytes_available: usize = memory_map.memory_areas()
-        .map(|area| area.start_address() + area.end_address())
+        .map(|area| area.end_address() - area.start_address() - 1)
         .sum();
     let gibbibytes_available  = bytes_available as f64 / (1 << 30) as f64;
 
