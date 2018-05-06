@@ -52,7 +52,8 @@ run: $(grub_iso)
 # Clean build dir
 clean:
 	@rm -rf build
-	@cd $(rust_crate_dir) && RUST_TARGET_PATH=$(shell pwd)/$(rust_crate_dir) xargo clean
+	@cd $(rust_crate_dir) && \
+	  RUST_TARGET_PATH=$(shell pwd)/$(rust_crate_dir) xargo clean
 
 # Make build directories
 makedirs:
