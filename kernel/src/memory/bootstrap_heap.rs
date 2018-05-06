@@ -30,7 +30,10 @@ lazy_static! {
     };
 }
 
-pub struct BootstrapHeap(pub RwLock<Option<BootstrapAllocator<[Block; BLOCKS_IN_TREE]>>>);
+/// A holding struct for the bootstrap heap. We use `RwLock<Option<...>>` so we can `write` to it
+/// to initialize the `Option`, but `read` from it under normal circumstances as the allocator
+/// employs its own lock.
+pub struct BootstrapHeap(RwLock<Option<BootstrapAllocator<[Block; BLOCKS_IN_TREE]>>>);
 
 impl BootstrapHeap {
     /// Panics if bootstrap heap is not initialized

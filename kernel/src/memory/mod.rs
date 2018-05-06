@@ -54,9 +54,18 @@ pub fn init_memory(mb_info: &BootInformation) {
     // Set up physical frame allocator
     PHYSICAL_ALLOCATOR.init(1, &[]); // TODO handle holes & # of GiB properly
 
-    for _ in 0..4 {
-        debug!("Allocated {:?}", PHYSICAL_ALLOCATOR.allocate(0).unwrap());
+    let mut addr = 0x0 as *const u8; // Needed; rustc can't infer that for _ in 0..2 will
+                                               // run
+
+    for _ in 0..2 {
+        addr = PHYSICAL_ALLOCATOR.allocate(0).unwrap();
+        debug!("Allocated {:?}", addr);
     }
+
+    PHYSICAL_ALLOCATOR.deallocate(addr, 0);
+    debug!("Freed {:?}", addr);
+
+    debug!("Allocated {:?}", PHYSICAL_ALLOCATOR.allocate(0).unwrap());
 
 }
 

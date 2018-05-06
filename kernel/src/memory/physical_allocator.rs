@@ -15,7 +15,7 @@ pub static PHYSICAL_ALLOCATOR: PhysicalAllocator<'static> = PhysicalAllocator {
     trees: RwLock::new(None),
 };
 
-buddy_allocator_bitmap_tree!(LEVEL_COUNT = 19, BASE_ORDER = 12);
+buddy_allocator_bitmap_tree!(LEVEL_COUNT = LEVEL_COUNT, BASE_ORDER = BASE_ORDER);
 
 pub struct PhysicalAllocator<'a> {
     // Max 256GiB
@@ -96,6 +96,19 @@ impl<'a> PhysicalAllocator<'a> {
             }
         }
     }
+
+    /// Deallocate the block of `order` at `ptr`. Panics if not initialized, if block is free, or if
+    /// block is out of bounds of the # of GiB available.
+    pub fn deallocate(&self, ptr: *const u8, order: u8) {
+        let tree = (ptr as usize) >> (LEVEL_COUNT - 1 + BASE_ORDER);
+        let local_ptr = (ptr as usize % (1 << LEVEL_COUNT - 1 + BASE_ORDER)) as *const u8;
+
+        let trees = self.trees.read();
+        let tree = trees.as_ref().unwrap()[tree].as_ref();
+        let mut tree = tree.unwrap().lock();
+
+        tree.deallocate(local_ptr, order);
+    }
 }
 
 #[cfg(test)]
@@ -113,5 +126,13 @@ mod test {
             .as_ref().unwrap().lock(); // Lock block
 
         assert_eq!(allocator.allocate(0).unwrap(), 2usize.pow((MAX_ORDER + BASE_ORDER) as u32) as *const u8);
+    }
+
+    #[test]
+    fn test_dealloc_physical_allocator() {
+        let allocator = PhysicalAllocator::new(2, &[]);
+        allocator.allocate(0).unwrap();
+        allocator.deallocate(0x0 as *const u8, 0);
+        assert_eq!(allocator.allocate(5).unwrap(), 0x0 as *const u8);
     }
 }
