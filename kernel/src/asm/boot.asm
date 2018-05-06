@@ -41,19 +41,11 @@ start:
 ; Note: use push word! Otherwise it will push extra 16bit of 0s
 ;
 ; Example:
-; push word 'd'
-; push word 'e'
-; push word 'a'
-; push word 'd'
-; push word 'b'
-; push word 'e'
-; push word 'e'
 ; push word 'f'
-; push word 8
 ; call error_print
 ; 
 ; Outputs:
-; FlowerOS boot failed, code 0xdeadbeef
+; FlowerOS boot failed, code 0xf
 ; 
 ; Error codes can be found in doc/Boot-Errors.md
 error_print:
@@ -88,29 +80,15 @@ error_print:
     mov word [VGA_PTR + 54], 0x0430 ; 0
     mov word [VGA_PTR + 56], 0x0478 ; x
     
-    pop edx ; pop return pointer
-    mov ecx, 0 ; clear ecx
-    pop cx ; (word) length of char array
-    
-    .print_error_code_loop:
-        
-        pop ax ; pop (word) code
-        or ax, 0x0400 ; form proper vga code
-        
-        ; ebx = vga memory location
-        mov ebx, ecx ; set bx to char offset
-        shl ebx, 1 ; shift for * 2 because two bits per char
-        add ebx, VGA_PTR + 56; vga memory pointer offset
-        
-        mov [ebx], ax ; set char to code
-        
-        dec ecx
-        
-        cmp ecx, 0
-        jne .print_error_code_loop ; if cx is not 0, loop
-    
-    push edx ; push return pointer
-    ret
+    pop ax ; pop (word) code
+    or ax, 0x400 ; get vga code from character
+
+    mov word [VGA_PTR + 58], ax ; print the given error character
+
+    cli
+    .loop:
+        hlt
+        jmp .loop
 
 ; Set up paging
 ; Thanks to https://intermezzos.github.io/book/paging.html
@@ -174,7 +152,6 @@ check_multiboot:
 ; Jumped to if multiboot booted incorrectly
 .multiboot_error:
     push '1' ; Error code 1
-    push 1
     call error_print
     hlt
 
@@ -221,7 +198,6 @@ check_cpuid:
 ; Jumped to if CPUID isn't supported
 .no_cpuid:
     push '2' ; Error code 2
-    push 1
     call error_print
     hlt
 
@@ -238,7 +214,6 @@ check_long_mode:
 ; Jumped to if long mode isn't supported
 .no_long_mode:
     push '3' ; Error code 3
-    push 1
     call error_print
     hlt
     
@@ -253,7 +228,7 @@ p2_table:
 
 ; Stack grows the other way
 stack_bottom:
-    resb 1024 * 16 ; 16 KiB
+    resb 1024 * 64 ; 64 kilobytes
 stack_top:
 
 section .rodata
@@ -285,5 +260,5 @@ long_mode_start:
     mov esp, stack_top
     
     call kmain
-    
+
     hlt

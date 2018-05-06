@@ -199,22 +199,26 @@ impl<'a> Ps2Keyboard<'a> {
     /// }
     /// ```
     fn read_scancode(&self) -> Result<Option<Ps2Scancode>, Ps2KeyboardError> {
+        use ps2::io;
+
         if self.device.state == DeviceState::Enabled {
-            if ps2::io::can_read()? && ps2::io::can_read_keyboard()? {
+            if io::can_read()? && io::can_read_keyboard()? {
                 let mut make = true;
                 let mut extended = false;
 
                 // Get all scancode modifiers, and return when the actual scancode is received
-                let scancode = loop {
-                    let data = ps2::io::read(&ps2::io::DATA_PORT)?;
-                    match data {
-                        0xE0 ... 0xE1 => extended = true,
-                        0xF0 => make = false,
-                        _ => {
-                            break data;
+                let scancode = (io::DATA_PORT.with_lock(|mut data_port| {
+                    loop {
+                        let data = io::read(&mut data_port)?;
+                        match data {
+                            0xE0 ... 0xE1 => extended = true,
+                            0xF0 => make = false,
+                            _ => {
+                                break Ok(data);
+                            }
                         }
                     }
-                };
+                }): Result<u8, io::Ps2Error>)?;
 
                 // If scancode is present, return it with modifiers
                 return Ok(if scancode != 0 {
