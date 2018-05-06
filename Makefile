@@ -36,13 +36,14 @@ grub_iso = $(out_dir)/flower.iso
 
 default: build
 
-.PHONY: clean run build $(rust_kernel)
+.PHONY: clean run build $(rust_kernel) iso
 $(grub_iso): $(kernel) $(grub_cfg)
 	@cp $(grub_cfg) $(out_dir)/isofiles/boot/grub/
 	@cp $(kernel) $(out_dir)/isofiles/boot/
 	@grub-mkrescue -o $(out_dir)/flower.iso $(out_dir)/isofiles
 
 build: $(kernel)
+iso: $(grub_iso)
 
 # Run with qemu
 run: $(grub_iso)
