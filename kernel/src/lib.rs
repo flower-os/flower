@@ -3,87 +3,96 @@
 #![feature(asm)]
 #![feature(lang_items)]
 #![feature(const_fn)]
-#![feature(const_unique_new)]
-#![feature(unique)]
+#![feature(unique, const_unique_new)]
 #![feature(slice_rotate)]
 #![feature(try_from)]
 #![feature(try_trait)]
+#![feature(nll)]
+#![feature(inclusive_range_syntax)]
 #![feature(type_ascription)]
 #![feature(range_contains)]
 #![feature(iterator_step_by)]
 #![feature(use_nested_groups)]
 #![feature(ptr_internals)]
+#![feature(abi_x86_interrupt)]
 
-extern crate rlibc;
-extern crate volatile;
-extern crate spin;
-extern crate x86_64;
-extern crate either;
-
+extern crate array_init;
 #[macro_use]
 extern crate bitflags;
-
+extern crate either;
 #[macro_use]
 extern crate lazy_static;
+extern crate rlibc;
+extern crate spin;
+extern crate volatile;
+extern crate x86_64;
+// Used as a workaround until const-generics arrives
 
-use core::{ops::Try, convert::TryInto};
-use either::{Left, Right};
-use drivers::keyboard::{Keyboard, KeyEventType, Ps2Keyboard, keymap};
+use acpi::sdt::{madt::{Madt, MADT_HEADER}, SdtHeader};
+use core::{convert::TryInto, ops::Try};
+use drivers::keyboard::{Keyboard, KeyEventType, Ps2Keyboard};
+use drivers::keyboard::keymap;
 use drivers::ps2;
-use drivers::vga::{self, Color, VgaColor};
-use acpi::sdt::{SdtHeader, madt::{Madt, MADT_HEADER}};
+use either::{Left, Right};
+use terminal::TerminalOutput;
 
 mod lang;
 #[macro_use]
+mod log;
+#[macro_use]
 mod util;
 #[macro_use]
-mod drivers;
+mod color;
 mod io;
 mod acpi;
+mod interrupts;
 
-const FLOWER: &'static str = include_str!("resources/art/flower.txt");
-const FLOWER_STEM: &'static str = include_str!("resources/art/flower_stem.txt");
+#[macro_use]
+mod terminal;
+mod drivers;
 
 /// Kernel main function
 #[no_mangle]
 pub extern fn kmain() -> ! {
-    vga::WRITER.lock().fill_screen(Color::Black);
+    interrupts::init();
 
-    // Print flower
-    vga::WRITER.lock().set_color(
-        VgaColor::new(Color::LightBlue, Color::Black)
-    );
-    print!("\n{}", FLOWER);
-    vga::WRITER.lock().set_color(
-        VgaColor::new(Color::Green, Color::Black)
-    );
-    print!("{}", FLOWER_STEM);
+    terminal::STDOUT.write().clear().expect("Screen clear failed");
 
-    // Reset colors
-    vga::WRITER.lock().set_color(
-        VgaColor::new(Color::White, Color::Black)
-    );
+    print_flower().expect("Flower print failed");
 
-    // Reset cursor position to (0, 0)
-    // It's hackish but it looks better
-    vga::WRITER.lock().set_cursor_pos((0, 0));
+    terminal::STDOUT.write().set_color(color!(Green on Black))
+        .expect("Color should be supported");
 
     // Print boot message
-    vga::WRITER.lock().write_str_colored(
-        "Flower kernel boot!\n-------------------\n\n",
-        VgaColor::new(Color::Green, Color::Black),
-    ).expect("Color code should be valid");
+    println!("Flower kernel boot!");
+    println!("-------------------\n");
+
+    // Reset colors
+    terminal::STDOUT.write().set_color(color!(White on Black))
+        .expect("Color should be supported");
 
     let mut controller = ps2::CONTROLLER.lock();
     match controller.initialize() {
-        Ok(_) => println!("ps2c: successful initialization"),
-        Err(error) => println!("ps2c: threw error: {:?}", error),
+        Ok(_) => info!("ps2c: init successful"),
+        Err(error) => error!("ps2c: {:?}", error),
     }
 
     let keyboard_device = controller.device(ps2::DevicePort::Keyboard);
     let mut keyboard = Ps2Keyboard::new(keyboard_device);
     if let Ok(_) = keyboard.enable() {
-        println!("kbd: successfully enabled");
+        info!("kbd: successfully enabled");
+        loop {
+            if let Ok(Some(event)) = keyboard.read_event() {
+                if event.event_type != KeyEventType::Break {
+                    if event.keycode == keymap::codes::BACKSPACE {
+                        // Ignore error
+                        let _ = terminal::STDOUT.write().backspace();
+                    } else if let Some(character) = event.char {
+                        print!("{}", character)
+                    }
+                }
+            }
+        }
     } else {
         println!("kbd: enable unsuccessful");
     }
@@ -171,23 +180,29 @@ pub extern fn kmain() -> ! {
         println!("acpi: {}", msg);
     }
 
-    loop {
-        if let Ok(Some(event)) = keyboard.read_event() {
-            if event.event_type != KeyEventType::Break {
-                if let Some(char) = event.char {
-                    print!("{}", char);
-                }
-            }
-        }
-    }
-
-    unsafe { halt() }
+    halt()
 }
 
-unsafe fn halt() -> ! {
-    asm!("cli");
+fn print_flower() -> Result<(), terminal::TerminalOutputError<()>> {
+    const FLOWER: &'static str = include_str!("resources/art/flower.txt");
+    const FLOWER_STEM: &'static str = include_str!("resources/art/flower_stem.txt");
 
-    loop {
-        asm!("hlt")
+    let mut stdout = terminal::STDOUT.write();
+    let old = stdout.cursor_pos();
+
+    stdout.write_string_colored(FLOWER, color!(LightBlue on Black))?;
+    stdout.write_string_colored(FLOWER_STEM, color!(Green on Black))?;
+    stdout.set_cursor_pos(old)
+}
+
+fn halt() -> ! {
+    unsafe {
+        // Disable interrupts
+        asm!("cli");
+
+        // Halt forever...
+        loop {
+            asm!("hlt");
+        }
     }
 }

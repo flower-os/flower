@@ -76,31 +76,31 @@ impl Controller {
 
     /// Initializes this PS2 controller
     pub fn initialize(&mut self) -> Result<(), Ps2Error> {
-        println!("ps2c: initializing");
+        info!("ps2c: initializing");
 
         self.prepare_devices()?;
-        println!("ps2c: disabled devices");
+        debug!("ps2c: disabled devices");
 
         io::flush_output()?;
 
         self.initialize_config()?;
 
         if !self.test_controller()? {
-            println!("ps2c: controller test failed");
+            error!("ps2c: controller test failed");
         }
 
-        println!("ps2c: testing devices");
+        debug!("ps2c: testing devices");
         match self.test_devices()? {
-            (false, _) => println!("ps2c: first device not supported"),
-            (_, false) => println!("ps2c: second device not supported"),
+            (false, _) => warn!("ps2c: first device not supported"),
+            (_, false) => warn!("ps2c: second device not supported"),
             _ => (),
         }
 
         // Check if any devices are available
         if self.reset_devices()? > 0 {
-            println!("ps2c: prepared devices");
+            debug!("ps2c: prepared devices");
         } else {
-            println!("ps2c: detected no available devices");
+            info!("ps2c: detected no available devices");
         }
 
         io::flush_output()?;
@@ -154,7 +154,7 @@ impl Controller {
         // Write the updated config back to the controller
         self.write_config(self.config)?;
 
-        println!("ps2c: initialized config");
+        debug!("ps2c: initialized config");
 
         Ok(())
     }
@@ -274,8 +274,10 @@ impl Device {
         if self.state != DeviceState::Unavailable {
             self.command_raw(cmd as u8).and_then(|result| match result {
                 ACK => {
-                    io::write(&io::DATA_PORT, data as u8)?;
-                    io::read(&io::DATA_PORT)
+                    io::DATA_PORT.with_lock(|mut data_port| {
+                        io::write(&mut data_port, data as u8)?;
+                        io::read(&mut data_port)
+                    })
                 }
                 _ => Ok(result)
             })
@@ -291,14 +293,18 @@ impl Device {
             if self.port == DevicePort::Mouse {
                 commands::send(ControllerCommand::WriteInputPort2)?;
             }
-            for _ in 0..4 {
-                io::write(&io::DATA_PORT, cmd)?;
-                match io::read(&io::DATA_PORT) {
-                    Ok(RESEND) => continue,
-                    result => return result,
+
+            io::DATA_PORT.with_lock(|mut data_port| {
+                for _ in 0..4 {
+                    io::write(&mut data_port, cmd)?;
+                    match io::read(&mut data_port) {
+                        Ok(RESEND) => continue,
+                        result => return result,
+                    }
                 }
-            }
-            Err(Ps2Error::NoData)
+
+                Err(Ps2Error::NoData)
+            })
         } else {
             Err(Ps2Error::DeviceUnavailable)
         }

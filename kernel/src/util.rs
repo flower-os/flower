@@ -1,4 +1,4 @@
-pub type CChar = u8;
+//! Various utilities
 
 /// A macro to implement [FromDiscriminator] on an enum with explicit discriminators.
 /// Doesn't support generics or comments, but does support attributes, etc
@@ -57,11 +57,4 @@ pub struct UnknownDiscriminator(pub u64);
 pub trait FromDiscriminator {
     type Output;
     fn from_discriminator(discriminator: u64) -> Result<Self::Output, UnknownDiscriminator>;
-}
-
-/// A macro to catch `try`'d values into one value
-macro_rules! catch {
-    {$($token:tt)*} => (
-    (|| { $($token)* })()
-    )
 }

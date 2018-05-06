@@ -1,16 +1,26 @@
 build_containing_dir := build
 debug ?= 0
 
+ifneq ($(debug), 1)
+else ifndef log_level
+    log_level := debug
+endif
+
+ifndef log_level
+    log_level := ""
+endif
+
 ifeq ($(debug), 1)
     nasm_flags := -f elf64 -F dwarf -g
     build_type := debug
     qemu_flags := -s -S -d int -no-reboot
+    xargo_flags := --features $(log_level)
 else
     nasm_flags := -f elf64
-    xargo_flags := --release
+    xargo_flags := --release --features $(log_level)
     build_type := release
 endif
-    
+
 linker_script := cfg/linker.ld
 grub_cfg := cfg/grub.cfg
 out_dir = $(build_containing_dir)/$(build_type)
@@ -26,7 +36,7 @@ grub_iso = $(out_dir)/flower.iso
 
 default: build $(rust_kernel)
 
-.PHONY: clean run build iso
+.PHONY: clean run build $(rust_kernel) iso
 $(grub_iso): $(kernel) $(grub_cfg)
 	@cp $(grub_cfg) $(out_dir)/isofiles/boot/grub/
 	@cp $(kernel) $(out_dir)/isofiles/boot/
@@ -42,7 +52,8 @@ run: $(grub_iso)
 # Clean build dir
 clean:
 	@rm -rf build
-	@cd $(rust_crate_dir) && RUST_TARGET_PATH=$(shell pwd)/$(rust_crate_dir) xargo clean
+	@cd $(rust_crate_dir) && \
+	  RUST_TARGET_PATH=$(shell pwd)/$(rust_crate_dir) xargo clean
 
 # Make build directories
 makedirs:
