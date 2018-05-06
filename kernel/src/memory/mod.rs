@@ -53,7 +53,6 @@ pub fn init_memory(mb_info: &BootInformation) {
 
     let highest_address = memory_map.memory_areas()
         .map(|area| area.end_address() - 1)
-        .inspect(|i| { trace!("Looking at {}", i); })
         .max()
         .expect("No usable physical memory available!");
 
