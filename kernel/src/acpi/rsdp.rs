@@ -32,11 +32,11 @@ fn find_ebda_start() -> usize {
     let base = (unsafe { ptr::read(EBDA_START_SEGMENT_PTR as *const u16) } as usize) << 4;
 
     // Check if base segment ptr is in valid range valid
-    if (EBDA_EARLIEST_START..EBDA_END).contains(base) {
-        println!("acpi: EBDA address is {:#x}", base);
+    if (EBDA_EARLIEST_START..EBDA_END).contains(&base) {
+        debug!("acpi: EBDA address is {:#x}", base);
         base
     } else {
-        println!(
+        warn!(
             "acpi: EBDA address at {:#x} out of range\n      ({:#x}), falling back to {:#x}",
             EBDA_START_SEGMENT_PTR,
             base,

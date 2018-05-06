@@ -44,11 +44,11 @@ mod util;
 #[macro_use]
 mod color;
 mod io;
-mod acpi;
 mod interrupts;
 
 #[macro_use]
 mod terminal;
+mod acpi;
 mod drivers;
 
 /// Kernel main function
@@ -81,6 +81,90 @@ pub extern fn kmain() -> ! {
     let mut keyboard = Ps2Keyboard::new(keyboard_device);
     if let Ok(_) = keyboard.enable() {
         info!("kbd: successfully enabled");
+
+        let acpi_res: Result<(), &str> = catch! {
+            let (rsdp, address) = match acpi::rsdp::search_for_rsdp() {
+                Some(ret) => ret,
+                None => return Err("rsdp not found"),
+            };
+
+            debug!("acpi: rsdp found at {:#x}", address);
+
+            let mut temp = rsdp
+                .map_left(|rsdp_v1| {
+                    println!("acpi: using rsdt");
+                    rsdp_v1.try_into().map_err(|_| "invalid rsdt")
+                })
+                .map_right(|rsdp_v2| {
+                    println!("acpi: using xsdt");
+                    rsdp_v2.try_into().map_err(|_| "invalid xsdt")
+                });
+
+            let (header, sdt_addresses) = match temp {
+                Left(Ok((ref mut header, ref mut addresses))) => {
+                    (header, addresses as &mut Iterator<Item=usize>)
+                },
+                Right(Ok((ref mut header, ref mut addresses))) => {
+                    (header, addresses as &mut Iterator<Item=usize>)
+                },
+                Left(Err(ref mut err)) => return Err(*err),
+                Right(Err(ref mut err)) => return Err(*err)
+            };
+
+            print!("acpi: oem: \"");
+            for c in header.oem_id.iter() {
+                print!("{}", *c as char);
+            }
+            println!("\"");
+
+            println!("acpi: {} tables found", sdt_addresses.size_hint().0);
+            println!("acpi: table signatures:");
+
+            let mut madt_address: Option<usize> = None;
+
+            for address in sdt_addresses {
+                let header = unsafe { *(address as *const SdtHeader) };
+
+                print!("    \"");
+                for c in header.signature.iter() {
+                    print!("{}", *c as char);
+                }
+
+                println!("\" at {:#x}", address);
+
+                if header.signature == *MADT_HEADER {
+                    madt_address = Some(address);
+                }
+            }
+
+            let madt_address = madt_address
+                .into_result()
+                .map_err(|_| "MADT not found")?;
+
+            let madt = unsafe { Madt::from_address(madt_address) }
+                .map_err(|_| "Error validating MADT")?;
+
+            info!("acpi: press S for next madt entry");
+
+            for entry in madt.entries {
+                loop {
+                    if let Ok(Some(event)) = keyboard.read_event() {
+                        if event.event_type == KeyEventType::Break && event.keycode == keymap::codes::S {
+                                break;
+                        }
+                    }
+                }
+
+                debug!("{:#?}", entry);
+            }
+
+            Ok(())
+        };
+
+        if let Err(msg) = acpi_res {
+            error!("acpi: {}", msg);
+        }
+
         loop {
             if let Ok(Some(event)) = keyboard.read_event() {
                 if event.event_type != KeyEventType::Break {
@@ -95,89 +179,6 @@ pub extern fn kmain() -> ! {
         }
     } else {
         println!("kbd: enable unsuccessful");
-    }
-
-    let acpi_res: Result<(), &str> = catch! {
-        let (rsdp, address) = match acpi::rsdp::search_for_rsdp() {
-            Some(ret) => ret,
-            None => return Err("rsdp not found"),
-        };
-
-        println!("acpi: rsdp found at {:#x}", address);
-
-        let mut temp = rsdp
-            .map_left(|rsdp_v1| {
-                println!("acpi: using rsdt");
-                rsdp_v1.try_into().map_err(|_| "invalid rsdt")
-            })
-            .map_right(|rsdp_v2| {
-                println!("acpi: using xsdt");
-                rsdp_v2.try_into().map_err(|_| "invalid xsdt")
-            });
-
-        let (header, sdt_addresses) = match temp {
-            Left(Ok((ref mut header, ref mut addresses))) => {
-                (header, addresses as &mut Iterator<Item=usize>)
-            },
-            Right(Ok((ref mut header, ref mut addresses))) => {
-                (header, addresses as &mut Iterator<Item=usize>)
-            },
-            Left(Err(ref mut err)) => return Err(*err),
-            Right(Err(ref mut err)) => return Err(*err)
-        };
-
-        print!("acpi: oem: \"");
-        for c in header.oem_id.iter() {
-            print!("{}", *c as char);
-        }
-        println!("\"");
-
-        println!("acpi: {} tables found", sdt_addresses.size_hint().0);
-        println!("acpi: table signatures:");
-
-        let mut madt_address: Option<usize> = None;
-
-        for address in sdt_addresses {
-            let header = unsafe { *(address as *const SdtHeader) };
-
-            print!("    \"");
-            for c in header.signature.iter() {
-                print!("{}", *c as char);
-            }
-
-            println!("\" at {:#x}", address);
-
-            if header.signature == *MADT_HEADER {
-                madt_address = Some(address);
-            }
-        }
-
-        let madt_address = madt_address
-            .into_result()
-            .map_err(|_| "MADT not found")?;
-
-        let madt = unsafe { Madt::from_address(madt_address) }
-            .map_err(|_| "Error validating MADT")?;
-
-        println!("acpi: press S for next madt entry");
-
-        for entry in madt.entries {
-            loop {
-                if let Ok(Some(event)) = keyboard.read_event() {
-                    if event.event_type == KeyEventType::Break && event.keycode == keymap::codes::S {
-                            break;
-                    }
-                }
-            }
-
-            println!("{:#?}", entry);
-        }
-
-        Ok(())
-    };
-
-    if let Err(msg) = acpi_res {
-        println!("acpi: {}", msg);
     }
 
     halt()

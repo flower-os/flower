@@ -1,5 +1,7 @@
 //! Various utilities
 
+pub type CChar = u8;
+
 /// A macro to implement [FromDiscriminator] on an enum with explicit discriminators.
 /// Doesn't support generics or comments, but does support attributes, etc
 macro_rules! from_discriminator {
@@ -50,6 +52,17 @@ macro_rules! from_discriminator {
             }
         }
     };
+}
+
+/// A macro to catch `try`'d values into one value
+macro_rules! catch {
+    {
+        $($token:tt)*
+    } => (
+        (|| {
+            $($token)*
+        })()
+    )
 }
 
 pub struct UnknownDiscriminator(pub u64);
