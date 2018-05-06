@@ -37,8 +37,8 @@ Much thanks to:
    - Toor,
    - Rep nop,
    - Evrey,
-   - nyrox,
-   - and cult pony;
+   - Cult Pony,
+   - and Nyrox;
  - the [OsDev wiki](http://wiki.osdev.org);
  - [Bare Metal Rust](http://www.randomhacks.net/bare-metal-rust/);
  - and [Wikipedia](https://wikipedia.org) (of course!);

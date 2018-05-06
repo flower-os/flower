@@ -149,7 +149,7 @@ setup_paging:
     mov eax, p4_table
     or eax, 0b11 ; present & writable
     mov [p4_table + 511 * 8], eax
-    
+
     ; Set page table address to cr3
     mov eax, p4_table ; cr3 must be mov'd to from another register
     mov cr3, eax 
