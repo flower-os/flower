@@ -16,9 +16,8 @@ macro_rules! from_discriminator {
         }
 
         impl ::util::FromDiscriminator for $name {
-            type Output = $name;
 
-            fn from_discriminator(discriminator: u64) -> Result<Self::Output, ::util::UnknownDiscriminator> {
+            fn from_discriminator(discriminator: u64) -> Result<Self, ::util::UnknownDiscriminator> {
                 match discriminator {
                     $($discriminator => Ok($name::$member)),+,
                     unknown => Err(::util::UnknownDiscriminator(unknown))
@@ -40,9 +39,7 @@ macro_rules! from_discriminator {
         }
 
         impl ::util::FromDiscriminator for $name {
-            type Output = $name;
-
-            fn from_discriminator(discriminator: u64) -> Result<Self::Output, ::util::UnknownDiscriminator> {
+            fn from_discriminator(discriminator: u64) -> Result<Self, ::util::UnknownDiscriminator> {
                 match discriminator {
                     $($discriminator => Ok($name::$member)),+,
                     unknown => Err(::util::UnknownDiscriminator(unknown))
@@ -54,7 +51,6 @@ macro_rules! from_discriminator {
 
 pub struct UnknownDiscriminator(pub u64);
 
-pub trait FromDiscriminator {
-    type Output;
-    fn from_discriminator(discriminator: u64) -> Result<Self::Output, UnknownDiscriminator>;
+pub trait FromDiscriminator: Sized {
+    fn from_discriminator(discriminator: u64) -> Result<Self, UnknownDiscriminator>;
 }
