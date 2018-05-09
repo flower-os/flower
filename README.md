@@ -20,6 +20,8 @@ You will need:
 You can make the iso with `make iso`, and launch qemu and run it with `make run`. To enable debug symbols,
 add `debug=1` to the make command.
 
+You can also get builds from [Flower's CI/CD](https://ci.gegy1000.net/job/Flower/).
+
 ## Thanks
 
 Much thanks to:
