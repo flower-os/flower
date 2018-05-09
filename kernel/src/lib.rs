@@ -7,10 +7,12 @@
 #![feature(slice_rotate)]
 #![feature(try_from)]
 #![feature(nll)]
-#![feature(inclusive_range_syntax)]
 #![feature(type_ascription)]
 #![feature(ptr_internals)]
 #![feature(abi_x86_interrupt)]
+
+// For `#[allow]`ing clippy lints
+#![allow(unknown_lints)]
 
 extern crate rlibc;
 extern crate volatile;
@@ -44,14 +46,18 @@ mod drivers;
 
 /// Kernel main function
 #[no_mangle]
-pub extern fn kmain() -> ! {
+pub extern "C" fn kmain() -> ! {
     interrupts::init();
 
-    terminal::STDOUT.write().clear().expect("Screen clear failed");
+    terminal::STDOUT.write().clear().expect(
+        "Screen clear failed",
+    );
 
     print_flower().expect("Flower print failed");
 
-    terminal::STDOUT.write().set_color(color!(Green on Black))
+    terminal::STDOUT
+        .write()
+        .set_color(color!(Green on Black))
         .expect("Color should be supported");
 
     // Print boot message
@@ -59,7 +65,9 @@ pub extern fn kmain() -> ! {
     println!("-------------------\n");
 
     // Reset colors
-    terminal::STDOUT.write().set_color(color!(White on Black))
+    terminal::STDOUT
+        .write()
+        .set_color(color!(White on Black))
         .expect("Color should be supported");
 
     let mut controller = ps2::CONTROLLER.lock();
@@ -70,7 +78,7 @@ pub extern fn kmain() -> ! {
 
     let keyboard_device = controller.device(ps2::DevicePort::Keyboard);
     let mut keyboard = Ps2Keyboard::new(keyboard_device);
-    if let Ok(_) = keyboard.enable() {
+    if keyboard.enable().is_ok() {
         info!("kbd: successfully enabled");
         loop {
             if let Ok(Some(event)) = keyboard.read_event() {
@@ -92,14 +100,20 @@ pub extern fn kmain() -> ! {
 }
 
 fn print_flower() -> Result<(), terminal::TerminalOutputError<()>> {
-    const FLOWER: &'static str = include_str!("resources/art/flower.txt");
-    const FLOWER_STEM: &'static str = include_str!("resources/art/flower_stem.txt");
+    const FLOWER: &str = include_str!("resources/art/flower.txt");
+    const FLOWER_STEM: &str = include_str!("resources/art/flower_stem.txt");
 
     let mut stdout = terminal::STDOUT.write();
     let old = stdout.cursor_pos();
 
-    stdout.write_string_colored(FLOWER, color!(LightBlue on Black))?;
-    stdout.write_string_colored(FLOWER_STEM, color!(Green on Black))?;
+    stdout.write_string_colored(
+        FLOWER,
+        color!(LightBlue on Black),
+    )?;
+    stdout.write_string_colored(
+        FLOWER_STEM,
+        color!(Green on Black),
+    )?;
     stdout.set_cursor_pos(old)
 }
 

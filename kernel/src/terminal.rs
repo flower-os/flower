@@ -70,11 +70,19 @@ impl<'a> TerminalOutput<()> for Stdout<'a> {
         self.0.write().set_color(color)
     }
 
-    fn set_char(&mut self, char: TerminalCharacter, point: Point) -> Result<(), TerminalOutputError<()>> {
+    fn set_char(
+        &mut self,
+        char: TerminalCharacter,
+        point: Point,
+    ) -> Result<(), TerminalOutputError<()>> {
         self.0.write().set_char(char, point)
     }
 
-    fn write_colored(&mut self, character: char, color: ColorPair) -> Result<(), TerminalOutputError<()>> {
+    fn write_colored(
+        &mut self,
+        character: char,
+        color: ColorPair,
+    ) -> Result<(), TerminalOutputError<()>> {
         self.0.write().write_colored(character, color)
     }
 
@@ -215,10 +223,18 @@ pub trait TerminalOutput<E: Debug> {
     /// # Implementation Note
     ///
     /// This should check whether the point is in bounds
-    fn set_char(&mut self, char: TerminalCharacter, point: Point) -> Result<(), TerminalOutputError<E>>;
+    fn set_char(
+        &mut self,
+        char: TerminalCharacter,
+        point: Point,
+    ) -> Result<(), TerminalOutputError<E>>;
 
     /// Writes a colored character to this terminal
-    fn write_colored(&mut self, character: char, color: ColorPair) -> Result<(), TerminalOutputError<E>>;
+    fn write_colored(
+        &mut self,
+        character: char,
+        color: ColorPair,
+    ) -> Result<(), TerminalOutputError<E>>;
 
     /// Writes a character to this terminal with the current set color
     fn write(&mut self, character: char) -> Result<(), TerminalOutputError<E>> {
@@ -231,7 +247,11 @@ pub trait TerminalOutput<E: Debug> {
     }
 
     /// Writes a colored string to this terminal
-    fn write_string_colored(&mut self, str: &str, color: ColorPair) -> Result<(), TerminalOutputError<E>> {
+    fn write_string_colored(
+        &mut self,
+        str: &str,
+        color: ColorPair,
+    ) -> Result<(), TerminalOutputError<E>> {
         for character in str.chars() {
             self.write_colored(character, color)?;
         }
@@ -270,8 +290,8 @@ pub trait TerminalOutput<E: Debug> {
     fn backspace(&mut self) -> Result<(), TerminalOutputError<E>> {
         if self.cursor_pos() == Point::new(0, 0) {
             return Err(TerminalOutputError::BackspaceUnavailable(
-                BackspaceUnavailableCause::TopOfTerminal)
-            );
+                BackspaceUnavailableCause::TopOfTerminal,
+            ));
         }
 
         if self.cursor_pos().x == 0 {
@@ -288,9 +308,10 @@ pub trait TerminalOutput<E: Debug> {
             })?;
         }
 
-        let blank = TerminalCharacter::new(' ', ColorPair::new(
-            self.color().background, self.color().background,
-        ));
+        let blank = TerminalCharacter::new(
+            ' ',
+            ColorPair::new(self.color().background, self.color().background),
+        );
 
         self.set_char(blank, self.cursor_pos())
     }

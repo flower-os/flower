@@ -1,10 +1,11 @@
 //! # Keyboard Driver
 //!
-//! The keyboard driver handles all keyboard related functionality, intended to support both PS/2 and USB.
-//! Currently, only PS/2 support has been implemented through the use of the PS/2 driver.
+//! The keyboard driver handles all keyboard related functionality, intended to support both PS/2
+//! and USB. Currently, only PS/2 support has been implemented through the use of the PS/2 driver.
 //!
-//! The driver is event based, and events are received through the `read_event` method, which blocks until an event is received.
-//! The event contains the keycode pressed, which can be compared to `keymap::codes`, an optional `char`, the type of press, and various modifier flags.
+//! The driver is event based, and events are received through the `read_event` method, which blocks
+//! until an event is received.  The event contains the keycode pressed, which can be compared to
+//! `keymap::codes`, an optional `char`, the type of press, and various modifier flags.
 //!
 //! # Examples
 //!
@@ -30,7 +31,7 @@ use drivers::ps2::io::commands::{DeviceCommand, DeviceDataCommand};
 bitflags! {
     pub struct ModifierFlags: u8 {
         /// If a CTRL modifier is active
-        const CTRL = 1 << 0;
+        const CTRL = 1;
         /// If an ALT modifier is active
         const ALT = 1 << 1;
         /// If a SHIFT modifier is active
@@ -134,7 +135,8 @@ pub trait Keyboard {
     /// ```
     fn disable(&mut self) -> Result<(), Self::Error>;
 
-    /// Polls the device for a new key state event, or returns `None` if none have occurred since the last poll.
+    /// Polls the device for a new key state event, or returns `None` if none have occurred since
+    /// the last poll.
     ///
     /// # Examples
     ///
@@ -207,15 +209,13 @@ impl<'a> Ps2Keyboard<'a> {
                 let mut extended = false;
 
                 // Get all scancode modifiers, and return when the actual scancode is received
-                let scancode = (io::DATA_PORT.with_lock(|mut data_port| {
-                    loop {
-                        let data = io::read(&mut data_port)?;
-                        match data {
-                            0xE0 ... 0xE1 => extended = true,
-                            0xF0 => make = false,
-                            _ => {
-                                break Ok(data);
-                            }
+                let scancode = (io::DATA_PORT.with_lock(|mut data_port| loop {
+                    let data = io::read(&mut data_port)?;
+                    match data {
+                        0xE0...0xE1 => extended = true,
+                        0xF0 => make = false,
+                        _ => {
+                            break Ok(data);
                         }
                     }
                 }): Result<u8, io::Ps2Error>)?;
@@ -245,27 +245,34 @@ impl<'a> Ps2Keyboard<'a> {
     /// assert_eq!(event.event_type, KeyEventType::Make);
     /// ```
     fn create_event(&self, scancode: &Ps2Scancode) -> Option<KeyEvent> {
-        let ctrl = self.pressed(keymap::codes::LEFT_CONTROL) || self.pressed(keymap::codes::RIGHT_CONTROL);
+        let ctrl = self.pressed(keymap::codes::LEFT_CONTROL) ||
+            self.pressed(keymap::codes::RIGHT_CONTROL);
         let alt = self.pressed(keymap::codes::LEFT_ALT) || self.pressed(keymap::codes::RIGHT_ALT);
-        let shift = self.pressed(keymap::codes::LEFT_SHIFT) || self.pressed(keymap::codes::RIGHT_SHIFT);
+        let shift = self.pressed(keymap::codes::LEFT_SHIFT) ||
+            self.pressed(keymap::codes::RIGHT_SHIFT);
         let modifiers = ModifierFlags::from_modifiers(ctrl, alt, shift);
 
         if let Some(keycode) = scancode.keycode() {
-            let char = keymap::get_us_qwerty_char(keycode)
-                .map(|chars| if shift {
-                    chars.1
-                } else {
-                    chars.0
-                });
+            let char = keymap::get_us_qwerty_char(keycode).map(|chars| if shift {
+                chars.1
+            } else {
+                chars.0
+            });
 
             // If the key was already pressed and make was sent, this is a repeat event
+#[allow(match_bool)] // Looks nicer
             let event_type = match scancode.make {
                 true if self.pressed(keycode) => KeyEventType::Repeat,
                 true => KeyEventType::Make,
                 false => KeyEventType::Break,
             };
 
-            return Some(KeyEvent { keycode, char, event_type, modifiers });
+            return Some(KeyEvent {
+                keycode,
+                char,
+                event_type,
+                modifiers,
+            });
         }
 
         None
@@ -325,7 +332,11 @@ struct Ps2Scancode {
 impl Ps2Scancode {
     /// Constructs a new [Ps2Scancode]
     fn new(scancode: u8, extended: bool, make: bool) -> Self {
-        Ps2Scancode { code: scancode, extended, make }
+        Ps2Scancode {
+            code: scancode,
+            extended,
+            make,
+        }
     }
 
     /// Gets the Flower keycode for this scancode

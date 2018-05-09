@@ -1,18 +1,20 @@
 //! # PS/2 Driver
 //!
-//! The PS/2 driver provides interface into the PS/2 controller, allowing access to devices using this protocol.
-//! The controller is accessed through the static `CONTROLLER` field.
+//! The PS/2 driver provides interface into the PS/2 controller, allowing access to devices using
+//! this protocol. The controller is accessed through the static `CONTROLLER` field.
 //!
 //! The [Controller] handles all interface with the controller for devices.
 //! For it to be initialized, `initialize` must be called on it. This sets up all attached devices.
 //!
-//! The [Device] handles interface to a single PS/2 device. Its state can be checked and toggled through `enable` and `disable`.
-//! Devices can be obtained from the controller through `device(DevicePort)` or `devices`.
+//! The [Device] handles interface to a single PS/2 device. Its state can be checked and toggled
+//! through `enable` and `disable`. Devices can be obtained from the controller through
+//! `device(DevicePort)` or `devices`.
 
 pub mod io;
 
 use drivers::ps2::io::Ps2Error;
-use drivers::ps2::io::commands::{self, ControllerCommand, ControllerReturnCommand, ControllerDataCommand, DeviceCommand, DeviceDataCommand};
+use drivers::ps2::io::commands::{self, ControllerCommand, ControllerReturnCommand,
+                                 ControllerDataCommand, DeviceCommand, DeviceDataCommand};
 use spin::Mutex;
 
 pub const RESEND: u8 = 0xFE;
@@ -25,7 +27,7 @@ lazy_static! {
 bitflags! {
     pub struct ConfigFlags: u8 {
         /// If interrupts for Port 1 are enabled
-        const PORT_INTERRUPT_1 = 1 << 0;
+        const PORT_INTERRUPT_1 = 1;
         /// If interrupts for Port 2 are enabled
         const PORT_INTERRUPT_2 = 1 << 1;
         /// If the clock for Port 1 is disabled
@@ -161,7 +163,9 @@ impl Controller {
 
     /// Tests this controller
     fn test_controller(&self) -> Result<bool, Ps2Error> {
-        Ok(commands::send_ret(ControllerReturnCommand::TestController)? == 0x55)
+        Ok(
+            commands::send_ret(ControllerReturnCommand::TestController)? == 0x55,
+        )
     }
 
     /// Tests all of this controller's devices
@@ -175,7 +179,8 @@ impl Controller {
 
         // Test both devices
         let first_supported = self.devices.0.test()?;
-        let second_supported = !self.config.contains(ConfigFlags::PORT_CLOCK_2) && self.devices.1.test()?;
+        let second_supported = !self.config.contains(ConfigFlags::PORT_CLOCK_2) &&
+            self.devices.1.test()?;
 
         Ok((first_supported, second_supported))
     }
@@ -272,15 +277,17 @@ impl Device {
     #[allow(dead_code)] // To be used by drivers interfacing with PS/2
     pub fn command_data(&mut self, cmd: DeviceDataCommand, data: u8) -> Result<u8, Ps2Error> {
         if self.state != DeviceState::Unavailable {
-            self.command_raw(cmd as u8).and_then(|result| match result {
-                ACK => {
-                    io::DATA_PORT.with_lock(|mut data_port| {
-                        io::write(&mut data_port, data as u8)?;
-                        io::read(&mut data_port)
-                    })
-                }
-                _ => Ok(result)
-            })
+            self.command_raw(cmd as u8).and_then(
+                |result| match result {
+                    ACK => {
+                        io::DATA_PORT.with_lock(|mut data_port| {
+                            io::write(&mut data_port, data as u8)?;
+                            io::read(&mut data_port)
+                        })
+                    }
+                    _ => Ok(result),
+                },
+            )
         } else {
             Err(Ps2Error::DeviceUnavailable)
         }
