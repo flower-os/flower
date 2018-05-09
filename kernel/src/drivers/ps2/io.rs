@@ -2,7 +2,8 @@ pub mod commands {
     use super::*;
 
     /// Represents a PS2 controller command without a return value
-    #[allow(dead_code)] // Dead variants for completeness
+    #[allow(dead_code)]
+    // Dead variants for completeness
     #[derive(Copy, Clone, Debug)]
     #[repr(u8)]
     pub enum ControllerCommand {
@@ -14,7 +15,8 @@ pub mod commands {
     }
 
     /// Represents a PS2 controller command with a return value
-    #[allow(dead_code)] // Dead variants for completeness
+    #[allow(dead_code)]
+    // Dead variants for completeness
     #[derive(Copy, Clone, Debug)]
     #[repr(u8)]
     pub enum ControllerReturnCommand {
@@ -26,7 +28,8 @@ pub mod commands {
     }
 
     /// Represents a PS2 controller command with a data value
-    #[allow(dead_code)] // Dead variants for completeness
+    #[allow(dead_code)]
+    // Dead variants for completeness
     #[derive(Copy, Clone, Debug)]
     #[repr(u8)]
     pub enum ControllerDataCommand {
@@ -34,7 +37,8 @@ pub mod commands {
     }
 
     /// Represents a PS2 device command without data
-    #[allow(dead_code)] // Dead variants for completeness
+    #[allow(dead_code)]
+    // Dead variants for completeness
     #[derive(Copy, Clone, Debug)]
     #[repr(u8)]
     pub enum DeviceCommand {
@@ -45,7 +49,8 @@ pub mod commands {
     }
 
     /// Represents a PS2 device command with additional data
-    #[allow(dead_code)] // Dead variants for completeness
+    #[allow(dead_code)]
+    // Dead variants for completeness
     #[derive(Copy, Clone, Debug)]
     #[repr(u8)]
     pub enum DeviceDataCommand {
@@ -84,13 +89,14 @@ pub static DATA_PORT: SynchronizedPort<u8> = unsafe { SynchronizedPort::new(0x60
 pub static STATUS_PORT: SynchronizedPort<u8> = unsafe { SynchronizedPort::new(0x64) };
 pub static COMMAND_PORT: SynchronizedPort<u8> = unsafe { SynchronizedPort::new(0x64) };
 
-/// The number of iterations before assuming no data to be read. Should be changed to a timeout as of #26
-pub const WAIT_TIMEOUT: u32 = 1000000;
+/// The number of iterations before assuming no data to be read. Should be changed to a timeout
+/// as of #26
+pub const WAIT_TIMEOUT: u32 = 1_000_000;
 
 bitflags! {
     pub struct StatusFlags: u8 {
         /// If the output buffer from the controller is full (data can be read)
-        const OUTPUT_FULL = 1 << 0;
+        const OUTPUT_FULL = 1;
         /// If the input buffer to the controller is full (data cannot be written)
         const INPUT_FULL = 1 << 1;
         /// If the current output from the controller is from the second port
@@ -111,14 +117,15 @@ pub fn write(port: &mut Port<u8>, value: u8) -> Result<(), Ps2Error> {
         // Check if the input status bit is empty
         if can_write()? {
             port.write(value);
-            break
+            break;
         }
     }
 
     Ok(())
 }
 
-/// Reads from the given port, returning an optional value. `NoData` returned if nothing could be read
+/// Reads from the given port, returning an optional value. `NoData` returned if nothing could be
+/// read
 pub fn read(port: &mut Port<u8>) -> Result<u8, Ps2Error> {
     for _ in 0..WAIT_TIMEOUT {
         // Check if the output status bit is full

@@ -18,7 +18,9 @@ macro_rules! from_discriminator {
         impl ::util::FromDiscriminator for $name {
             type Output = $name;
 
-            fn from_discriminator(discriminator: u64) -> Result<Self::Output, ::util::UnknownDiscriminator> {
+            fn from_discriminator(discriminator: u64)
+                -> Result<Self::Output, ::util::UnknownDiscriminator>
+            {
                 match discriminator {
                     $($discriminator => Ok($name::$member)),+,
                     unknown => Err(::util::UnknownDiscriminator(unknown))
@@ -42,7 +44,9 @@ macro_rules! from_discriminator {
         impl ::util::FromDiscriminator for $name {
             type Output = $name;
 
-            fn from_discriminator(discriminator: u64) -> Result<Self::Output, ::util::UnknownDiscriminator> {
+            fn from_discriminator(discriminator: u64)
+                -> Result<Self::Output, $crate::util::UnknownDiscriminator>
+            {
                 match discriminator {
                     $($discriminator => Ok($name::$member)),+,
                     unknown => Err(::util::UnknownDiscriminator(unknown))

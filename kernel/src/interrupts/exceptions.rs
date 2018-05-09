@@ -34,19 +34,35 @@ pub extern "x86-interrupt" fn invalid_tss(stack_frame: &mut ExceptionStackFrame,
     panic!("cpuex: invalid tss {}\n{:#?}", code, stack_frame);
 }
 
-pub extern "x86-interrupt" fn segment_not_present(stack_frame: &mut ExceptionStackFrame, code: u64) {
+pub extern "x86-interrupt" fn segment_not_present(
+    stack_frame: &mut ExceptionStackFrame,
+    code: u64,
+) {
     panic!("cpuex: segment not present {}\n{:#?}", code, stack_frame);
 }
 
-pub extern "x86-interrupt" fn stack_segment_fault(stack_frame: &mut ExceptionStackFrame, code: u64) {
+pub extern "x86-interrupt" fn stack_segment_fault(
+    stack_frame: &mut ExceptionStackFrame,
+    code: u64,
+) {
     panic!("cpuex: stack segment fault {}\n{:#?}", code, stack_frame);
 }
 
-pub extern "x86-interrupt" fn general_protection_fault(stack_frame: &mut ExceptionStackFrame, code: u64) {
-    panic!("cpuex: general protection fault {}\n{:#?}", code, stack_frame);
+pub extern "x86-interrupt" fn general_protection_fault(
+    stack_frame: &mut ExceptionStackFrame,
+    code: u64,
+) {
+    panic!(
+        "cpuex: general protection fault {}\n{:#?}",
+        code,
+        stack_frame
+    );
 }
 
-pub extern "x86-interrupt" fn page_fault(stack_frame: &mut ExceptionStackFrame, code: PageFaultErrorCode) {
+pub extern "x86-interrupt" fn page_fault(
+    stack_frame: &mut ExceptionStackFrame,
+    code: PageFaultErrorCode,
+) {
     panic!("cpuex: page fault fault {:?}\n{:#?}", code, stack_frame);
 }
 

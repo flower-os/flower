@@ -42,7 +42,6 @@ impl VgaWriter {
 }
 
 impl TerminalOutput<()> for VgaWriter {
-
     fn resolution(&self) -> Resolution {
         RESOLUTION
     }
@@ -81,7 +80,11 @@ impl TerminalOutput<()> for VgaWriter {
         Ok(())
     }
 
-    fn write_colored(&mut self, character: char, color: ColorPair) -> Result<(), TerminalOutputError<()>> {
+    fn write_colored(
+        &mut self,
+        character: char,
+        color: ColorPair,
+    ) -> Result<(), TerminalOutputError<()>> {
         match character {
             '\n' => self.new_line(),
             _ => {
@@ -102,7 +105,11 @@ impl TerminalOutput<()> for VgaWriter {
         }
     }
 
-    fn set_char(&mut self, char: TerminalCharacter, point: Point) -> Result<(), TerminalOutputError<()>> {
+    fn set_char(
+        &mut self,
+        char: TerminalCharacter,
+        point: Point,
+    ) -> Result<(), TerminalOutputError<()>> {
         let point = Point::new(point.x, RESOLUTION.y - 1 - point.y);
 
         if !self.color_supported(char.color.foreground) {
@@ -119,10 +126,7 @@ impl TerminalOutput<()> for VgaWriter {
         self.buffer().set_char(
             point.x,
             point.y,
-            VgaChar::new(
-                VgaColor::from(char.color),
-                char.character as u8
-            )
+            VgaChar::new(VgaColor::from(char.color), char.character as u8),
         );
         Ok(())
     }
@@ -176,10 +180,7 @@ impl VgaBuffer {
     }
 
     pub fn clear_row(&mut self, y: usize, color: Color) {
-        let blank = VgaChar::new(
-            VgaColor::new(Color::Black, color),
-            b' '
-        );
+        let blank = VgaChar::new(VgaColor::new(Color::Black, color), b' ');
 
         for x in 0..RESOLUTION.x {
             self.0[y][x].write(blank);
@@ -226,8 +227,8 @@ impl TryFrom<VgaColor> for (Color, Color) {
 
     fn try_from(color: VgaColor) -> Result<Self, Self::Error> {
         Ok((
-            Color::from_discriminator(((color.0 & 0xF0) >> 4) as u64)?,
-            Color::from_discriminator((color.0 & 0x0F) as u64)?
+            Color::from_discriminator(u64::from((color.0 & 0xF0) >> 4))?,
+            Color::from_discriminator(u64::from(color.0 & 0x0F))?,
         ))
     }
 }

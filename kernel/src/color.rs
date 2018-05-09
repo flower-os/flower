@@ -32,7 +32,10 @@ pub struct ColorPair {
 impl ColorPair {
     #[allow(dead_code)] // Completeness
     pub const fn new(foreground: Color, background: Color) -> Self {
-        ColorPair { foreground, background }
+        ColorPair {
+            foreground,
+            background,
+        }
     }
 }
 
@@ -40,7 +43,7 @@ impl Default for ColorPair {
     fn default() -> Self {
         ColorPair {
             foreground: Color::White,
-            background: Color::Black
+            background: Color::Black,
         }
     }
 }

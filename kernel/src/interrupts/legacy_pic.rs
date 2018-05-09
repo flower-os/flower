@@ -8,6 +8,8 @@ pub static CHAINED_PICS: Mutex<ChainedPics> = Mutex::new(ChainedPics::new((0x20,
 /// Used to pause execution temporarily
 pub static IO_WAIT_PORT: SynchronizedPort<u8> = unsafe { SynchronizedPort::new(0x80) };
 
+#[allow(dead_code)]
+// Variants will be used in future
 #[repr(u8)]
 enum Commands {
     Init = 0x10,
@@ -22,14 +24,24 @@ pub struct Pic {
 }
 
 impl Pic {
-    const fn new(offset: u8, command_port: SynchronizedPort<u8>, data_port: SynchronizedPort<u8>) -> Self {
-        Pic { offset, command_port, data_port }
+    const fn new(
+        offset: u8,
+        command_port: SynchronizedPort<u8>,
+        data_port: SynchronizedPort<u8>,
+    ) -> Self {
+        Pic {
+            offset,
+            command_port,
+            data_port,
+        }
     }
 
+    #[allow(dead_code)] // Will be used in future
     fn handles_interrupt(&self, interrupt_id: u8) -> bool {
         self.offset <= interrupt_id && interrupt_id < self.offset + 8
     }
 
+    #[allow(dead_code)] // Will be used in future
     fn end_of_interrupt(&self) {
         self.command_port.write(Commands::EndOfInterrupt as u8);
     }
@@ -60,14 +72,15 @@ impl ChainedPics {
         unsafe {
             ChainedPics {
                 inner: [
-                    Pic::new(offsets.0,
-                             SynchronizedPort::new(0x20),
-                             SynchronizedPort::new(0x21)
+                    Pic::new(
+                        offsets.0,
+                        SynchronizedPort::new(0x20),
+                        SynchronizedPort::new(0x21),
                     ),
                     Pic::new(
                         offsets.1,
                         SynchronizedPort::new(0xA0),
-                        SynchronizedPort::new(0xA1)
+                        SynchronizedPort::new(0xA1),
                     ),
                 ],
             }
@@ -78,22 +91,24 @@ impl ChainedPics {
         IO_WAIT_PORT.write(0x0);
 
         // Tell both of the PICs to initialise
-        for pic in self.inner.iter() {
+        for pic in &self.inner {
             pic.initialise();
         }
 
+        // Tell master that there is a slave at IRQ 2 and tell slave its cascade identity (IRQ 2)
         for (pic, data) in self.inner.iter().zip([4u8, 2u8].iter()) {
             pic.data_port.write(*data);
             IO_WAIT_PORT.write(0x0);
         }
 
         // Set PICs to 8086/88 (MCS-80/85) mode
-        for pic in self.inner.iter() {
+        for pic in &self.inner {
             pic.set_mode(0x1);
         }
 
-        // Mask pics
-        self.inner[0].data_port.write(0xFF);
-        self.inner[1].data_port.write(0xFF);
+        // Mask PICs
+        for pic in &self.inner {
+            pic.data_port.write(0xFF)
+        }
     }
 }

@@ -102,7 +102,9 @@ impl<T: InOut> Port<T> {
 
     /// Write a value to `self.port`.
     pub fn write(&mut self, value: T) {
-        unsafe { T::port_out(self.port, value); }
+        unsafe {
+            T::port_out(self.port, value);
+        }
     }
 }
 
@@ -114,9 +116,7 @@ pub struct SynchronizedPort<T: InOut> {
 impl<'a, T: InOut> SynchronizedPort<T> {
     ///Create a port which can handle values of `T` size.
     pub const unsafe fn new(port: u16) -> SynchronizedPort<T> {
-        SynchronizedPort {
-            inner: Mutex::new(Port::new(port))
-        }
+        SynchronizedPort { inner: Mutex::new(Port::new(port)) }
     }
 
     /// Read a value from `self.port`. Synchronized over context of this read.
