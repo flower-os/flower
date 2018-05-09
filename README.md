@@ -22,6 +22,10 @@ add `debug=1` to the make command.
 
 You can also get builds from [Flower's CI/CD](https://ci.gegy1000.net/job/Flower/).
 
+## Contributing
+
+If you wish to PR something to Flower, thanks so much! Just note to please **pull request into development, not master**.
+
 ## Thanks
 
 Much thanks to:
@@ -32,8 +36,9 @@ Much thanks to:
  - the people over on the [Rust discord](https://discord.me/rust-lang), such as:
    - Toor,
    - Rep nop,
-   - Evrey
-   - and Nyrox;
+   - Evrey,
+   - nyrox,
+   - and cult pony;
  - the [OsDev wiki](http://wiki.osdev.org);
  - [Bare Metal Rust](http://www.randomhacks.net/bare-metal-rust/);
  - and [Wikipedia](https://wikipedia.org) (of course!);
