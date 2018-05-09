@@ -275,10 +275,12 @@ pub trait TerminalOutput<E: Debug> {
         }
 
         if self.cursor_pos().x == 0 {
-            self.set_cursor_pos(Point {
-                x: self.resolution().x - 1,
-                y: self.cursor_pos().y - 1,
-            })?;
+            if self.cursor_pos().y != self.resolution().y {
+                self.set_cursor_pos(Point {
+                    x: self.resolution().x - 1,
+                    y: self.cursor_pos().y + 1,
+                })?;
+            }
         } else {
             self.set_cursor_pos(Point {
                 x: self.cursor_pos().x - 1,
