@@ -20,8 +20,7 @@ x86_64 = "0.1.2"
 bitflags = "1.0.1"
 
 [dependencies.array-init]
-git = "https://github.com/Restioson/array-init"
-branch = "fix-nodrop-std"
+version = "0.0.3"
 features = ["nightly"]
 
 [dependencies.lazy_static]
