@@ -1,4 +1,4 @@
-def archive() {
+def archiveFlower() {
     if (BRANCH_NAME == "master" || BRANCH_NAME == "development") {
         archiveArtifacts artifacts: "build/release/kernel.elf";
         archiveArtifacts artifacts: "build/release/flower.iso";
@@ -22,7 +22,7 @@ pipeline {
             }
             post {
                 success {
-                    archive()
+                    archiveFlower()
                 }
             }
         }
