@@ -10,7 +10,7 @@ pipeline {
     options {
         timeout(time: 10, unit: "MINUTES") 
     }
-    task("Build") {
+    stage("Build") {
         steps {
             sh """export PATH="/home/gegy1000/.cargo/bin:$PATH"
                   |export RUST_BACKTRACE=1
