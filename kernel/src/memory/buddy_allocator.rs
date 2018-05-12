@@ -18,10 +18,15 @@ impl Block {
     }
 }
 
+#[inline]
 pub const fn blocks_in_tree(levels: u8) -> usize {
     ((1 << levels) - 1) as usize
 }
 
+#[inline]
+pub const fn blocks_in_level(level: u8) -> usize {
+    blocks_in_tree(level + 1) - blocks_in_tree(level)
+}
 
 /// Flat tree things.
 ///
@@ -56,13 +61,17 @@ macro_rules! buddy_allocator_bitmap_tree {
 
         impl<'a> Tree<'a> {
             /// Creates a new tree. Panics if the bootstrap allocator has not been initialized or
-            /// does not have enough memory
-            pub fn new<'b>(holes: &'b [::core::ops::RangeInclusive<usize>]) -> Self {
+            /// does not have enough memory. Takes a list of usable memory areas, **local to this
+            /// tree.**
+            pub fn new<I>(usable: I) -> Self
+                where I: Iterator<Item=::core::ops::Range<usize>> + Clone
+            {
                 use $crate::memory::buddy_allocator::Block;
                 use $crate::memory::bootstrap_heap::BootstrapHeapBox;
 
                 let mut flat_blocks: BootstrapHeapBox<[Block; BLOCKS_IN_TREE]> = unsafe {
-                    $crate::memory::bootstrap_heap::BOOTSTRAP_HEAP.allocate_zeroed().unwrap()
+                    $crate::memory::bootstrap_heap::BOOTSTRAP_HEAP.allocate_zeroed()
+                        .expect("No heap memory available!")
                 };
 
                 // First, set everything up as free
@@ -78,36 +87,30 @@ macro_rules! buddy_allocator_bitmap_tree {
                     start += size;
                 }
 
-                let mut tree = Tree {
-                    flat_blocks,
-                };
+                let mut tree = Tree { flat_blocks };
 
-                // Then, set blocks at order 0 (level MAX_ORDER) in the memory hole to used & set
-                // their parents accordingly
-                let mut address: usize = 0;
+                // Then, set blocks at order 0 (level MAX_ORDER) in the holes to used & set
+                // their parents accordingly. This is implemented by checking if the block falls
+                // completely within a usable memory area.
+                let mut block_begin: usize = 0;
 
-                if !holes.is_empty() {
-                    for block_index in (1 << MAX_ORDER)..(1 << (MAX_ORDER + 1)) {
-                        for hole in holes {
-                            if hole.contains(&address) {
-                                // Set blocks
-                                tree.flat_blocks[block_index - 1] = Block::new_used();
+                for block_index in (1 << MAX_ORDER)..(1 << (MAX_ORDER + 1)) {
+                    let block_end = block_begin + (1 << $BASE_ORDER);
 
-                                // Set parents
-                                tree.update_blocks_above(block_index, MAX_ORDER);
-                            }
-                        }
+                    if !(usable.clone())
+                        .any(|area| (area.contains(&block_begin) && area.contains(&block_end)))
+                    {
+                        // Set blocks
+                        tree.flat_blocks[block_index - 1] = Block::new_used();
 
-                        address += 1 << ($BASE_ORDER);
+                        // Set parents
+                        tree.update_blocks_above(block_index, MAX_ORDER);
                     }
+
+                    block_begin += 1 << ($BASE_ORDER);
                 }
 
                 tree
-            }
-
-            #[cfg(test)]
-            pub const fn blocks_in_level(order: u8) -> usize {
-                (1 << ($BASE_ORDER + order) as usize) / (1 << ($BASE_ORDER as usize))
             }
 
             #[inline]
@@ -122,8 +125,12 @@ macro_rules! buddy_allocator_bitmap_tree {
                 self.flat_blocks.get_unchecked(index)
             }
 
+            /// Allocate a block of `desired_order` if one is available, returning a pointer
+            /// relative to the tree (i.e `0` is the beginning of the tree's memory).
             pub fn allocate(&mut self, desired_order: u8) -> Option<*const u8> {
-                debug_assert!(desired_order <= MAX_ORDER);
+                use $crate::memory::buddy_allocator::flat_tree;
+
+                assert!(desired_order <= MAX_ORDER);
 
                 let root = unsafe { self.block_mut(0) };
 
@@ -139,16 +146,16 @@ macro_rules! buddy_allocator_bitmap_tree {
                 let max_level = MAX_ORDER - desired_order;
 
                 for level in 0..max_level {
-                    let left_child_index = $crate::memory::buddy_allocator::flat_tree::left_child(
-                    node_index
+                    let left_child_index = flat_tree::left_child(
+                        node_index
                     );
                     let left_child = unsafe { self.block(left_child_index - 1) };
 
                     let o = left_child.order_free;
                     // If the child is not used (o!=0) or (desired_order in o-1)
-                    // Due to the +1 offset, we need to subtract 1 from 0:
+                    // Due to the +1 offset, we need to subtract 1 from 0.
                     // However, (o - 1) >= desired_order can be simplified to o > desired_order
-                    node_index = if o != 0 && o > desired_order {
+                    node_index = if o != 0 && o >= desired_order {
                         left_child_index
                     } else {
                         // Move over to the right: if the parent had a free order and the left didn't,
@@ -172,24 +179,82 @@ macro_rules! buddy_allocator_bitmap_tree {
                 Some(addr as *const u8)
             }
 
+            /// Deallocate a block of memory from a pointer relative to the tree (e.g `0` is the
+            /// beginning of the tree's memory) and the order of the block.
+            #[inline]
+            pub fn deallocate(&mut self, ptr: *const u8, order: u8) {
+                use $crate::memory::buddy_allocator::blocks_in_tree;
+                use $crate::memory::buddy_allocator::flat_tree;
+                use ::core::cmp;
+
+                debug_assert!(order <= MAX_ORDER);
+
+                let level = MAX_ORDER - order;
+                let level_offset = blocks_in_tree(level);
+                let index = level_offset + ((ptr as usize) >> (order + $BASE_ORDER)) + 1;
+
+                debug_assert_eq!(
+                    unsafe { self.block(index - 1).order_free },
+                    0,
+                    "Block to free must be used!"
+                );
+
+                // Only if order isn't 0 we need to check the children, as blocks of order 0 have
+                // no children
+                if order != 0 {
+                    // Treat this as a right child. It would be the left child, but since it's 1
+                    // indexed it's 1 greater than the array index, and so is the right child, so
+                    // they balance out.
+                    let right_child = flat_tree::left_child(index);
+
+                    // Set this block's order free to the max of both its children. If both are
+                    // free, however, then this block must have its own `order` free, as the
+                    // children can be merged.
+                    unsafe {
+                        let left = self.block(right_child - 1).order_free;
+                        let right = self.block(right_child).order_free;
+
+                        if (left == order) && (right == order) {
+                            self.block_mut(index - 1).order_free = order + 1;
+                        } else {
+                            debug_assert!(left != 0 && right != 0);
+                            self.block_mut(index - 1).order_free = cmp::max(left, right);
+                        }
+                    }
+                } else {
+                    unsafe { self.block_mut(index - 1).order_free = 1; }
+                }
+
+                self.update_blocks_above(index, MAX_ORDER - order);
+            }
+
             #[inline]
             fn update_blocks_above(&mut self, index: usize, max_level: u8) {
+                use $crate::memory::buddy_allocator::flat_tree;
+                use ::core::cmp;
+
                 let mut node_index = index;
                 // Iterate upwards and set parents accordingly
-                for _ in 0..max_level {
+                for level in 0..max_level {
                     // Treat as right index because we need to be 0 indexed here!
                     // If we exclude the last bit, we'll always get an even number
                     // (the left node while 1 indexed)
                     let right_index = node_index & !1;
-                    node_index = $crate::memory::buddy_allocator::flat_tree::parent(node_index);
+                    node_index = flat_tree::parent(node_index);
 
-                    let left = unsafe { self.block(right_index - 1) }.order_free;
-                    let right = unsafe { self.block(right_index) }.order_free;
+                    unsafe {
+                        let left = self.block(right_index - 1).order_free;
+                        let right = self.block(right_index).order_free;
+                        let order = MAX_ORDER - level;
 
-                    unsafe { self.block_mut(node_index - 1) }.order_free = ::core::cmp::max(
-                        left,
-                        right
-                    );
+                        // Would be order - 1, but 0 indicates used so we add 1
+                        if (left == order) && (right == order) {
+                            // Merge blocks
+                            self.block_mut(node_index - 1).order_free = order + 1;
+                        } else {
+                            self.block_mut(node_index - 1).order_free = cmp::max(left, right);
+                        }
+                    }
                 }
             }
         }
@@ -198,15 +263,17 @@ macro_rules! buddy_allocator_bitmap_tree {
 
 #[cfg(test)]
 mod test {
+    use core::iter;
     use std::collections::BTreeSet;
     use super::*;
 
     buddy_allocator_bitmap_tree!(LEVEL_COUNT = 19, BASE_ORDER = 12);
 
     #[test]
-    fn test_holes() {
-        let mut tree = Tree::new(&[0..=(0x1000 - 1)]);
+    fn test_usable() {
+        let mut tree = Tree::new(iter::once(0x1000..0x2001));
         assert_eq!(tree.allocate(0), Some((1 << 12) as *const u8));
+        assert_eq!(tree.allocate(0), None);
     }
 
     #[test]
@@ -226,19 +293,25 @@ mod test {
     }
 
     #[test]
+    fn test_blocks_in_level() {
+        assert_eq!(blocks_in_level(2), 4);
+        assert_eq!(blocks_in_level(0), 1);
+    }
+
+    #[test]
     fn test_tree_runs_out_of_blocks() {
-        let mut tree = Tree::new(&[]);
-        let max_blocks = Tree::blocks_in_level(MAX_ORDER);
+        let mut tree = Tree::new(iter::once(0..(1 << 30 + 1)));
+        let max_blocks = blocks_in_level(MAX_ORDER);
+
         for _ in 0..max_blocks {
             assert_ne!(tree.allocate(0), None);
         }
-
         assert_eq!(tree.allocate(0), None);
     }
 
     #[test]
     fn test_init_tree() {
-        let tree = Tree::new(&[]);
+        let tree = Tree::new(iter::once(0..(1 << 30 + 1)));
 
         // Highest level has 1 block, next has 2, next 4
         assert_eq!(tree.flat_blocks[0].order_free, 19);
@@ -254,10 +327,10 @@ mod test {
 
     #[test]
     fn test_allocate_exact() {
-        let mut tree = Tree::new(&[]);
+        let mut tree = Tree::new(iter::once(0..(1 << 30 + 1)));
         tree.allocate(3).unwrap();
 
-        tree = Tree::new(&[]);
+        tree = Tree::new(iter::once(0..(1 << 30 + 1)));
         assert_eq!(tree.allocate(MAX_ORDER - 1), Some(0x0 as *const u8));
         assert_eq!(
             tree.allocate(MAX_ORDER - 1),
@@ -266,16 +339,37 @@ mod test {
         assert_eq!(tree.allocate(0), None);
         assert_eq!(tree.allocate(MAX_ORDER - 1), None);
 
-        tree = Tree::new(&[]);
+        tree = Tree::new(iter::once(0..(1 << 30 + 1)));
         assert_eq!(tree.allocate(MAX_ORDER), Some(0x0 as *const u8));
         assert_eq!(tree.allocate(MAX_ORDER), None);
     }
 
     #[test]
+    fn test_free() {
+        let mut tree = Tree::new(iter::once(0..(1 << 30 + 1)));
+        let ptr = tree.allocate(3).unwrap();
+        tree.deallocate(ptr, 3);
+
+        let ptr2 = tree.allocate(3).unwrap();
+        assert_eq!(ptr2, ptr);
+        tree.deallocate(ptr2, 3);
+
+        let ptr = tree.allocate(0).unwrap();
+        let ptr2 = tree.allocate(0).unwrap();
+
+        tree.deallocate(ptr, 0);
+        assert_eq!(tree.allocate(0).unwrap(), ptr);
+        tree.deallocate(ptr2, 0);
+        tree.deallocate(ptr, 0);
+
+        assert_eq!(tree.allocate(5).unwrap(), 0x0 as *const u8);
+    }
+
+    #[test]
     fn test_alloc_unique_addresses() {
-        let max_blocks = Tree::blocks_in_level(MAX_ORDER);
+        let max_blocks = blocks_in_level(MAX_ORDER);
         let mut seen = BTreeSet::new();
-        let mut tree = Tree::new(&[]);
+        let mut tree = Tree::new(iter::once(0..(1 << 30 + 1)));
 
         for _ in 0..max_blocks {
             let addr = tree.allocate(0).unwrap();
