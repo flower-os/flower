@@ -48,9 +48,6 @@ impl<'a> PhysicalAllocator<'a> {
             panic!("PhysicalAllocator already initialized!");
         }
 
-        // TOOD
-        usable.clone().for_each(|i| { debug!("{:?}..{:?}", i.start as *const u8, i.end as *const u8) });
-
         let mut trees: [Option<Mutex<Tree<'a>>>; 256] = unsafe { mem::uninitialized() };
 
         for (i, slot) in trees.iter_mut().enumerate() {

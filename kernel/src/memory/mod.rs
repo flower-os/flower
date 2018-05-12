@@ -63,7 +63,7 @@ fn print_memory_info(memory_map: &MemoryMapTag) {
         .sum();
     let gibbibytes_available  = bytes_available as f64 / (1 << 30) as f64;
 
-    info!("{:.2} GiB of RAM available", gibbibytes_available);
+    info!("{:.3} GiB of RAM available", gibbibytes_available);
 }
 
 fn setup_bootstrap_heap(mb_info: &BootInformation) {
