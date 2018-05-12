@@ -28,7 +28,6 @@ pub const fn blocks_in_level(level: u8) -> usize {
     blocks_in_tree(level + 1) - blocks_in_tree(level)
 }
 
-
 /// Flat tree things.
 ///
 /// # Note
@@ -62,9 +61,10 @@ macro_rules! buddy_allocator_bitmap_tree {
 
         impl<'a> Tree<'a> {
             /// Creates a new tree. Panics if the bootstrap allocator has not been initialized or
-            /// does not have enough memory
+            /// does not have enough memory. Takes a list of usable memory areas, **local to this
+            /// tree.**
             pub fn new<I>(usable: I) -> Self
-                where I: Iterator<Item=::core::ops::RangeInclusive<usize>> + Clone
+                where I: Iterator<Item=::core::ops::Range<usize>> + Clone
             {
                 use $crate::memory::buddy_allocator::Block;
                 use $crate::memory::bootstrap_heap::BootstrapHeapBox;
@@ -97,8 +97,7 @@ macro_rules! buddy_allocator_bitmap_tree {
                 for block_index in (1 << MAX_ORDER)..(1 << (MAX_ORDER + 1)) {
                     let block_end = block_begin + (1 << $BASE_ORDER);
 
-                    if !usable
-                        .clone()
+                    if !(usable.clone())
                         .any(|area| (area.contains(&block_begin) && area.contains(&block_end)))
                     {
                         // Set blocks
@@ -131,7 +130,7 @@ macro_rules! buddy_allocator_bitmap_tree {
             pub fn allocate(&mut self, desired_order: u8) -> Option<*const u8> {
                 use $crate::memory::buddy_allocator::flat_tree;
 
-                debug_assert!(desired_order <= MAX_ORDER);
+                assert!(desired_order <= MAX_ORDER);
 
                 let root = unsafe { self.block_mut(0) };
 
@@ -272,7 +271,7 @@ mod test {
 
     #[test]
     fn test_usable() {
-        let mut tree = Tree::new(iter::once(0x1000..=0x2000));
+        let mut tree = Tree::new(iter::once(0x1000..0x2001));
         assert_eq!(tree.allocate(0), Some((1 << 12) as *const u8));
         assert_eq!(tree.allocate(0), None);
     }
@@ -301,7 +300,7 @@ mod test {
 
     #[test]
     fn test_tree_runs_out_of_blocks() {
-        let mut tree = Tree::new(iter::once(0..=(1 << 30)));
+        let mut tree = Tree::new(iter::once(0..(1 << 30 + 1)));
         let max_blocks = blocks_in_level(MAX_ORDER);
 
         for _ in 0..max_blocks {
@@ -312,7 +311,7 @@ mod test {
 
     #[test]
     fn test_init_tree() {
-        let tree = Tree::new(iter::once(0..=(1 << 30)));
+        let tree = Tree::new(iter::once(0..(1 << 30 + 1)));
 
         // Highest level has 1 block, next has 2, next 4
         assert_eq!(tree.flat_blocks[0].order_free, 19);
@@ -328,10 +327,10 @@ mod test {
 
     #[test]
     fn test_allocate_exact() {
-        let mut tree = Tree::new(iter::once(0..=(1 << 30)));
+        let mut tree = Tree::new(iter::once(0..(1 << 30 + 1)));
         tree.allocate(3).unwrap();
 
-        tree = Tree::new(iter::once(0..=(1 << 30)));
+        tree = Tree::new(iter::once(0..(1 << 30 + 1)));
         assert_eq!(tree.allocate(MAX_ORDER - 1), Some(0x0 as *const u8));
         assert_eq!(
             tree.allocate(MAX_ORDER - 1),
@@ -340,14 +339,14 @@ mod test {
         assert_eq!(tree.allocate(0), None);
         assert_eq!(tree.allocate(MAX_ORDER - 1), None);
 
-        tree = Tree::new(iter::once(0..=(1 << 30)));
+        tree = Tree::new(iter::once(0..(1 << 30 + 1)));
         assert_eq!(tree.allocate(MAX_ORDER), Some(0x0 as *const u8));
         assert_eq!(tree.allocate(MAX_ORDER), None);
     }
 
     #[test]
     fn test_free() {
-        let mut tree = Tree::new(iter::once(0..=(1 << 30)));
+        let mut tree = Tree::new(iter::once(0..(1 << 30 + 1)));
         let ptr = tree.allocate(3).unwrap();
         tree.deallocate(ptr, 3);
 
@@ -370,7 +369,7 @@ mod test {
     fn test_alloc_unique_addresses() {
         let max_blocks = blocks_in_level(MAX_ORDER);
         let mut seen = BTreeSet::new();
-        let mut tree = Tree::new(iter::once(0..=(1 << 30)));
+        let mut tree = Tree::new(iter::once(0..(1 << 30 + 1)));
 
         for _ in 0..max_blocks {
             let addr = tree.allocate(0).unwrap();

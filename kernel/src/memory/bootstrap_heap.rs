@@ -10,7 +10,8 @@ use bit_field::BitField;
 use super::{physical_allocator::BLOCKS_IN_TREE, buddy_allocator::Block};
 
 /// How many 8 heap objects to allocate at maximum.
-const OBJECTS8_NUMBER: usize = 32; // 32 gives us 256GiB while taking 8MiB of memory
+// TODO two stage bootstrap -- allocate 1gib on the bootstrap heap and the rest on kernel heap
+const OBJECTS8_NUMBER: usize = 8; // 8 gives us 64GiB while taking 32mib
 
 #[cfg(not(test))]
 pub static BOOTSTRAP_HEAP: BootstrapHeap = BootstrapHeap(RwLock::new(None));
@@ -50,6 +51,12 @@ impl BootstrapHeap {
 
         *self.0.write() = Some(BootstrapAllocator::new_unchecked(address));
     }
+
+    /// Get the end address of the bootstrap heap. Inclusive.
+    pub fn end(&self) -> usize {
+        self.0.read().as_ref().unwrap().start() as usize +
+            BootstrapAllocator::<[Block; BLOCKS_IN_TREE]>::space_taken()
+    }
 }
 
 /// A bitmap heap/physmem allocator to bootstrap the buddy allocator since it requires a
@@ -66,12 +73,11 @@ pub struct BootstrapAllocator<T> {
 struct Objects8(u8);
 
 impl<T> BootstrapAllocator<T> {
-    #[cfg(test)]
     pub const fn space_taken() -> usize {
         mem::size_of::<T>() * OBJECTS8_NUMBER * 8
     }
 
-    fn start(&self) -> *mut T {
+    pub fn start(&self) -> *mut T {
         self.start_addr as *mut T
     }
 

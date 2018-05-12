@@ -11,6 +11,7 @@
 #![feature(type_ascription)]
 #![feature(ptr_internals, align_offset)]
 #![feature(arbitrary_self_types)]
+#![feature(inclusive_range_methods)]
 #![cfg_attr(test, feature(box_syntax))]
 #![feature(abi_x86_interrupt)]
 
@@ -68,6 +69,7 @@ pub extern fn kmain(multiboot_info_addr: usize) -> ! {
         Ok(_) => info!("ps2c: init successful"),
         Err(error) => error!("ps2c: {:?}", error),
     }
+
     keyboard_echo_loop(&mut controller);
 
     halt()

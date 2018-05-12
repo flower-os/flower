@@ -1,6 +1,6 @@
 ///! A modified buddy bitmap allocator. Written originally in
 /// [buddy allocator workshop](https://github.com/Restioson/buddy-allocator-workshop).
-use core::{mem, ptr, ops::RangeInclusive};
+use core::{mem, ptr, ops::Range};
 use spin::{RwLock, Mutex};
 
 /// Number of orders.
@@ -15,6 +15,7 @@ pub static PHYSICAL_ALLOCATOR: PhysicalAllocator<'static> = PhysicalAllocator {
     trees: RwLock::new(None),
 };
 
+// Panics from `buddy_allocator.rs` will say they're from here. Go there instead.
 buddy_allocator_bitmap_tree!(LEVEL_COUNT = LEVEL_COUNT, BASE_ORDER = BASE_ORDER);
 
 pub struct PhysicalAllocator<'a> {
@@ -28,7 +29,7 @@ impl<'a> PhysicalAllocator<'a> {
     /// Create a new, initialized allocator
     #[cfg(test)]
     fn new<I>(gibbibytes: u8, usable: I) -> Self
-        where I: Iterator<Item=RangeInclusive<usize>> + Clone
+        where I: Iterator<Item=Range<usize>> + Clone
     {
         let allocator = PhysicalAllocator {
             trees: RwLock::new(None),
@@ -41,11 +42,14 @@ impl<'a> PhysicalAllocator<'a> {
 
     /// Initialize the allocator. Panics if already initialized.
     pub fn init<I>(&self, gibbibytes: u8, usable: I)
-        where I: Iterator<Item=RangeInclusive<usize>> + Clone
+        where I: Iterator<Item=Range<usize>> + Clone
     {
         if let Some(_) = *self.trees.read() {
             panic!("PhysicalAllocator already initialized!");
         }
+
+        // TOOD
+        usable.clone().for_each(|i| { debug!("{:?}..{:?}", i.start as *const u8, i.end as *const u8) });
 
         let mut trees: [Option<Mutex<Tree<'a>>>; 256] = unsafe { mem::uninitialized() };
 
@@ -54,9 +58,29 @@ impl<'a> PhysicalAllocator<'a> {
                 unsafe { ptr::write(slot as *mut _, None) };
             } else {
                 unsafe {
+                    // Filter out addresses that apply to this tree and make them local to it
+                    let usable = (&usable).clone()
+                        .filter_map(|range| {
+                            let gib = (i << 30)..((i + 1 << 30) + 1);
+
+                            // If the range covers any portion of the GiB
+                            if !(range.start > gib.end) && !(range.end < gib.start) {
+                                let end = range.end - gib.start;
+                                let begin = if range.start >= gib.start {
+                                    range.start - gib.start // Begin is within this GiB
+                                } else {
+                                    0 // Begin is earlier than this GiB
+                                };
+
+                                Some(begin..end)
+                            } else {
+                                None
+                            }
+                        });
+
                     ptr::write(
                         slot as *mut _,
-                        Some(Mutex::new(Tree::new(usable.clone())))
+                        Some(Mutex::new(Tree::new(usable)))
                     );
                 }
             }
@@ -127,12 +151,13 @@ mod test {
     fn test_alloc_physical_allocator() {
         let allocator = PhysicalAllocator::new(
             2,
-            iter::once(0..=(1 << 30)),
+            iter::once(0..(2 << MAX_ORDER + BASE_ORDER) + 1),
         );
 
         assert_eq!(allocator.allocate(0).unwrap(), 0x0 as *const u8);
 
         let lock = allocator.trees.read();
+
         let _tree_lock = lock.as_ref().unwrap()[0] // Get trees array
             .as_ref().unwrap().lock(); // Lock block
 
@@ -143,7 +168,7 @@ mod test {
     fn test_dealloc_physical_allocator() {
         let allocator = PhysicalAllocator::new(
             2,
-             iter::once(0..=(1 << 30)),
+             iter::once(0..(2 << 30) + 1),
         );
 
         allocator.allocate(0).unwrap();
