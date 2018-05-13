@@ -54,27 +54,27 @@ impl<'a> PhysicalAllocator<'a> {
             if i >= gibbibytes as usize {
                 unsafe { ptr::write(slot as *mut _, None) };
             } else {
-                unsafe {
-                    // Filter out addresses that apply to this tree and make them local to it
-                    let usable = (&usable).clone()
-                        .filter_map(|range| {
-                            let gib = (i << 30)..((i + 1 << 30) + 1);
+                // Filter out addresses that apply to this tree and make them local to it
+                let usable = (&usable).clone()
+                    .filter_map(|range| {
+                        let gib = (i << 30)..((i + 1 << 30) + 1);
 
-                            // If the range covers any portion of the GiB
-                            if !(range.start > gib.end) && !(range.end < gib.start) {
-                                let end = range.end - gib.start;
-                                let begin = if range.start >= gib.start {
-                                    range.start - gib.start // Begin is within this GiB
-                                } else {
-                                    0 // Begin is earlier than this GiB
-                                };
-
-                                Some(begin..end)
+                        // If the range covers any portion of the GiB
+                        if !(range.start > gib.end) && !(range.end < gib.start) {
+                            let end = range.end - gib.start;
+                            let begin = if range.start >= gib.start {
+                                range.start - gib.start // Begin is within this GiB
                             } else {
-                                None
-                            }
-                        });
+                                0 // Begin is earlier than this GiB
+                            };
 
+                            Some(begin..end)
+                        } else {
+                            None
+                        }
+                    });
+
+                unsafe {
                     ptr::write(
                         slot as *mut _,
                         Some(Mutex::new(Tree::new(usable)))

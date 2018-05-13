@@ -110,7 +110,7 @@ setup_paging:
     mov ecx, 0
     .map_p2_table_loop:
         
-        mov eax, 0x200000 ; 2mib (page size) TODO 4kib page size?
+        mov eax, 0x200000 ; 2mib (page size)
         mul ecx ; multiply by counter
         or eax, 0b10000011 ; first 1 is huge page bit
         
@@ -119,6 +119,11 @@ setup_paging:
         inc ecx
         cmp ecx, 512
         jne .map_p2_table_loop
+
+    ; Recursively map P4 table
+    mov eax, p4_table
+    or eax, 0b11 ; present & writable
+    mov [p4_table + 511 * 8], eax
     
     ; Set page table address to cr3
     mov eax, p4_table ; cr3 must be mov'd to from another register

@@ -3,6 +3,7 @@ use core::{iter, mem};
 
 #[macro_use]
 mod buddy_allocator;
+mod paging;
 pub mod bootstrap_heap;
 pub mod physical_allocator;
 
