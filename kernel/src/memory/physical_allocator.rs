@@ -86,7 +86,7 @@ impl<'a> PhysicalAllocator<'a> {
         *self.trees.write() = Some(trees);
     }
 
-    /// Allocate a frame of order `order`. Panics if not initialized.
+    /// Allocate a frame of order `order`. Panics if not initialized. Does __not__ zero the memory.
     pub fn allocate(&self, order: u8) -> Option<*const u8> {
         #[derive(Eq, PartialEq, Copy, Clone)]
         enum TryState {

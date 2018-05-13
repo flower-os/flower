@@ -102,12 +102,16 @@ impl ActivePageTables {
     }
 
     pub fn map_to(&mut self, page: Page, physical_address: PhysicalAddress, flags: EntryFlags) {
+        use core::ptr;
         let mut p3 = self.p4_mut().next_table_create(page.p4_index());
         let mut p2 = p3.next_table_create(page.p3_index());
         let mut p1 = p2.next_table_create(page.p2_index());
 
         assert!(p1[page.p1_index()].is_unused());
         p1[page.p1_index()].set(physical_address, flags | self::EntryFlags::PRESENT);
+
+        // Zero the page
+        ptr::write_volatile(page.start_address() as *mut [u8; 4096], [0; 4096]);
     }
 
     pub fn map(&mut self, page: Page, flags: EntryFlags) {
@@ -115,8 +119,30 @@ impl ActivePageTables {
         let frame = PhysicalAddress(ptr as usize);
         self.map_to(page, frame, flags);
     }
+
+    fn unmap<A>(&mut self, page: Page) {
+        use x86_64::instructions::tlb;
+
+        assert!(self.walk_page_table(page).is_some());
+
+        let p1 = self.p4_mut()
+            .next_page_table_mut(page.p4_index())
+            .and_then(|p3| p3.next_page_table_mut(page.p3_index()))
+            .and_then(|p2| p2.next_page_table_mut(page.p2_index()))
+            .expect("Huge pages are only partially supported!");
+
+        let frame = p1[page.p1_index()].physical_address().unwrap();
+        p1[page.p1_index()].set_unused();
+
+        // TODO free p1/p2/p3 tables if they are empty
+        PHYSICAL_ALLOCATOR.deallocate(frame.0 as *const _, 0);
+
+        // Flush tlb
+        tlb::flush(::x86_64::VirtualAddress(page.start_address()));
+    }
 }
 
+#[derive(Copy, Clone)]
 pub struct Page {
     number: usize,
 }
@@ -136,6 +162,10 @@ impl Page {
 
     fn p1_index(&self) -> usize {
         self.number & 0o777
+    }
+
+    fn start_address(&self) -> usize {
+        self.number * 4096
     }
 }
 
