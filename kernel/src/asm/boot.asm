@@ -109,16 +109,41 @@ setup_paging:
     
     mov ecx, 0
     .map_p2_table_loop:
-        
+
         mov eax, 0x200000 ; 2mib (page size)
         mul ecx ; multiply by counter
         or eax, 0b10000011 ; first 1 is huge page bit
         
         mov [p2_table + ecx * 8], eax
-        
+
         inc ecx
         cmp ecx, 512
         jne .map_p2_table_loop
+
+    ; Set the area with the guard page to use 4kib pages
+    mov eax, guard_page_begin
+    shr eax, 21 ; Get 2mib page base
+    mov edx, eax
+    mov ecx, eax
+
+    mov eax, p1_table
+    or eax, 0b11
+    mov [p2_table + ecx * 8], eax
+
+    ; Map the guard page's page table
+    mov ecx, 0
+    .map_guard_table_loop:
+
+        mov eax, 0x1000 ; 4kib (page size)
+        mul ecx ; multiply by counter
+        add eax, edx
+        or eax, 0b11
+
+        mov [p1_table + ecx * 8], eax
+
+        inc ecx
+        cmp ecx, 512
+        jne .map_guard_table_loop
 
     ; Recursively map P4 table
     mov eax, p4_table
@@ -139,7 +164,7 @@ setup_paging:
     rdmsr
     or eax, 1 << 8
     wrmsr
-    
+
     ; Enable paging
     mov eax, cr0
     or eax, (1 << 31)
@@ -233,10 +258,19 @@ p3_table:
     resb 4096
 p2_table:
     resb 4096
+p1_table: ; Used for guard page area
+    resb 4096
 
+section .guard_page
+align 4096
+
+guard_page_begin:
+times 4096 db 0
+
+section .stack
 ; Stack grows the other way
 stack_bottom:
-    resb 1024 * 64 ; 64 kilobytes
+    times 1024 * 64 db 0 ; 64 kilobytes
 stack_top:
 
 section .rodata
@@ -270,6 +304,9 @@ long_mode_start:
     ; Clear top 32 bits of edi
     mov rax, 0xffffffff
     and rdi, rax
+
+    ; Pass guard page address to kmain through rsi
+    mov rsi, guard_page_begin
 
     call kmain
 

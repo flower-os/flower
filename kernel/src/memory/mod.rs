@@ -16,10 +16,6 @@ use self::bootstrap_heap::BOOTSTRAP_HEAP;
 /// The size of a physical frame
 pub const FRAME_SIZE: usize = 4096;
 
-/// A structure representing a physical address
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
-pub struct PhysicalAddress(pub usize);
-
 /// Represents the size of a page
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 enum PageSize {
@@ -39,13 +35,14 @@ impl From<PageSize> for usize {
     }
 }
 
-pub fn init_memory(mb_info: &BootInformation) {
+pub fn init_memory(mb_info: &BootInformation, guard_page_addr: usize) {
     let memory_map = mb_info.memory_map_tag()
         .expect("Expected a multiboot2 memory map tag, but it is not present!");
 
     print_memory_info(memory_map);
     setup_bootstrap_heap(mb_info);
     setup_physical_allocator(mb_info);
+    setup_guard_page(guard_page_addr);
 }
 
 fn print_memory_info(memory_map: &MemoryMapTag) {
@@ -122,6 +119,12 @@ fn setup_physical_allocator(mb_info: &BootInformation) {
         trees,
         usable_areas,
     );
+}
+
+fn setup_guard_page(addr: usize) {
+    use self::paging::*;
+
+    PAGE_TABLES.lock().unmap(Page::containing_address(addr, PageSize::Kib4));
 }
 
 fn kernel_area(mb_info: &BootInformation) -> Range<usize> {

@@ -5,12 +5,11 @@ use spin::Mutex;
 use core::{marker::PhantomData, convert::From, ops::{Index, IndexMut}, ptr::Unique};
 use super::physical_allocator::PHYSICAL_ALLOCATOR;
 
-const PAGE_SIZE: usize = 4 * 1024;
 const PAGE_TABLE_ENTRIES: usize = 512;
-pub const PAGE_TABLES: Mutex<ActivePageTables> = Mutex::new(ActivePageTables::new());
+pub const PAGE_TABLES: Mutex<PageMap> = Mutex::new(PageMap::new());
 
 #[derive(Eq, PartialEq, Copy, Clone, Ord, PartialOrd)]
-pub struct PhysicalAddress(usize);
+pub struct PhysicalAddress(pub usize);
 
 #[derive(Eq, PartialEq, Copy, Clone, Ord, PartialOrd)]
 pub struct VirtualAddress(usize);
@@ -23,22 +22,50 @@ impl From<VirtualAddress> for PhysicalAddress {
             "invalid address: 0x{:x}", vaddr.0,
         );
 
-        let offset = vaddr.0 % PAGE_SIZE;
         let page = Page {
-            number: vaddr.0 / PAGE_SIZE,
+            number: vaddr.0 / 4096, // Still valid for 2mib page
+            size: None, // ... but we don't know the size :(
         };
 
-        PhysicalAddress(PAGE_TABLES.lock().walk_page_table(page).unwrap().0 + offset)
+        let (start, size) = PAGE_TABLES.lock().walk_page_table(page).unwrap();
+
+        PhysicalAddress(start.0 + (vaddr.0 % size.bytes()))
     }
 }
 
-pub struct ActivePageTables {
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Ord, PartialOrd)]
+pub enum PageSize {
+    Kib4,
+    Mib2,
+}
+
+impl PageSize {
+    fn bytes(self) -> usize {
+        use self::PageSize::*;
+
+        match self {
+            Kib4 => 4 * 1024,
+            Mib2 => 2 * 1024 * 1024,
+        }
+    }
+
+    fn pot(self) -> u8 {
+        use self::PageSize::*;
+
+        match self {
+            Kib4 => 12,
+            Mib2 => 21,
+        }
+    }
+}
+
+pub struct PageMap {
     p4: Unique<PageTable<Level4>>,
 }
 
-impl ActivePageTables {
-    const fn new() -> ActivePageTables {
-        ActivePageTables {
+impl PageMap {
+    const fn new() -> PageMap {
+        PageMap {
             // The address points to the recursively mapped entry in the P4 table, which we can use
             // to access the P4 table itself.
             p4: unsafe { Unique::new_unchecked(0xffffffff_fffff000 as *mut _) },
@@ -54,29 +81,15 @@ impl ActivePageTables {
     }
 
     /// Walks the page tables and translates this page into a physical address
-    pub fn walk_page_table(&self, page: Page) -> Option<PhysicalAddress> {
+    pub fn walk_page_table(&self, page: Page) -> Option<(PhysicalAddress, PageSize)> {
         let p3 = self.p4().next_page_table(page.p4_index());
 
         let huge_page = || {
             p3.and_then(|p3| {
-                let p3_entry = &p3[page.p3_index()];
-
                 // 1GiB page
+                let p3_entry = &p3[page.p3_index()];
                 if let Some(start_address) = p3_entry.physical_address() {
-                    if p3_entry.flags().contains(self::EntryFlags::HUGE_PAGE) {
-                        // Check that the address is 1GiB aligned
-                        assert_eq!(
-                            start_address.0 >> 12 % (PAGE_TABLE_ENTRIES * PAGE_TABLE_ENTRIES),
-                            0,
-                        );
-
-                        return Some(PhysicalAddress(
-                            start_address.0 >> 12
-                                + page.p2_index()
-                                * PAGE_TABLE_ENTRIES
-                                + page.p1_index()
-                        ));
-                    }
+                    panic!("1 GiB pages are not supported!");
                 }
 
                 if let Some(p2) = p3.next_page_table(page.p3_index()) {
@@ -87,7 +100,10 @@ impl ActivePageTables {
                         if p2_entry.flags().contains(self::EntryFlags::HUGE_PAGE) {
                             // Check that the address is 2MiB aligned
                             assert_eq!(start_frame.0 >> 12 % PAGE_TABLE_ENTRIES, 0);
-                            return Some(PhysicalAddress(start_frame.0 >> 12 + page.p1_index()));
+                            return Some((
+                                PhysicalAddress(start_frame.0 >> 12 + page.p1_index()),
+                                PageSize::Mib2,
+                            ));
                         }
                     }
                 }
@@ -97,54 +113,74 @@ impl ActivePageTables {
 
         p3.and_then(|p3| p3.next_page_table(page.p3_index()))
             .and_then(|p2| p2.next_page_table(page.p2_index()))
-            .and_then(|p1| p1[page.p1_index()].physical_address())
+            .and_then(|p1| Some((p1[page.p1_index()].physical_address()?, PageSize::Kib4)))
             .or_else(huge_page)
     }
 
     pub fn map_to(&mut self, page: Page, physical_address: PhysicalAddress, flags: EntryFlags) {
-        use core::ptr;
-        let mut p3 = self.p4_mut().next_table_create(page.p4_index());
-        let mut p2 = p3.next_table_create(page.p3_index());
+        let mut p3 = self.p4_mut().next_table_create(page.p4_index()).unwrap();
+        let mut p2 = p3.next_table_create(page.p3_index()).unwrap();
         let mut p1 = p2.next_table_create(page.p2_index());
 
-        assert!(p1[page.p1_index()].is_unused());
-        p1[page.p1_index()].set(physical_address, flags | self::EntryFlags::PRESENT);
-
-        // Zero the page
-        ptr::write_volatile(page.start_address() as *mut [u8; 4096], [0; 4096]);
+        if let Some(p1) = p1 {
+            // 4kib huge page
+            p1[page.p1_index()].set(physical_address, flags | self::EntryFlags::PRESENT);
+        } else {
+            // 2mib huge page
+            p2[page.p2_index()].set(physical_address, flags | self::EntryFlags::PRESENT);
+        }
     }
 
     pub fn map(&mut self, page: Page, flags: EntryFlags) {
+        use core::ptr;
+
         let ptr = PHYSICAL_ALLOCATOR.allocate(0).expect("out of memory");
         let frame = PhysicalAddress(ptr as usize);
         self.map_to(page, frame, flags);
+
+        // Zero the page
+        unsafe { ptr::write_volatile(page.start_address().unwrap() as *mut [u8; 4096], [0; 4096]) };
     }
 
-    fn unmap<A>(&mut self, page: Page) {
+    pub fn unmap(&mut self, page: Page) {
         use x86_64::instructions::tlb;
 
         assert!(self.walk_page_table(page).is_some());
 
-        let p1 = self.p4_mut()
-            .next_page_table_mut(page.p4_index())
-            .and_then(|p3| p3.next_page_table_mut(page.p3_index()))
-            .and_then(|p2| p2.next_page_table_mut(page.p2_index()))
-            .expect("Huge pages are only partially supported!");
+        let mut p2 = self.p4_mut()
+            .next_page_table_mut(page.p4_index()).expect("Unmap called on unmapped page!")
+            .next_page_table_mut(page.p3_index()).expect("Unmap called on unmapped page!");
 
-        let frame = p1[page.p1_index()].physical_address().unwrap();
-        p1[page.p1_index()].set_unused();
+        let p1 = p2.next_page_table_mut(page.p2_index());
 
-        // TODO free p1/p2/p3 tables if they are empty
-        PHYSICAL_ALLOCATOR.deallocate(frame.0 as *const _, 0);
+        if let Some(p1) = p1 {
+            // 4kib page
+
+            let frame = p1[page.p1_index()].physical_address().unwrap();
+            p1[page.p1_index()].set_unused();
+
+            // TODO free p1/p2/p3 tables if they are empty
+            PHYSICAL_ALLOCATOR.deallocate(frame.0 as *const _, 0);
+        } else {
+            // Huge 2mib page
+
+            let frame = p2[page.p2_index()].physical_address().unwrap();
+            p2[page.p2_index()].set_unused();
+
+            // TODO free p2/p3 tables if they are empty
+            PHYSICAL_ALLOCATOR.deallocate(frame.0 as *const _, 0);
+        }
 
         // Flush tlb
-        tlb::flush(::x86_64::VirtualAddress(page.start_address()));
+        tlb::flush(::x86_64::VirtualAddress(page.start_address().unwrap()));
     }
 }
 
 #[derive(Copy, Clone)]
 pub struct Page {
     number: usize,
+    /// Size of page. None when unknown.
+    size: Option<PageSize>,
 }
 
 impl Page {
@@ -164,8 +200,12 @@ impl Page {
         self.number & 0o777
     }
 
-    fn start_address(&self) -> usize {
-        self.number * 4096
+    fn start_address(&self) -> Option<usize> {
+        self.size.map(|size| self.number * size.bytes())
+    }
+
+    pub fn containing_address(addr: usize, size: PageSize) -> Page {
+        Page { number: addr / size.bytes(), size: Some(size) }
     }
 }
 
@@ -246,6 +286,8 @@ impl TableLevel for Level1 {}
 /// A trait that indicates a type represents a page table level that is not P1
 pub trait HierarchicalLevel: TableLevel {
     type NextLevel: TableLevel;
+
+    const CAN_BE_HUGE: bool = false;
 }
 
 impl HierarchicalLevel for Level4 {
@@ -254,10 +296,12 @@ impl HierarchicalLevel for Level4 {
 
 impl HierarchicalLevel for Level3 {
     type NextLevel = Level2;
+    const CAN_BE_HUGE: bool = true;
 }
 
 impl HierarchicalLevel for Level2 {
     type NextLevel = Level1;
+    const CAN_BE_HUGE: bool = true;
 }
 
 /// A page table consisting of 512 entries ([PageTableEntry]).
@@ -311,24 +355,22 @@ impl<L: TableLevel> PageTable<L> {
     }
 
 
-    pub fn next_table_create(&mut self, index: usize) -> &mut PageTable<L::NextLevel>
+    pub fn next_table_create(&mut self, index: usize) -> Option<&mut PageTable<L::NextLevel>>
         where L: HierarchicalLevel
     {
         if self.next_page_table(index).is_none() {
-            // TODO implement this sometime
-            assert!(
-                !self.entries[index].flags().contains(self::EntryFlags::HUGE_PAGE),
-                "Huge pages are only partially supported!"
-            );
+            if self.entries[index].flags().contains(self::EntryFlags::HUGE_PAGE){
+                assert!(L::CAN_BE_HUGE, "Page has huge bit but cannot be huge!");
+            } else {
+                let ptr = PHYSICAL_ALLOCATOR.allocate(0).expect("No physical frames available!");
+                let frame = PhysicalAddress(ptr as usize);
 
-            let ptr = PHYSICAL_ALLOCATOR.allocate(0).expect("No physical frames available!");
-            let frame = PhysicalAddress(ptr as usize);
-
-            self.entries[index].set(frame, self::EntryFlags::PRESENT | self::EntryFlags::WRITABLE);
-            self.next_page_table_mut(index).unwrap().zero();
+                self.entries[index].set(frame, self::EntryFlags::PRESENT | self::EntryFlags::WRITABLE);
+                self.next_page_table_mut(index).unwrap().zero();
+            }
         }
 
-        self.next_page_table_mut(index).unwrap()
+        self.next_page_table_mut(index)
     }
 }
 

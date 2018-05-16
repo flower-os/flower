@@ -53,7 +53,7 @@ mod drivers;
 
 /// Kernel main function
 #[no_mangle]
-pub extern fn kmain(multiboot_info_addr: usize) -> ! {
+pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
     say_hello();
     interrupts::init();
 
@@ -61,7 +61,7 @@ pub extern fn kmain(multiboot_info_addr: usize) -> ! {
     let mb_info = unsafe { multiboot2::load(multiboot_info_addr) };
 
     // Init memory
-    memory::init_memory(&mb_info);
+    memory::init_memory(&mb_info, guard_page_addr);
 
     // Initialize the PS/2 controller and run the keyboard echo loop
     let mut controller = ps2::CONTROLLER.lock();
