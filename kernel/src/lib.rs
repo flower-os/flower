@@ -28,7 +28,7 @@ extern crate volatile;
 extern crate x86_64;
 // Used as a workaround until const-generics arrives
 
-use acpi::sdt::{madt::{Madt, MADT_HEADER}, SdtHeader};
+use acpi::sdt::{hpet::{Hpet, HPET_HEADER}, madt::{Madt, MADT_HEADER}, SdtHeader};
 use core::{convert::TryInto, ops::Try};
 use drivers::keyboard::{Keyboard, KeyEventType, Ps2Keyboard};
 use drivers::keyboard::keymap;
@@ -121,6 +121,7 @@ pub extern fn kmain() -> ! {
             println!("acpi: table signatures:");
 
             let mut madt_address: Option<usize> = None;
+            let mut hpet_address: Option<usize> = None;
 
             for address in sdt_addresses {
                 let header = unsafe { *(address as *const SdtHeader) };
@@ -134,6 +135,8 @@ pub extern fn kmain() -> ! {
 
                 if header.signature == *MADT_HEADER {
                     madt_address = Some(address);
+                } else if header.signature == *HPET_HEADER {
+                    hpet_address = Some(address);
                 }
             }
 
@@ -141,8 +144,17 @@ pub extern fn kmain() -> ! {
                 .into_result()
                 .map_err(|_| "MADT not found")?;
 
+             let hpet_address = hpet_address
+                .into_result()
+                .map_err(|_| "HPET not found")?;
+
             let madt = unsafe { Madt::from_address(madt_address) }
                 .map_err(|_| "Error validating MADT")?;
+
+            let hpet = unsafe { Hpet::from_address(hpet_address) }
+                .map_err(|_| "Error validating HPET")?;
+
+            info!("hpet: {:#?}", hpet);
 
             info!("acpi: press S for next madt entry");
 
@@ -150,7 +162,7 @@ pub extern fn kmain() -> ! {
                 loop {
                     if let Ok(Some(event)) = keyboard.read_event() {
                         if event.event_type == KeyEventType::Break && event.keycode == keymap::codes::S {
-                                break;
+                            break;
                         }
                     }
                 }

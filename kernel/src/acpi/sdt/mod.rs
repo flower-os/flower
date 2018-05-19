@@ -3,6 +3,7 @@ use util::CChar;
 
 pub mod rsdt;
 pub mod madt;
+pub mod hpet;
 
 /// Validate an SDT by checking if the signature is correct and checking if all bytes in the table
 /// add to 0
