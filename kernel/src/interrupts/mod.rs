@@ -33,6 +33,10 @@ lazy_static! {
 /// Implicitly invoke the lazy initializer of the IDT & load it, as well as disable PICs and set up
 /// APICs
 pub fn init() {
+    info!("interrupts: initialising");
+    debug!("interrupts: loading idt");
     IDT.load();
+    debug!("interrupts: disabling legacy PICs");
     legacy_pic::CHAINED_PICS.lock().remap_and_disable();
+    info!("interrupts: initialised")
 }

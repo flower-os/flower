@@ -19,7 +19,12 @@ pub extern "x86-interrupt" fn out_of_bounds(stack_frame: &mut ExceptionStackFram
 }
 
 pub extern "x86-interrupt" fn invalid_opcode(stack_frame: &mut ExceptionStackFrame) {
-    panic!("cpuex: invalid opcode\n{:#?}", stack_frame);
+    panic!(
+        "cpuex: invalid opcode \n{:#?}\n => note: qword at {:?} is 0x{:x}",
+        stack_frame,
+        stack_frame.instruction_pointer,
+        unsafe { *(stack_frame.instruction_pointer.0 as *const u64) },
+    );
 }
 
 pub extern "x86-interrupt" fn device_not_available(stack_frame: &mut ExceptionStackFrame) {
@@ -67,7 +72,7 @@ pub extern "x86-interrupt" fn simd_floating_point(stack_frame: &mut ExceptionSta
 }
 
 pub extern "x86-interrupt" fn virtualization(stack_frame: &mut ExceptionStackFrame) {
-    panic!("cpuex: simd floating point\n{:#?}", stack_frame);
+    panic!("cpuex: virtualization\n{:#?}", stack_frame);
 }
 
 pub extern "x86-interrupt" fn security_exception(stack_frame: &mut ExceptionStackFrame, code: u64) {

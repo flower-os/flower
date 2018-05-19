@@ -8,10 +8,10 @@ use super::physical_allocator::PHYSICAL_ALLOCATOR;
 const PAGE_TABLE_ENTRIES: usize = 512;
 pub const PAGE_TABLES: Mutex<PageMap> = Mutex::new(PageMap::new());
 
-#[derive(Eq, PartialEq, Copy, Clone, Ord, PartialOrd)]
+#[derive(Debug, Eq, PartialEq, Copy, Clone, Ord, PartialOrd)]
 pub struct PhysicalAddress(pub usize);
 
-#[derive(Eq, PartialEq, Copy, Clone, Ord, PartialOrd)]
+#[derive(Debug, Eq, PartialEq, Copy, Clone, Ord, PartialOrd)]
 pub struct VirtualAddress(usize);
 
 impl From<VirtualAddress> for PhysicalAddress {
@@ -89,7 +89,9 @@ impl PageMap {
                 // 1GiB page
                 let p3_entry = &p3[page.p3_index()];
                 if let Some(start_address) = p3_entry.physical_address() {
-                    panic!("1 GiB pages are not supported!");
+                    if p3_entry.flags().contains(EntryFlags::HUGE_PAGE | EntryFlags::PRESENT) {
+                        panic!("1 GiB pages are not supported!");
+                    }
                 }
 
                 if let Some(p2) = p3.next_page_table(page.p3_index()) {
@@ -97,7 +99,7 @@ impl PageMap {
 
                     // 2MiB page
                     if let Some(start_frame) = p2_entry.physical_address() {
-                        if p2_entry.flags().contains(self::EntryFlags::HUGE_PAGE) {
+                        if p2_entry.flags().contains(EntryFlags::HUGE_PAGE | EntryFlags::PRESENT) {
                             // Check that the address is 2MiB aligned
                             assert_eq!(start_frame.0 >> 12 % PAGE_TABLE_ENTRIES, 0);
                             return Some((
@@ -139,7 +141,13 @@ impl PageMap {
         self.map_to(page, frame, flags);
 
         // Zero the page
-        unsafe { ptr::write_volatile(page.start_address().unwrap() as *mut [u8; 4096], [0; 4096]) };
+        unsafe {
+            ptr::write_bytes(
+                page.start_address().unwrap() as *mut u8,
+                0,
+                page.size.unwrap().bytes()
+            );
+        }
     }
 
     pub fn unmap(&mut self, page: Page) {

@@ -1,5 +1,6 @@
 //! Lang items
 
+use core::f32;
 use ::halt;
 use color::{Color, ColorPair};
 use core::fmt::{self, Write};
@@ -26,4 +27,11 @@ extern fn panic_fmt(args: fmt::Arguments, file: &'static str, line: u32) -> ! {
     let _ = write!(&mut writer, "Panicked at \"{}\", {file}:{line}\n", args, file = file, line = line);
 
     halt()
+}
+
+#[lang = "oom"]
+#[no_mangle]
+#[allow(private_no_mangle_fns)] // publicity is not required, but no mangle is
+extern fn oom() -> ! {
+    panic!("Ran out of kernel heap memory!");
 }

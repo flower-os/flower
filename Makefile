@@ -14,10 +14,10 @@ ifeq ($(debug), 1)
     nasm_flags := -f elf64 -F dwarf -g
     build_type := debug
     qemu_flags := -s -S
-    xargo_flags := --features $(log_level)
+    cargo_flags := --features $(log_level)
 else
     nasm_flags := -f elf64
-    xargo_flags := --release --features $(log_level)
+    cargo_flags := --release --features $(log_level)
     build_type := release
 endif
 
@@ -57,7 +57,7 @@ run: $(grub_iso)
 clean:
 	@rm -rf build
 	@cd $(rust_crate_dir) && \
-	  RUST_TARGET_PATH=$(shell pwd)/$(rust_crate_dir) xargo clean
+	  RUST_TARGET_PATH=$(shell pwd)/$(rust_crate_dir) cargo clean
 
 # Make build directories
 makedirs:
@@ -68,7 +68,7 @@ makedirs:
 # Compile rust
 $(rust_kernel): $(rust_crate_dir)/**/*
 	@cd $(rust_crate_dir) && \
-      RUST_TARGET_PATH=$(shell pwd)/$(rust_crate_dir) xargo build --target $(target) $(xargo_flags)
+      RUST_TARGET_PATH=$(shell pwd)/$(rust_crate_dir) cargo xbuild --target $(target) $(cargo_flags)
 	@mv $(rust_crate_dir)/target/$(target)/$(build_type)/libflower_kernel.a $(rust_kernel)
 
 # Compile kernel.elf

@@ -4,6 +4,7 @@ use core::{iter, mem};
 #[macro_use]
 mod buddy_allocator;
 mod paging;
+pub mod heap;
 pub mod bootstrap_heap;
 pub mod physical_allocator;
 
@@ -12,9 +13,6 @@ use multiboot2::{BootInformation, MemoryMapTag};
 use self::physical_allocator::{PHYSICAL_ALLOCATOR, BLOCKS_IN_TREE};
 use self::buddy_allocator::Block;
 use self::bootstrap_heap::BOOTSTRAP_HEAP;
-
-/// The size of a physical frame
-pub const FRAME_SIZE: usize = 4096;
 
 /// Represents the size of a page
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
@@ -36,13 +34,20 @@ impl From<PageSize> for usize {
 }
 
 pub fn init_memory(mb_info: &BootInformation, guard_page_addr: usize) {
+    info!("memory: initialising");
     let memory_map = mb_info.memory_map_tag()
         .expect("Expected a multiboot2 memory map tag, but it is not present!");
 
     print_memory_info(memory_map);
+    debug!("memory: initialising bootstrap heap");
     setup_bootstrap_heap(mb_info);
+    debug!("memory: initialising pmm");
     setup_physical_allocator(mb_info);
+    trace!("memory: setting up guard page");
     setup_guard_page(guard_page_addr);
+    debug!("memory: setting up kernel heap");
+    ::HEAP.init();
+    info!("memory: initialised")
 }
 
 fn print_memory_info(memory_map: &MemoryMapTag) {
@@ -59,8 +64,8 @@ fn print_memory_info(memory_map: &MemoryMapTag) {
     let bytes_available: usize = memory_map.memory_areas()
         .map(|area| area.start_address() + area.end_address())
         .sum();
-    let gibbibytes_available  = bytes_available as f64 / (1 << 30) as f64;
 
+    let gibbibytes_available  = bytes_available as f64 / (1 << 30) as f64;
     info!("{:.3} GiB of RAM available", gibbibytes_available);
 }
 
@@ -99,7 +104,7 @@ fn setup_physical_allocator(mb_info: &BootInformation) {
         .sum();
     let gibbibytes_available  = bytes_available as f64 / (1 << 30) as f64;
 
-    debug!("Allocating {} trees", trees);
+    trace!("Allocating {} trees", trees);
 
     let kernel_area = kernel_area(mb_info).start..BOOTSTRAP_HEAP.end() + 1;
 

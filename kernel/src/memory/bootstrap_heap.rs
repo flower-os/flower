@@ -5,7 +5,7 @@ use std::boxed::Box;
 use core::{mem, ptr::{self, Unique}};
 use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
-use spin::{RwLock, RwLockReadGuard, Mutex};
+use spin::{Once, Mutex};
 use bit_field::BitField;
 use super::{physical_allocator::BLOCKS_IN_TREE, buddy_allocator::Block};
 
@@ -13,48 +13,25 @@ use super::{physical_allocator::BLOCKS_IN_TREE, buddy_allocator::Block};
 // TODO two stage bootstrap -- allocate 1gib on the bootstrap heap and the rest on kernel heap
 const OBJECTS8_NUMBER: usize = 8; // 8 gives us 64GiB while taking 32mib
 
-#[cfg(not(test))]
-pub static BOOTSTRAP_HEAP: BootstrapHeap = BootstrapHeap(RwLock::new(None));
-#[cfg(test)]
-lazy_static! {
-    pub static ref BOOTSTRAP_HEAP: BootstrapHeap = {
-        // We assume the align is the same so we can allocate a u8 array of the space the bootstrap
-        // allocator takes up
-        assert_eq!(mem::align_of::<Block>(), 1);
+pub static BOOTSTRAP_HEAP: BootstrapHeap = BootstrapHeap(Once::new());
 
-        let area = unsafe {
-            box mem::uninitialized::<[u8; BootstrapAllocator::<[Block; BLOCKS_IN_TREE]>::space_taken()]>()
-        };
-        let start = Box::into_raw(area) as usize;
-
-        BootstrapHeap(RwLock::new(Some(BootstrapAllocator::new_unchecked(start))))
-    };
-}
-
-/// A holding struct for the bootstrap heap. We use `RwLock<Option<...>>` so we can `write` to it
-/// to initialize the `Option`, but `read` from it under normal circumstances as the allocator
-/// employs its own lock.
-pub struct BootstrapHeap(RwLock<Option<BootstrapAllocator<[Block; BLOCKS_IN_TREE]>>>);
+/// A holding struct for the bootstrap heap.
+pub struct BootstrapHeap(Once<BootstrapAllocator<[Block; BLOCKS_IN_TREE]>>);
 
 impl BootstrapHeap {
-    /// Panics if bootstrap heap is not initialized
+    /// Allocates a zeroed object. Panics if bootstrap heap is not initialized
     pub unsafe fn allocate_zeroed(&self) -> Option<BootstrapHeapBox<[Block; BLOCKS_IN_TREE]>> {
-        AllocatorRef::ReadGuard(self.0.read()).allocate_zeroed()
+        self.0.wait().unwrap().allocate_zeroed()
     }
 
-    /// Initialises the bootstrap heap with a begin address. Panics if already
-    /// initialised.
+    /// Initialises the bootstrap heap with a begin address.
     pub unsafe fn init_unchecked(&self, address: usize) {
-        if let Some(_) = *self.0.read() {
-            panic!("Bootstrap heap already initialized!");
-        }
-
-        *self.0.write() = Some(BootstrapAllocator::new_unchecked(address));
+        self.0.call_once(|| BootstrapAllocator::new_unchecked(address));
     }
 
-    /// Get the end address of the bootstrap heap. Inclusive.
+    /// Get the end address of the bootstrap heap. Inclusive. Panics if uninitialized
     pub fn end(&self) -> usize {
-        self.0.read().as_ref().unwrap().start() as usize +
+        self.0.wait().unwrap().start() as usize +
             BootstrapAllocator::<[Block; BLOCKS_IN_TREE]>::space_taken()
     }
 }
@@ -100,7 +77,7 @@ impl<T> BootstrapAllocator<T> {
     }
 
     /// Allocate an object of zeroes and return the address if there is space
-    unsafe fn allocate_zeroed<'a>(self: AllocatorRef<'a, T>) -> Option<BootstrapHeapBox<'a, T>> {
+    unsafe fn allocate_zeroed<'a>(&'a self) -> Option<BootstrapHeapBox<'a, T>> {
         for objects8_index in 0..OBJECTS8_NUMBER {
             for bit in 0..8 {
                 let mut lock = self.objects8.lock();
@@ -125,7 +102,7 @@ impl<T> BootstrapAllocator<T> {
     }
 
     /// Deallocate a heap box. Must be only called in the `Drop` impl of `BootstrapHeapBox`.
-    unsafe fn deallocate(self: &AllocatorRef<T>, obj: &BootstrapHeapBox<T>) {
+    unsafe fn deallocate(&self, obj: &BootstrapHeapBox<T>) {
         let addr_in_heap = obj.ptr.as_ptr() as usize - self.start_addr;
         let index = addr_in_heap / mem::size_of::<T>();
 
@@ -135,31 +112,7 @@ impl<T> BootstrapAllocator<T> {
 
 pub struct BootstrapHeapBox<'a, T: 'a> {
     ptr: Unique<T>,
-    allocator: AllocatorRef<'a, T>,
-}
-
-enum AllocatorRef<'a, T: 'a> {
-    #[cfg(test)]
-    Ref(&'a BootstrapAllocator<T>),
-    ReadGuard(RwLockReadGuard<'a, Option<BootstrapAllocator<T>>>),
-}
-
-impl<'a, T: 'a> AllocatorRef<'a, T> {
-    fn as_ref<'b>(&'a self) -> &'b BootstrapAllocator<T> where 'a: 'b {
-        match self {
-            #[cfg(test)]
-            AllocatorRef::Ref(r) => r,
-            AllocatorRef::ReadGuard(r) => &*r.as_ref().unwrap()
-        }
-    }
-}
-
-impl<'a, T: 'a> Deref for AllocatorRef<'a, T> {
-    type Target = BootstrapAllocator<T>;
-
-    fn deref(&self) -> &Self::Target {
-        self.as_ref()
-    }
+    allocator: &'a BootstrapAllocator<T>,
 }
 
 impl<'a, T> PartialEq for BootstrapHeapBox<'a, T> {
@@ -211,11 +164,11 @@ mod test {
         let ptr = setup_heap();
         let bitmap = BootstrapAllocator::<u8>::new_unchecked(ptr as usize);
 
-        let heap_box = unsafe { AllocatorRef::Ref(&bitmap).allocate_zeroed().unwrap() };
+        let heap_box = unsafe { bitmap.allocate_zeroed().unwrap() };
         let old_ptr = heap_box.ptr;
         drop(heap_box);
         assert!(ptr::eq(
-            unsafe { AllocatorRef::Ref(&bitmap).allocate_zeroed().unwrap().ptr.as_ptr() },
+            unsafe { bitmap.allocate_zeroed().unwrap().ptr.as_ptr() },
             old_ptr.as_ptr()
         ));
 
@@ -230,7 +183,7 @@ mod test {
         let bitmap = BootstrapAllocator::<u8>::new_unchecked(ptr as usize);
 
         assert_eq!(
-            unsafe { AllocatorRef::Ref(&bitmap).allocate_zeroed().unwrap().ptr.as_ptr() },
+            unsafe { bitmap.allocate_zeroed().unwrap().ptr.as_ptr() },
             ptr as *mut _
         );
 
@@ -246,7 +199,7 @@ mod test {
         let mut v = Vec::with_capacity(OBJECTS8_NUMBER * 8);
 
         for i in 0..(OBJECTS8_NUMBER * 8) {
-            let obj = unsafe { AllocatorRef::Ref(&bitmap).allocate_zeroed().unwrap() };
+            let obj = unsafe { bitmap.allocate_zeroed().unwrap() };
             assert!(ptr::eq(obj.ptr.as_ptr(), (ptr as *mut u8).wrapping_offset(i as isize)));
             assert_eq!(*obj, 0);
             v.push(obj); // Stop it from being dropped
@@ -265,11 +218,11 @@ mod test {
         let mut v = Vec::with_capacity(OBJECTS8_NUMBER * 8);
 
         for _ in 0..(OBJECTS8_NUMBER * 8) {
-            let addr = unsafe { AllocatorRef::Ref(&bitmap).allocate_zeroed().unwrap() };
+            let addr = unsafe { bitmap.allocate_zeroed().unwrap() };
             v.push(addr); // Stop it from being dropped
         }
 
-        assert!(unsafe { AllocatorRef::Ref(&bitmap).allocate_zeroed() } == None);
+        assert!(unsafe { bitmap.allocate_zeroed() } == None);
 
         teardown_heap(ptr);
     }

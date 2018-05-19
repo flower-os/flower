@@ -1,7 +1,10 @@
 ///! A modified buddy bitmap allocator. Written originally in
 /// [buddy allocator workshop](https://github.com/Restioson/buddy-allocator-workshop).
 use core::{mem, ptr, ops::Range};
-use spin::{RwLock, Mutex};
+#[cfg(test)]
+use std::boxed::Box;
+use spin::{Mutex, Once};
+use super::bootstrap_heap::BootstrapHeapBox;
 
 /// Number of orders.
 const LEVEL_COUNT: u8 = 19;
@@ -12,17 +15,37 @@ const BASE_ORDER: u8 = 12;
 /// The physical frame allocator. Requires the bootstrap heap to be initialized, or else the
 /// initializer will panic.
 pub static PHYSICAL_ALLOCATOR: PhysicalAllocator<'static> = PhysicalAllocator {
-    trees: RwLock::new(None),
+    trees: Once::new(),
+    #[cfg(test)]
+    _phantom: ::core::marker::PhantomData,
 };
 
 // Panics from `buddy_allocator.rs` will say they're from here. Go there instead.
 buddy_allocator_bitmap_tree!(LEVEL_COUNT = LEVEL_COUNT, BASE_ORDER = BASE_ORDER);
 
+impl<'a> Tree<BootstrapHeapBox<'a, [Block; BLOCKS_IN_TREE]>> {
+    /// Creates a new tree. Panics if the bootstrap allocator has not been initialized or
+    /// does not have enough memory. Takes a list of usable memory areas, **local to this
+    /// tree.**
+    pub fn new_bootstrap_heap<I>(usable: I) -> Self
+        where I: Iterator<Item=Range<usize>> + Clone,
+    {
+        let mut flat_blocks: BootstrapHeapBox<[Block; BLOCKS_IN_TREE]> = unsafe {
+            super::bootstrap_heap::BOOTSTRAP_HEAP.allocate_zeroed()
+            .expect("No heap memory available!")
+        };
+        Self::new(usable, flat_blocks)
+    }
+}
+
 pub struct PhysicalAllocator<'a> {
     // Max 256GiB
-    trees: RwLock<Option<
-        [Option<Mutex<Tree<'a>>>; 256]
-    >>,
+    #[cfg(not(test))]
+    trees: Once<[Option<Mutex<Tree<BootstrapHeapBox<'a, [Block; BLOCKS_IN_TREE]>>>>; 256]>,
+    #[cfg(test)]
+    trees: Once<[Option<Mutex<Tree<Box<[Block; BLOCKS_IN_TREE]>>>>; 256]>,
+    #[cfg(test)]
+    _phantom: ::core::marker::PhantomData<&'a ()>,
 }
 
 impl<'a> PhysicalAllocator<'a> {
@@ -32,7 +55,8 @@ impl<'a> PhysicalAllocator<'a> {
         where I: Iterator<Item=Range<usize>> + Clone
     {
         let allocator = PhysicalAllocator {
-            trees: RwLock::new(None),
+            trees: Once::new(),
+            _phantom: ::core::marker::PhantomData,
         };
 
         allocator.init(gibbibytes, usable);
@@ -40,24 +64,24 @@ impl<'a> PhysicalAllocator<'a> {
         allocator
     }
 
-    /// Initialize the allocator. Panics if already initialized.
+    /// Initialize the allocator.
     pub fn init<I>(&self, gibbibytes: u8, usable: I)
         where I: Iterator<Item=Range<usize>> + Clone
     {
-        if let Some(_) = *self.trees.read() {
-            panic!("PhysicalAllocator already initialized!");
-        }
+        self.trees.call_once(|| {
+            #[cfg(not(test))]
+            let mut trees: [
+                Option<Mutex<Tree<BootstrapHeapBox<'a, [Block; BLOCKS_IN_TREE]>>>>; 256
+            ] = unsafe { mem::uninitialized() };
+            #[cfg(test)]
+            let mut trees: [
+                Option<Mutex<Tree<Box<[Block; BLOCKS_IN_TREE]>>>>; 256
+            ] = unsafe { mem::uninitialized() };
 
-        // TOOD
-        usable.clone().for_each(|i| { debug!("{:?}..{:?}", i.start as *const u8, i.end as *const u8) });
-
-        let mut trees: [Option<Mutex<Tree<'a>>>; 256] = unsafe { mem::uninitialized() };
-
-        for (i, slot) in trees.iter_mut().enumerate() {
-            if i >= gibbibytes as usize {
-                unsafe { ptr::write(slot as *mut _, None) };
-            } else {
-                unsafe {
+            for (i, slot) in trees.iter_mut().enumerate() {
+                if i >= gibbibytes as usize {
+                    unsafe { ptr::write(slot as *mut _, None) };
+                } else {
                     // Filter out addresses that apply to this tree and make them local to it
                     let usable = (&usable).clone()
                         .filter_map(|range| {
@@ -78,18 +102,27 @@ impl<'a> PhysicalAllocator<'a> {
                             }
                         });
 
-                    ptr::write(
-                        slot as *mut _,
-                        Some(Mutex::new(Tree::new(usable)))
-                    );
+                    unsafe {
+                        #[cfg(not(test))]
+                        ptr::write(
+                            slot as *mut _,
+                            Some(Mutex::new(Tree::new_bootstrap_heap(usable)))
+                        );
+
+                        #[cfg(test)]
+                        ptr::write(
+                            slot as *mut _,
+                            Some(Mutex::new(Tree::new(usable, box mem::uninitialized())))
+                        )
+                    }
                 }
             }
-        }
 
-        *self.trees.write() = Some(trees);
+            trees
+        });
     }
 
-    /// Allocate a frame of order `order`. Panics if not initialized.
+    /// Allocate a frame of order `order`. Panics if not initialized. Does __not__ zero the memory.
     pub fn allocate(&self, order: u8) -> Option<*const u8> {
         #[derive(Eq, PartialEq, Copy, Clone)]
         enum TryState {
@@ -99,7 +132,6 @@ impl<'a> PhysicalAllocator<'a> {
         }
 
         let mut tried = [TryState::Untried; 256];
-        let lock = self.trees.read();
 
         // Try every tree. If it's locked, come back to it later.
         loop {
@@ -109,7 +141,7 @@ impl<'a> PhysicalAllocator<'a> {
                     || tried.iter().position(|i| *i == TryState::WasInUse)
                 )?;
 
-            let trees = lock.as_ref().unwrap();
+            let trees = self.trees.wait().unwrap();
 
             if let Some(ref tree) = trees[index] {
                 if let Some(ref mut tree) = tree.try_lock() {
@@ -134,9 +166,8 @@ impl<'a> PhysicalAllocator<'a> {
         let tree = (ptr as usize) >> (LEVEL_COUNT - 1 + BASE_ORDER);
         let local_ptr = (ptr as usize % (1 << LEVEL_COUNT - 1 + BASE_ORDER)) as *const u8;
 
-        let trees = self.trees.read();
-        let tree = trees.as_ref().unwrap()[tree].as_ref();
-        let mut tree = tree.unwrap().lock();
+        let trees = self.trees.wait().unwrap();
+        let mut tree = trees[tree].as_ref().unwrap().lock();
 
         tree.deallocate(local_ptr, order);
     }
@@ -156,10 +187,8 @@ mod test {
 
         assert_eq!(allocator.allocate(0).unwrap(), 0x0 as *const u8);
 
-        let lock = allocator.trees.read();
-
-        let _tree_lock = lock.as_ref().unwrap()[0] // Get trees array
-            .as_ref().unwrap().lock(); // Lock block
+        let trees = allocator.trees.wait().unwrap();
+        let _tree_lock = trees[0].as_ref().unwrap().lock();
 
         assert_eq!(allocator.allocate(0).unwrap(), 2usize.pow((MAX_ORDER + BASE_ORDER) as u32) as *const u8);
     }

@@ -12,31 +12,36 @@
 #![feature(ptr_internals, align_offset)]
 #![feature(arbitrary_self_types)]
 #![feature(inclusive_range_methods)]
+#![feature(alloc, allocator_api, global_allocator)]
+#![feature(core_intrinsics)]
 #![cfg_attr(test, feature(box_syntax))]
 #![feature(abi_x86_interrupt)]
+#![feature(compiler_builtins_lib)]
 
 #[cfg(test)]
 #[cfg_attr(test, macro_use)]
 extern crate std;
+
 extern crate rlibc;
+extern crate alloc;
 extern crate volatile;
 extern crate spin;
 extern crate x86_64;
 extern crate array_init; // Used as a workaround until const-generics arrives
 extern crate multiboot2;
 extern crate bit_field;
+extern crate fast_math;
 #[macro_use]
 extern crate bitflags;
 #[macro_use]
 extern crate lazy_static;
 
-use core::mem;
+use core::alloc::{GlobalAlloc, Layout};
+use alloc::string::ToString;
 use drivers::keyboard::{Keyboard, KeyEventType, Ps2Keyboard};
 use drivers::keyboard::keymap;
 use drivers::ps2;
 use terminal::TerminalOutput;
-use memory::bootstrap_allocator;
-use memory::buddy_allocator::{Tree, BLOCKS_IN_TREE, Block};
 
 #[cfg(not(test))]
 mod lang;
@@ -46,19 +51,23 @@ mod log;
 mod util;
 #[macro_use]
 mod color;
-mod io;
-mod interrupts;
 #[macro_use]
 mod terminal;
+mod io;
+mod interrupts;
 mod memory;
 mod drivers;
+
+use memory::heap::Heap;
+
+#[cfg_attr(not(test), global_allocator)]
+pub static HEAP: Heap = Heap::new();
 
 /// Kernel main function
 #[no_mangle]
 pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
     say_hello();
     interrupts::init();
-    keyboard_echo_loop(&mut controller);
 
     // Parse and print mb info
     let mb_info = unsafe { multiboot2::load(multiboot_info_addr) };
@@ -89,7 +98,7 @@ fn say_hello() {
 
     // Print boot message
     println!("Flower kernel boot!");
-    println!("-------------------\n");
+    println!("-------------------");
 
     // Reset colors
     terminal::STDOUT.write().set_color(color!(White on Black))
