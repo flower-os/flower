@@ -34,20 +34,20 @@ impl From<PageSize> for usize {
 }
 
 pub fn init_memory(mb_info: &BootInformation, guard_page_addr: usize) {
-    info!("memory: initialising");
+    info!("mem: initialising");
     let memory_map = mb_info.memory_map_tag()
         .expect("Expected a multiboot2 memory map tag, but it is not present!");
 
     print_memory_info(memory_map);
-    debug!("memory: initialising bootstrap heap");
+    debug!("mem: initialising bootstrap heap");
     setup_bootstrap_heap(mb_info);
-    debug!("memory: initialising pmm");
+    debug!("mem: initialising pmm");
     setup_physical_allocator(mb_info);
-    trace!("memory: setting up guard page");
+    trace!("mem: setting up guard page");
     setup_guard_page(guard_page_addr);
-    debug!("memory: setting up kernel heap");
+    debug!("mem: setting up kernel heap");
     ::HEAP.init();
-    info!("memory: initialised")
+    info!("mem: initialised")
 }
 
 fn print_memory_info(memory_map: &MemoryMapTag) {
