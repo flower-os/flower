@@ -8,7 +8,9 @@ const HEAP_TREE_START: usize = 4 * 1024 * 1024 * 1024;
 const HEAP_START: usize = HEAP_TREE_START + mem::size_of::<[Block; BLOCKS_IN_TREE]>() + 1;
 
 use core::alloc::{GlobalAlloc, Layout, Opaque};
-use core::{iter, cmp, mem, ptr::{self, Unique}, ops::{Deref, DerefMut}, f32};
+use core::{iter, cmp, mem, f32};
+use core::ptr::{self, Unique};
+use core::ops::{Deref, DerefMut};
 use spin::{Once, Mutex};
 use fast_math;
 use util;
@@ -61,7 +63,7 @@ impl Heap {
             for page in 0..pages_to_map {
                 PAGE_TABLES.lock().map(
                     Page::containing_address(HEAP_TREE_START + (page * 4096), PageSize::Kib4),
-                    EntryFlags::from_bits_truncate(0),
+                    EntryFlags::WRITABLE,
                 );
             }
 
@@ -94,7 +96,7 @@ unsafe impl GlobalAlloc for Heap {
                 let ptr = (ptr as usize + HEAP_START) as *mut _;
 
                 // Map ptr page if it isn't already
-                let page_tables = PAGE_TABLES; // What the fuck... This is needed
+                let page_tables = PAGE_TABLES; // This is needed, apparently
                 let mut page_tables = page_tables.lock();
 
                 let mapped = page_tables
@@ -105,7 +107,7 @@ unsafe impl GlobalAlloc for Heap {
                 if !mapped {
                     page_tables.map(
                         Page::containing_address(ptr as usize, PageSize::Kib4),
-                        EntryFlags::from_bits_truncate(0)
+                        EntryFlags::WRITABLE,
                     );
                 }
 

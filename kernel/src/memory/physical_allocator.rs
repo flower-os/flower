@@ -27,6 +27,7 @@ impl<'a> Tree<BootstrapHeapBox<'a, [Block; BLOCKS_IN_TREE]>> {
     /// Creates a new tree. Panics if the bootstrap allocator has not been initialized or
     /// does not have enough memory. Takes a list of usable memory areas, **local to this
     /// tree.**
+    #[cfg(not(test))]
     pub fn new_bootstrap_heap<I>(usable: I) -> Self
         where I: Iterator<Item=Range<usize>> + Clone,
     {

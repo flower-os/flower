@@ -98,12 +98,6 @@ fn setup_physical_allocator(mb_info: &BootInformation) {
 
     // Do round-up division by 2^30 = 1GiB in bytes
     let trees = ((highest_address + (1 << 30) - 1) / (1 << 30)) as u8;
-
-    let bytes_available: usize = memory_map.memory_areas()
-        .map(|area| area.end_address() - area.start_address() - 1)
-        .sum();
-    let gibbibytes_available  = bytes_available as f64 / (1 << 30) as f64;
-
     trace!("Allocating {} trees", trees);
 
     let kernel_area = kernel_area(mb_info).start..BOOTSTRAP_HEAP.end() + 1;

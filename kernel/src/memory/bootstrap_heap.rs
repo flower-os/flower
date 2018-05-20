@@ -20,6 +20,7 @@ pub struct BootstrapHeap(Once<BootstrapAllocator<[Block; BLOCKS_IN_TREE]>>);
 
 impl BootstrapHeap {
     /// Allocates a zeroed object. Panics if bootstrap heap is not initialized
+    #[cfg(not(test))]
     pub unsafe fn allocate_zeroed(&self) -> Option<BootstrapHeapBox<[Block; BLOCKS_IN_TREE]>> {
         self.0.wait().unwrap().allocate_zeroed()
     }
@@ -41,13 +42,9 @@ impl BootstrapHeap {
 #[derive(Debug)]
 pub struct BootstrapAllocator<T> {
     start_addr: usize,
-    objects8: Mutex<[Objects8; OBJECTS8_NUMBER]>,
+    bitmap: Mutex<[u8; OBJECTS8_NUMBER]>,
     _phantom: PhantomData<T>,
 }
-
-/// A bitmap consisting of 8 objects
-#[derive(Debug, Copy, Clone)]
-struct Objects8(u8);
 
 impl<T> BootstrapAllocator<T> {
     pub const fn space_taken() -> usize {
@@ -63,7 +60,7 @@ impl<T> BootstrapAllocator<T> {
     pub const fn new_unchecked(start: usize) -> Self {
         BootstrapAllocator {
             start_addr: start,
-            objects8: Mutex::new([Objects8(0); OBJECTS8_NUMBER]),
+            bitmap: Mutex::new([0; OBJECTS8_NUMBER]),
             _phantom: PhantomData,
         }
     }
@@ -71,23 +68,23 @@ impl<T> BootstrapAllocator<T> {
     /// Set a block to used or not at an index
     #[inline]
     fn set_used(&self, index: usize, used: bool) {
-        let objects8_index = index / 8;
+        let byte_index = index / 8;
         let bit = index % 8;
-        self.objects8.lock()[objects8_index].0.set_bit(bit, used);
+        self.bitmap.lock()[byte_index].set_bit(bit, used);
     }
 
     /// Allocate an object of zeroes and return the address if there is space
     unsafe fn allocate_zeroed<'a>(&'a self) -> Option<BootstrapHeapBox<'a, T>> {
-        for objects8_index in 0..OBJECTS8_NUMBER {
+        for byte_index in 0..OBJECTS8_NUMBER {
             for bit in 0..8 {
-                let mut lock = self.objects8.lock();
-                let objects8 = &mut lock[objects8_index].0;
+                let mut lock = self.bitmap.lock();
+                let byte = &mut lock[byte_index];
 
-                if !objects8.get_bit(bit) {
-                    objects8.set_bit(bit, true);
+                if !byte.get_bit(bit) {
+                    byte.set_bit(bit, true);
                     drop(lock);
 
-                    let ptr = self.start().offset((objects8_index * 8 + bit) as isize);
+                    let ptr = self.start().offset((byte_index * 8 + bit) as isize);
                     *ptr = mem::zeroed();
 
                     return Some(BootstrapHeapBox {

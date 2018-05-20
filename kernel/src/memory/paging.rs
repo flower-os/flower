@@ -48,15 +48,6 @@ impl PageSize {
             Mib2 => 2 * 1024 * 1024,
         }
     }
-
-    fn pot(self) -> u8 {
-        use self::PageSize::*;
-
-        match self {
-            Kib4 => 12,
-            Mib2 => 21,
-        }
-    }
 }
 
 pub struct PageMap {
@@ -88,8 +79,8 @@ impl PageMap {
             p3.and_then(|p3| {
                 // 1GiB page
                 let p3_entry = &p3[page.p3_index()];
-                if let Some(start_address) = p3_entry.physical_address() {
-                    if p3_entry.flags().contains(EntryFlags::HUGE_PAGE | EntryFlags::PRESENT) {
+                if p3_entry.physical_address().is_some() {
+                    if p3_entry.flags().contains(EntryFlags::HUGE_PAGE) {
                         panic!("1 GiB pages are not supported!");
                     }
                 }
@@ -99,7 +90,7 @@ impl PageMap {
 
                     // 2MiB page
                     if let Some(start_frame) = p2_entry.physical_address() {
-                        if p2_entry.flags().contains(EntryFlags::HUGE_PAGE | EntryFlags::PRESENT) {
+                        if p2_entry.flags().contains(EntryFlags::HUGE_PAGE) {
                             // Check that the address is 2MiB aligned
                             assert_eq!(start_frame.0 >> 12 % PAGE_TABLE_ENTRIES, 0);
                             return Some((
@@ -223,6 +214,7 @@ impl Page {
 pub struct PageTableEntry(u64);
 
 impl PageTableEntry {
+    #[cfg(not(test))]
     pub fn is_unused(&self) -> bool {
         self.0 == 0
     }
@@ -319,13 +311,6 @@ pub struct PageTable<L: TableLevel> {
 }
 
 impl<L: TableLevel> PageTable<L> {
-    pub fn new_zeroed() -> Self {
-        PageTable {
-            entries: [PageTableEntry(0); PAGE_TABLE_ENTRIES],
-            _level: PhantomData,
-        }
-    }
-
     pub fn zero(&mut self) {
         for entry in self.entries.iter_mut() {
             entry.set_unused();

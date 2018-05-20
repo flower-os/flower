@@ -36,8 +36,6 @@ extern crate bitflags;
 #[macro_use]
 extern crate lazy_static;
 
-use core::alloc::{GlobalAlloc, Layout};
-use alloc::string::ToString;
 use drivers::keyboard::{Keyboard, KeyEventType, Ps2Keyboard};
 use drivers::keyboard::keymap;
 use drivers::ps2;

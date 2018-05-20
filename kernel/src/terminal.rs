@@ -33,6 +33,7 @@ macro_rules! println {
 }
 
 /// Writes formatted string to stdout, for print macro use
+#[cfg(not(test))]
 pub fn stdout_print(args: fmt::Arguments) {
     use core::fmt::Write;
     STDOUT.write().write_fmt(args).unwrap();

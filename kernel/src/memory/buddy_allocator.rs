@@ -23,7 +23,8 @@ pub const fn blocks_in_tree(levels: u8) -> usize {
     ((1 << levels) - 1) as usize
 }
 
-#[inline]
+#[cfg(test)]
+#[cfg_attr(test, inline)]
 pub const fn blocks_in_level(level: u8) -> usize {
     blocks_in_tree(level + 1) - blocks_in_tree(level)
 }

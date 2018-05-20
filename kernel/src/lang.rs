@@ -1,6 +1,5 @@
 //! Lang items
 
-use core::f32;
 use ::halt;
 use color::{Color, ColorPair};
 use core::fmt::{self, Write};
