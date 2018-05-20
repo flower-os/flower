@@ -9,10 +9,6 @@ use spin::{Once, Mutex};
 use bit_field::BitField;
 use super::{physical_allocator::BLOCKS_IN_TREE, buddy_allocator::Block};
 
-/// How many 8 heap objects to allocate at maximum.
-// TODO two stage bootstrap -- allocate 1gib on the bootstrap heap and the rest on kernel heap
-const OBJECTS8_NUMBER: usize = 8; // 8 gives us 64GiB while taking 32mib
-
 pub static BOOTSTRAP_HEAP: BootstrapHeap = BootstrapHeap(Once::new());
 
 /// A holding struct for the bootstrap heap.
@@ -42,13 +38,13 @@ impl BootstrapHeap {
 #[derive(Debug)]
 pub struct BootstrapAllocator<T> {
     start_addr: usize,
-    bitmap: Mutex<[u8; OBJECTS8_NUMBER]>,
+    bitmap: Mutex<u8>,
     _phantom: PhantomData<T>,
 }
 
 impl<T> BootstrapAllocator<T> {
     pub const fn space_taken() -> usize {
-        mem::size_of::<T>() * OBJECTS8_NUMBER * 8
+        mem::size_of::<T>() * 8
     }
 
     pub fn start(&self) -> *mut T {
@@ -60,7 +56,7 @@ impl<T> BootstrapAllocator<T> {
     pub const fn new_unchecked(start: usize) -> Self {
         BootstrapAllocator {
             start_addr: start,
-            bitmap: Mutex::new([0; OBJECTS8_NUMBER]),
+            bitmap: Mutex::new(0),
             _phantom: PhantomData,
         }
     }
@@ -68,30 +64,26 @@ impl<T> BootstrapAllocator<T> {
     /// Set a block to used or not at an index
     #[inline]
     fn set_used(&self, index: usize, used: bool) {
-        let byte_index = index / 8;
         let bit = index % 8;
-        self.bitmap.lock()[byte_index].set_bit(bit, used);
+        self.bitmap.lock().set_bit(bit, used);
     }
 
     /// Allocate an object of zeroes and return the address if there is space
     unsafe fn allocate_zeroed<'a>(&'a self) -> Option<BootstrapHeapBox<'a, T>> {
-        for byte_index in 0..OBJECTS8_NUMBER {
-            for bit in 0..8 {
-                let mut lock = self.bitmap.lock();
-                let byte = &mut lock[byte_index];
+        for bit in 0..8 {
+            let mut byte = self.bitmap.lock();
 
-                if !byte.get_bit(bit) {
-                    byte.set_bit(bit, true);
-                    drop(lock);
+            if !byte.get_bit(bit) {
+                byte.set_bit(bit, true);
+                drop(byte);
 
-                    let ptr = self.start().offset((byte_index * 8 + bit) as isize);
-                    *ptr = mem::zeroed();
+                let ptr = self.start().offset((bit) as isize);
+                *ptr = mem::zeroed();
 
-                    return Some(BootstrapHeapBox {
-                        ptr: Unique::new_unchecked(ptr),
-                        allocator: self,
-                    });
-                }
+                return Some(BootstrapHeapBox {
+                    ptr: Unique::new_unchecked(ptr),
+                    allocator: self,
+                });
             }
         }
 
@@ -193,9 +185,9 @@ mod test {
 
         let ptr = setup_heap();
         let bitmap = BootstrapAllocator::<u8>::new_unchecked(ptr as usize);
-        let mut v = Vec::with_capacity(OBJECTS8_NUMBER * 8);
+        let mut v = Vec::with_capacity(8);
 
-        for i in 0..(OBJECTS8_NUMBER * 8) {
+        for i in 0..8 {
             let obj = unsafe { bitmap.allocate_zeroed().unwrap() };
             assert!(ptr::eq(obj.ptr.as_ptr(), (ptr as *mut u8).wrapping_offset(i as isize)));
             assert_eq!(*obj, 0);
@@ -212,9 +204,9 @@ mod test {
         let ptr = setup_heap();
 
         let bitmap = BootstrapAllocator::<u8>::new_unchecked(ptr as usize);
-        let mut v = Vec::with_capacity(OBJECTS8_NUMBER * 8);
+        let mut v = Vec::with_capacity(8);
 
-        for _ in 0..(OBJECTS8_NUMBER * 8) {
+        for _ in 0..8 {
             let addr = unsafe { bitmap.allocate_zeroed().unwrap() };
             v.push(addr); // Stop it from being dropped
         }

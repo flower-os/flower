@@ -12,11 +12,10 @@
 #![feature(ptr_internals, align_offset)]
 #![feature(arbitrary_self_types)]
 #![feature(inclusive_range_methods)]
-#![feature(alloc, allocator_api, global_allocator)]
-#![feature(core_intrinsics)]
-#![cfg_attr(test, feature(box_syntax))]
+#![feature(alloc, allocator_api, global_allocator, box_syntax)]
 #![feature(abi_x86_interrupt)]
 #![feature(compiler_builtins_lib)]
+#![feature(impl_trait)]
 
 #[cfg(test)]
 #[cfg_attr(test, macro_use)]
