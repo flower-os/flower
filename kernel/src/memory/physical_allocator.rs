@@ -44,7 +44,10 @@ impl<'a> PhysicalAllocator<'a> {
         allocator
     }
 
-    /// Initialize the allocator's first 8 gibbibytes
+    /// Initialize the allocator's first 8 gibbibytes. The PMM has a two stage init -- in the first
+    /// stage, the first 8 GiBs are set up, using the bootstrap heap. This is enough to set up the
+    /// main kernel heap. In the second stage, the rest of the GiBs are set up, using the kernel
+    /// heap.
     pub fn init_prelim<I>(&self, gibbibytes: u8, usable: I)
         where I: Iterator<Item=Range<usize>> + Clone
     {
@@ -84,7 +87,7 @@ impl<'a> PhysicalAllocator<'a> {
         });
     }
 
-    /// Initialise the rest of the allocator's gibbibytes
+    /// Initialise the rest of the allocator's gibbibytes. See [PhysicalAllocator.init_prelim].
     pub fn init_rest<I>(&self, gibbibytes: u8, usable: I)
         where I: Iterator<Item=Range<usize>> + Clone
     {

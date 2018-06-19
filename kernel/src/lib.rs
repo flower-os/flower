@@ -65,11 +65,7 @@ pub static HEAP: Heap = Heap::new();
 pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
     say_hello();
     interrupts::init();
-
-    // Parse and print mb info
     let mb_info = unsafe { multiboot2::load(multiboot_info_addr) };
-
-    // Init memory
     memory::init_memory(&mb_info, guard_page_addr);
 
     // Initialize the PS/2 controller and run the keyboard echo loop
