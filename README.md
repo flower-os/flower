@@ -7,7 +7,7 @@
 You will need:
  - [rustup](https://rustup.rs) and a nightly Rust (if yours doesn't work, then update to latest) build to compile;
  - The `rust-src` component from rustup;
- - [Xargo](https://github.com/japaric/xargo);
+ - cargo-xbuild (`cargo install` it);
  - [nasm](http://www.nasm.us/);
  - ld;
  - [qemu](https://www.qemu.org/) (to run in a virtual machine);
@@ -18,7 +18,8 @@ You will need:
 ## Building
 
 You can make the iso with `make iso`, and launch qemu and run it with `make run`. To enable debug symbols,
-add `debug=1` to the make command.
+add `debug=1` to the make command. If this does not work, try `make clean`ing and checking you're on the latest 
+rust/cargo-xbuild version. If this does still not work, then open an issue.
 
 You can also get builds from [Flower's CI/CD](https://ci.gegy1000.net/job/Flower/).
 
