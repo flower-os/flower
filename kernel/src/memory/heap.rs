@@ -12,7 +12,6 @@ use core::{iter, cmp, mem, f32};
 use core::ptr::{self, Unique};
 use core::ops::{Deref, DerefMut};
 use spin::{Once, Mutex};
-use fast_math;
 use util;
 use super::paging::{PAGE_TABLES, Page, PageSize, EntryFlags};
 
@@ -83,11 +82,7 @@ unsafe impl GlobalAlloc for Heap {
     unsafe fn alloc(&self, layout: Layout) -> *mut Opaque {
         let mut tree = self.tree.wait().unwrap().lock();
 
-        let order = fast_math::log2_raw(layout.size() as f32);
-        if order == f32::NAN {
-            return 0 as *mut _;
-        }
-        let order = util::ceil(order) as u8;
+        let order = order(layout.size());
 
         if order > MAX_ORDER {
             0 as *mut _
@@ -120,8 +115,7 @@ unsafe impl GlobalAlloc for Heap {
 
     unsafe fn dealloc(&self, ptr: *mut Opaque, layout: Layout) {
         if !ptr.is_null() {
-            let order = fast_math::log2_raw(layout.size() as f32);
-            let order = util::ceil(order) as u8;
+            let order = order(layout.size());
             let ptr = ptr as usize - HEAP_START;
 
             self.tree.wait().unwrap().lock().deallocate(ptr as *mut _, order);
@@ -129,17 +123,8 @@ unsafe impl GlobalAlloc for Heap {
     }
 
     unsafe fn realloc(&self, ptr: *mut Opaque, layout: Layout, new_size: usize) -> *mut Opaque {
-        let old_order = fast_math::log2_raw(layout.size() as f32);
-        if old_order == f32::NAN {
-            return 0 as *mut _;
-        }
-        let old_order = util::ceil(old_order) as u8;
-
-        let new_order =  fast_math::log2_raw(new_size as f32);
-        if new_order == f32::NAN {
-            return 0 as *mut _;
-        }
-        let new_order = util::ceil(new_order) as u8;
+        let old_order = order(layout.size());
+        let new_order =  order(new_size);
 
         // See if the size is still the same order. If so, do nothing
         if old_order == new_order {
@@ -159,4 +144,15 @@ unsafe impl GlobalAlloc for Heap {
 
         new_ptr
     }
+}
+
+/// Calculates the integer log2 of the given input
+fn order(i: usize) -> u8 {
+    let mut i = i;
+    let mut o = 0;
+    while i > 0 {
+        i >>= 1;
+        o += 1;
+    }
+    o
 }

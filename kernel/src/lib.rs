@@ -29,7 +29,6 @@ extern crate x86_64;
 extern crate array_init; // Used as a workaround until const-generics arrives
 extern crate multiboot2;
 extern crate bit_field;
-extern crate fast_math;
 #[macro_use]
 extern crate bitflags;
 #[macro_use]
