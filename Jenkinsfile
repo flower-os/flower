@@ -21,6 +21,7 @@ pipeline {
                     |export RUST_TARGET_PATH=\$(pwd)/kernel
                     |rustup override add nightly
                     |rustup component add rust-src
+                    |make clean
                     |make iso""".stripMargin()
             }
             post {

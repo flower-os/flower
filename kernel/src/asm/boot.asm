@@ -15,6 +15,9 @@ start:
     ; Disable interrupts
     cli
 
+    ; Save multiboot2 information structure into edi to be passed into kmain
+    mov edi, ebx
+
     ; Checks
     call check_multiboot ; Check if booted correctly
     call check_cpuid  ; Check if cpuid supported
@@ -99,24 +102,66 @@ setup_paging:
     or eax, 0b11
     mov [p4_table + 0], eax ; set 1st entry of p4 table to 1st entry of p3 table
     
-    ; Point entry #1 of page 3 to entry #1 of page 2
-    mov eax, p2_table + 0 ; set eax to 1st entry of p3 table
-    or eax, 0b11
-    mov [p3_table + 0], eax ; set 1st entry of p4 table to 1st entry of p3 table
-    
+    ; Map p3 table
     mov ecx, 0
-    .map_p2_table_loop:
-        
-        mov eax, 0x200000 ; 2mib (page size) TODO 4kib page size?
+    .map_p3_table_loop:
+        ; set eax to nth p2 table
+        mov eax, ecx
+        mov ebx, 4096
+        mul ebx
+        mov ebx, p2_tables
+        add eax, ebx
+
+        or eax, 0b11 ; present & writable
+        mov [p3_table + ecx * 8], eax ; set 1st entry of p4 table to 1st entry of p3 table
+        inc ecx
+        cmp ecx, 4
+        jne .map_p3_table_loop
+
+    ; Map p2 tables
+    mov ecx, 0
+    .map_p2_tables_loop:
+
+        mov eax, 0x200000 ; 2mib (page size)
         mul ecx ; multiply by counter
         or eax, 0b10000011 ; first 1 is huge page bit
-        
-        mov [p2_table + ecx * 8], eax
-        
+
+        mov [p2_tables + ecx * 8], eax
+
+        inc ecx
+        cmp ecx, 512 * 4 ; map all 4 at once
+        jne .map_p2_tables_loop
+
+    ; Set the area with the guard page to use 4kib pages
+    mov eax, guard_page_begin
+    shr eax, 21 ; Get 2mib page base
+    mov edx, eax
+    mov ecx, eax
+
+    mov eax, p1_table
+    or eax, 0b11
+    mov [p2_tables + ecx * 8], eax
+
+    ; Map the guard page's page table
+    mov ecx, 0
+    .map_guard_table_loop:
+
+        mov eax, 0x1000 ; 4kib (page size)
+        mul ecx ; multiply by counter
+        add eax, edx
+        or eax, 0b11
+
+        mov [p1_table + ecx * 8], eax
+
         inc ecx
         cmp ecx, 512
-        jne .map_p2_table_loop
-    
+        jne .map_guard_table_loop
+
+    ; Recursively map P4 table
+    mov eax, p4_table
+    or eax, 0b11 ; present & writable
+    mov [p4_table + 511 * 8], eax
+
     ; Set page table address to cr3
     mov eax, p4_table ; cr3 must be mov'd to from another register
     mov cr3, eax 
@@ -131,7 +176,7 @@ setup_paging:
     rdmsr
     or eax, 1 << 8
     wrmsr
-    
+
     ; Enable paging
     mov eax, cr0
     or eax, (1 << 31)
@@ -223,12 +268,24 @@ p4_table:
     resb 4096
 p3_table:
     resb 4096
-p2_table:
+p2_tables: ; 4 p2 tables
+    resb 4096
+    resb 4096
+    resb 4096
+    resb 4096
+p1_table: ; Used for guard page area
     resb 4096
 
+section .guard_page
+align 4096
+
+guard_page_begin:
+times 4096 db 0
+
+section .stack
 ; Stack grows the other way
 stack_bottom:
-    resb 1024 * 64 ; 64 kilobytes
+    times 1024 * 64 db 0 ; 64 kilobytes
 stack_top:
 
 section .rodata
@@ -255,10 +312,17 @@ long_mode_start:
     mov es, ax
     mov fs, ax
     mov gs, ax
-    
+
     ; Setup stack
     mov esp, stack_top
-    
+
+    ; Clear top 32 bits of edi
+    mov rax, 0xffffffff
+    and rdi, rax
+
+    ; Pass guard page address to kmain through rsi
+    mov rsi, guard_page_begin
+
     call kmain
 
     hlt

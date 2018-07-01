@@ -19,19 +19,21 @@ use core::result::Result;
 use drivers::vga;
 use spin::RwLock;
 
-// Macros up here to allow use in submodules for debugging
+#[cfg(not(test))]
 macro_rules! print {
     ($($arg:tt)*) => ({
         $crate::terminal::stdout_print(format_args!($($arg)*));
     });
 }
 
+#[cfg(not(test))]
 macro_rules! println {
     ($fmt:expr) => (print!(concat!($fmt, "\n")));
     ($fmt:expr, $($arg:tt)*) => (print!(concat!($fmt, "\n"), $($arg)*));
 }
 
 /// Writes formatted string to stdout, for print macro use
+#[cfg(not(test))]
 pub fn stdout_print(args: fmt::Arguments) {
     use core::fmt::Write;
     STDOUT.write().write_fmt(args).unwrap();
