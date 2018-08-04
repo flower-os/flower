@@ -9,6 +9,9 @@ use drivers::vga::VgaWriter;
 use spin::RwLock;
 use terminal::{Stdout, TerminalOutput};
 
+// A note on the `#[no_mangle]`s:
+// Apparently, removing them makes it link-error with undefined symbols, so we include them
+
 #[lang = "eh_personality"]
 #[no_mangle]
 #[allow(private_no_mangle_fns)] // publicity is not required, but no mangle is

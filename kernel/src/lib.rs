@@ -22,6 +22,7 @@ extern crate std;
 extern crate rlibc;
 extern crate alloc;
 extern crate volatile;
+extern crate acpi;
 extern crate spin;
 extern crate x86_64;
 extern crate array_init; // Used as a workaround until const-generics arrives
@@ -51,6 +52,7 @@ mod io;
 mod interrupts;
 mod memory;
 mod drivers;
+mod acpi_impl;
 
 use memory::heap::Heap;
 
@@ -64,6 +66,7 @@ pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
     interrupts::init();
     let mb_info = unsafe { multiboot2::load(multiboot_info_addr) };
     memory::init_memory(&mb_info, guard_page_addr);
+    acpi_impl::acpi_init();
 
     // Initialize the PS/2 controller and run the keyboard echo loop
     let mut controller = ps2::CONTROLLER.lock();
