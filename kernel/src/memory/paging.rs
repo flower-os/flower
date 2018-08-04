@@ -6,7 +6,7 @@ use core::{marker::PhantomData, convert::From, ops::{Index, IndexMut}, ptr::Uniq
 use super::physical_allocator::PHYSICAL_ALLOCATOR;
 
 const PAGE_TABLE_ENTRIES: usize = 512;
-pub const PAGE_TABLES: Mutex<PageMap> = Mutex::new(PageMap::new());
+pub static PAGE_TABLES: Mutex<PageMap> = Mutex::new(PageMap::new());
 
 #[derive(Debug, Eq, PartialEq, Copy, Clone, Ord, PartialOrd)]
 pub struct PhysicalAddress(pub usize);

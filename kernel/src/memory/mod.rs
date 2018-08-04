@@ -1,9 +1,11 @@
+//! All things to do with memory
+
 use core::convert::From;
 use core::{iter, mem};
 
 #[macro_use]
 mod buddy_allocator;
-mod paging;
+pub mod paging;
 pub mod heap;
 pub mod bootstrap_heap;
 pub mod physical_allocator;
@@ -13,6 +15,7 @@ use multiboot2::{BootInformation, MemoryMapTag};
 use self::physical_allocator::{PHYSICAL_ALLOCATOR, BLOCKS_IN_TREE};
 use self::buddy_allocator::Block;
 use self::bootstrap_heap::BOOTSTRAP_HEAP;
+use util;
 
 /// Represents the size of a page
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
@@ -101,7 +104,7 @@ fn setup_physical_allocator_prelim(
         .expect("No usable physical memory available!");
 
     // Do round-up division by 2^30 = 1GiB in bytes
-    let trees = ((highest_address + (1 << 30) - 1) / (1 << 30)) as u8;
+    let trees = util::round_up_divide(highest_address as u64, 1 << 30) as u8;
     trace!("Allocating {} trees", trees);
 
     let kernel_area = kernel_area(mb_info).start..BOOTSTRAP_HEAP.end() + 1;
