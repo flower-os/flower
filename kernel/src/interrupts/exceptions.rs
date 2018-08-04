@@ -52,7 +52,7 @@ pub extern "x86-interrupt" fn general_protection_fault(stack_frame: &mut Excepti
 }
 
 pub extern "x86-interrupt" fn page_fault(stack_frame: &mut ExceptionStackFrame, code: PageFaultErrorCode) {
-    panic!("cpuex: page fault fault {:?}\n{:#?}", code, stack_frame);
+    panic!("cpuex: page fault {:?}\n{:#?}", code, stack_frame);
 }
 
 pub extern "x86-interrupt" fn x87_floating_point(stack_frame: &mut ExceptionStackFrame) {
