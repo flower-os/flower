@@ -76,7 +76,7 @@ impl Controller {
 
     /// Initializes this PS2 controller
     pub fn initialize(&mut self) -> Result<(), Ps2Error> {
-        info!("ps2c: initializing");
+        info!("ps2c: initialising");
 
         self.prepare_devices()?;
         debug!("ps2c: disabled devices");
