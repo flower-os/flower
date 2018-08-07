@@ -34,14 +34,16 @@ SECTIONS {
         *(.bss .bss.*)
     }
 
-    .guard_page :
-    {
-       /* Make sure the guard page is before the stack and is not gc'd */
-        KEEP(*(.guard_page))
-    }
+    /* TODO where put guard page */
 
     .stack :
     {
         *(.stack)
+    }
+
+    .guard_page :
+    {
+       /* Make sure the guard page is before the stack and is not gc'd */
+        KEEP(*(.guard_page))
     }
 }

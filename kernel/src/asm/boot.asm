@@ -280,12 +280,12 @@ section .guard_page
 align 4096
 
 guard_page_begin:
-times 4096 db 0
+times 4096 db 0xAA
 
 section .stack
 ; Stack grows the other way
 stack_bottom:
-    times 1024 * 64 db 0 ; 64 kilobytes
+    times 1024 * 256 db 0 ; 256 kilobytes
 stack_top:
 
 section .rodata
