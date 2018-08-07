@@ -182,16 +182,18 @@ macro_rules! buddy_allocator_bitmap_tree {
                 use $crate::memory::buddy_allocator::flat_tree;
                 use ::core::cmp;
 
-                debug_assert!(order <= MAX_ORDER);
+                assert!(order <= MAX_ORDER, "Block order > maximum order!");
 
                 let level = MAX_ORDER - order;
                 let level_offset = blocks_in_tree(level);
                 let index = level_offset + ((ptr as usize) >> (order + $BASE_ORDER)) + 1;
 
-                debug_assert_eq!(
+                assert!(index < BLOCKS_IN_TREE, "Block index {} out of bounds!", index);
+                assert_eq!(
                     unsafe { self.block(index - 1).order_free },
                     0,
-                    "Block to free must be used!"
+                    "Block to free (index {}) must be used!",
+                    index,
                 );
 
                 // Only if order isn't 0 we need to check the children, as blocks of order 0 have
@@ -208,10 +210,11 @@ macro_rules! buddy_allocator_bitmap_tree {
                     unsafe {
                         let left = self.block(right_child - 1).order_free;
                         let right = self.block(right_child).order_free;
-
                         if (left == order) && (right == order) {
+
                             self.block_mut(index - 1).order_free = order + 1;
                         } else {
+
                             debug_assert!(left != 0 && right != 0);
                             self.block_mut(index - 1).order_free = cmp::max(left, right);
                         }

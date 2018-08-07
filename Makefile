@@ -13,12 +13,16 @@ endif
 ifeq ($(debug), 1)
     nasm_flags := -f elf64 -F dwarf -g
     build_type := debug
-    qemu_flags := -s -S
+    qemu_flags := -s
     cargo_flags := --features $(log_level)
 else
     nasm_flags := -f elf64
     cargo_flags := --release --features $(log_level)
     build_type := release
+endif
+
+ifeq ($(wait_for_gdb), 1)
+    qemu_flags := -s -S
 endif
 
 linker_script := cfg/linker.ld
@@ -51,7 +55,7 @@ iso: $(grub_iso)
 
 # Run with qemu
 run: $(grub_iso)
-	@qemu-system-x86_64 -cdrom $(grub_iso) $(qemu_flags)
+	@qemu-system-x86_64 -cdrom $(grub_iso) $(qemu_flags) -m 128M
 
 # Clean build dir
 clean:

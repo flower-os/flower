@@ -18,7 +18,13 @@ impl BootstrapHeap {
     /// Allocates a zeroed object. Panics if bootstrap heap is not initialized
     #[cfg(not(test))]
     pub unsafe fn allocate_zeroed(&self) -> Option<BootstrapHeapBox<[Block; BLOCKS_IN_TREE]>> {
-        self.0.wait().unwrap().allocate_zeroed()
+        trace!("Trace 5");
+        // TODO self.0.wait().unwrap().allocate_zeroed()
+        let s = self.0.wait();
+        trace!("Trace 6");
+        let s = s.unwrap();
+        trace!("Trace 7");
+        s.allocate_zeroed()
     }
 
     /// Initialises the bootstrap heap with a begin address.
@@ -70,8 +76,11 @@ impl<T> BootstrapAllocator<T> {
 
     /// Allocate an object of zeroes and return the address if there is space
     unsafe fn allocate_zeroed<'a>(&'a self) -> Option<BootstrapHeapBox<'a, T>> {
+        trace!("Trace 8");
         for bit in 0..8 {
+            trace!("Trace 9");
             let mut byte = self.bitmap.lock();
+            trace!("Trace 10");
 
             if !byte.get_bit(bit) {
                 byte.set_bit(bit, true);

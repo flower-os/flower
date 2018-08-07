@@ -20,8 +20,10 @@
 extern crate std;
 
 extern crate rlibc;
+#[cfg_attr(not(test), macro_use)]
 extern crate alloc;
 extern crate volatile;
+extern crate log as log_facade;
 extern crate acpi;
 extern crate spin;
 extern crate x86_64;
@@ -41,11 +43,11 @@ use terminal::TerminalOutput;
 #[cfg(not(test))]
 mod lang;
 #[macro_use]
-mod log;
-#[macro_use]
 mod util;
 #[macro_use]
 mod color;
+#[macro_use]
+mod log;
 #[macro_use]
 mod terminal;
 mod io;
@@ -63,9 +65,17 @@ pub static HEAP: Heap = Heap::new();
 #[no_mangle]
 pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
     say_hello();
+    log::init();
     interrupts::init();
     let mb_info = unsafe { multiboot2::load(multiboot_info_addr) };
     memory::init_memory(&mb_info, guard_page_addr);
+
+    // TODO
+    let s = ::alloc::string::String::from("Abcs");
+    println!("{}", format!("xyz"));
+
+    // TODO
+
     acpi_impl::acpi_init();
 
     // Initialize the PS/2 controller and run the keyboard echo loop

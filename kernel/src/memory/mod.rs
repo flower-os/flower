@@ -17,7 +17,7 @@ use self::buddy_allocator::Block;
 use self::bootstrap_heap::BOOTSTRAP_HEAP;
 use util;
 
-/// Represents the size of a page
+/// Represents the size of a page.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 enum PageSize {
     Kib4,
@@ -42,16 +42,22 @@ pub fn init_memory(mb_info: &BootInformation, guard_page_addr: usize) {
         .expect("Expected a multiboot2 memory map tag, but it is not present!");
 
     print_memory_info(memory_map);
-    debug!("mem: initialising bootstrap heap");
-    setup_bootstrap_heap(mb_info);
-    debug!("mem: initialising pmm (1/2)");
-    let (gibbibytes, usable) = setup_physical_allocator_prelim(mb_info);
+
     trace!("mem: setting up guard page");
     setup_guard_page(guard_page_addr);
+
+    debug!("mem: initialising bootstrap heap");
+    setup_bootstrap_heap(mb_info);
+
+    debug!("mem: initialising pmm (1/2)");
+    let (gibbibytes, usable) = setup_physical_allocator_prelim(mb_info);
+
     debug!("mem: setting up kernel heap");
     ::HEAP.init();
+
     debug!("mem: initialising pmm (2/2)");
     setup_physical_allocator_rest(gibbibytes, usable);
+
     info!("mem: initialised")
 }
 
@@ -95,6 +101,7 @@ fn setup_bootstrap_heap(mb_info: &BootInformation) {
 fn setup_physical_allocator_prelim(
     mb_info: &BootInformation
 ) -> (u8, impl Iterator<Item=Range<usize>> + Clone) {
+    trace!("Trace 1");
     let memory_map = mb_info.memory_map_tag()
         .expect("Expected a multiboot2 memory map tag, but it is not present!");
 
@@ -121,6 +128,9 @@ fn setup_physical_allocator_prelim(
             iter::once(first).chain(iter::once(second)).filter_map(|i| i)
         });
 
+    // TODO
+    trace!("prelim init physical alocator");
+
     PHYSICAL_ALLOCATOR.init_prelim(
         trees,
         usable_areas.clone(),
@@ -141,7 +151,7 @@ fn setup_physical_allocator_rest<I>(gibbibytes: u8, usable_areas: I)
 fn setup_guard_page(addr: usize) {
     use self::paging::*;
 
-    PAGE_TABLES.lock().unmap(Page::containing_address(addr, PageSize::Kib4));
+    PAGE_TABLES.lock().unmap(Page::containing_address(addr, PageSize::Kib4), false);
 }
 
 fn kernel_area(mb_info: &BootInformation) -> Range<usize> {

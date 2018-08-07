@@ -56,13 +56,18 @@ impl<'a> PhysicalAllocator<'a> {
                 mem::uninitialized()
             };
 
+            trace!("Call once"); // TODO
+
             for (i, slot) in trees.iter_mut().enumerate() {
                 if i >= gibbibytes as usize || i >= 8 {
+                    trace!("Trace 2");
                     unsafe { ptr::write(slot as *mut _, Mutex::new(None)) };
                 } else {
+                    trace!("Trace 3");
                     let usable = Self::localize(i as u8, usable.clone());
 
                     unsafe {
+                        trace!("Trace 4");
                         #[cfg(not(test))]
                         let tree = Tree::new(
                             usable,
@@ -78,6 +83,7 @@ impl<'a> PhysicalAllocator<'a> {
                             TreeBox::Heap(box mem::uninitialized()),
                         );
 
+                        trace!("Trace omegA");
                         ptr::write(slot as *mut _, Mutex::new(Some(tree)));
                     }
                 }
@@ -108,6 +114,7 @@ impl<'a> PhysicalAllocator<'a> {
         where I: Iterator<Item=Range<usize>> + Clone
     {
         (&usable).clone()
+//            .inspect(|_| {panic!();}) // TODO
             .filter_map(move |range| {
                 let gib = ((gib as usize) << 30)..((gib as usize + 1 << 30) + 1);
 

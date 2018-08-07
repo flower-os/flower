@@ -100,8 +100,9 @@ impl Heap {
         if ptr.is_none() { return 0 as *mut _ }
         let ptr = (ptr.unwrap() as usize + HEAP_START) as *mut u8;
 
-        // Map pages
-        for page in 0..(1 << order) / 4096 {
+        // Map pages that must be mapped
+        // 6 is base order so `1 << (order + 6)`
+        for page in 0..util::round_up_divide(1u64 << (order + 6), 4096) as usize {
             let page_addr = ptr as usize + (page * 4096);
             PAGE_TABLES.lock().map_to(
                 Page::containing_address(page_addr, PageSize::Kib4),
@@ -148,15 +149,27 @@ unsafe impl GlobalAlloc for Heap {
         ptr
     }
 
+    // TODO dealloc_special so we don't free reserved mem -- or rather a flag for reserved mem TODO
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         if !ptr.is_null() {
             let order = order(layout.size());
+
+            assert!(
+                ptr as usize >= HEAP_START &&
+                    (ptr as usize) < (HEAP_START + (1 << 30)),
+                "Heap object {:?} pointer not in heap!",
+                ptr,
+            );
+
             let ptr = ptr as usize - HEAP_START;
 
+            // TODO
+            trace!("Freeing ptr {}", ptr);
             self.tree.wait().unwrap().lock().deallocate(ptr as *mut _, order);
 
             // There will only be pages to unmap which totally contained this allocation if this
             // allocation was larger or equal to the size of a page
+            // TODO NO: if it happened to be on its own page we must unmap too
             if order < 12 - 6  { // log2(4096) - base order
                 return;
             }
@@ -164,9 +177,12 @@ unsafe impl GlobalAlloc for Heap {
             // Unmap pages that have were only used for this alloc
             // 6 is base order so `1 << (order + 6)`
             for page in 0..util::round_up_divide(1u64 << (order + 6), 4096) as usize {
-                let page_addr = ptr as usize + (page * 4096);
+                let page_addr = ptr as usize /* TODO use global ptr */ + (page * 4096);
 
-                PAGE_TABLES.lock().unmap(Page::containing_address(page_addr, PageSize::Kib4));
+                PAGE_TABLES.lock().unmap(
+                    Page::containing_address(page_addr, PageSize::Kib4),
+                    true
+                );
             }
         }
     }
