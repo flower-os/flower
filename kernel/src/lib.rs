@@ -16,6 +16,8 @@
 #![feature(abi_x86_interrupt)]
 #![feature(compiler_builtins_lib)]
 #![feature(impl_trait)]
+#![feature(panic_implementation)]
+#![feature(panic_info_message)]
 
 #[cfg(test)]
 #[cfg_attr(test, macro_use)]
