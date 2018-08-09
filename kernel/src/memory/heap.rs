@@ -7,12 +7,11 @@ const HEAP_TREE_START: usize = 4 * 1024 * 1024 * 1024;
 // We add 1 because the size of the blocks in tree is a power of two - 1 and we want to be aligned
 const HEAP_START: usize = HEAP_TREE_START + mem::size_of::<[Block; BLOCKS_IN_TREE]>() + 1;
 
-use core::alloc::{GlobalAlloc, Layout, Opaque};
-use core::{iter, cmp, mem, f32};
+use core::alloc::{GlobalAlloc, Layout};
+use core::{iter, cmp, mem};
 use core::ptr::{self, Unique};
 use core::ops::{Deref, DerefMut};
 use spin::{Once, Mutex};
-use util;
 use super::paging::{PAGE_TABLES, Page, PageSize, EntryFlags};
 
 buddy_allocator_bitmap_tree!(LEVEL_COUNT = 25, BASE_ORDER = 6);
@@ -79,7 +78,7 @@ impl Heap {
 }
 
 unsafe impl GlobalAlloc for Heap {
-    unsafe fn alloc(&self, layout: Layout) -> *mut Opaque {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         let mut tree = self.tree.wait().unwrap().lock();
 
         let order = order(layout.size());
@@ -113,7 +112,7 @@ unsafe impl GlobalAlloc for Heap {
         }
     }
 
-    unsafe fn dealloc(&self, ptr: *mut Opaque, layout: Layout) {
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         if !ptr.is_null() {
             let order = order(layout.size());
             let ptr = ptr as usize - HEAP_START;
@@ -122,7 +121,7 @@ unsafe impl GlobalAlloc for Heap {
         }
     }
 
-    unsafe fn realloc(&self, ptr: *mut Opaque, layout: Layout, new_size: usize) -> *mut Opaque {
+    unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
         let old_order = order(layout.size());
         let new_order =  order(new_size);
 

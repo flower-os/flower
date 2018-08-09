@@ -2,8 +2,9 @@
 
 use ::halt;
 use color::{Color, ColorPair};
-use core::fmt::{self, Write};
+use core::fmt::Write;
 use core::panic::PanicInfo;
+use core::alloc::Layout;
 use drivers::vga::VgaWriter;
 use spin::RwLock;
 use terminal::{Stdout, TerminalOutput};
@@ -42,6 +43,6 @@ extern fn panic_fmt(info: &PanicInfo) -> ! {
 #[lang = "oom"]
 #[no_mangle]
 #[allow(private_no_mangle_fns)] // publicity is not required, but no mangle is
-extern fn oom() -> ! {
+extern fn oom(_layout: Layout) -> ! {
     panic!("Ran out of kernel heap memory!");
 }
