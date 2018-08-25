@@ -22,8 +22,7 @@ multiboot2 = { git = "https://github.com/Restioson/multiboot2-elf64", branch = "
 bit_field = "0.9.0"
 log = "0.4.3"
 static_assertions = "0.2.5"
-#acpi = { git = "https://github.com/Restioson/acpi", rev = "24c63e26" }
-acpi = { path = "../../acpi" }
+acpi = { git = "https://github.com/Restioson/acpi", branch = "fixes" }
 
 [dependencies.arrayvec]
 version = "0.4.7"
