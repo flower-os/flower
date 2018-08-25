@@ -94,7 +94,7 @@ const fn log_level() -> Level {
 
 impl Log for Logger {
     fn enabled(&self, metadata: &Metadata) -> bool {
-        metadata.level() >= log_level()
+        metadata.level() <= log_level()
     }
 
     fn log(&self, record: &Record) {

@@ -60,13 +60,14 @@ impl Heap {
             // Map pages for the tree to use for accounting info
             let pages_to_map = util::round_up_divide(
                 mem::size_of::<[Block; BLOCKS_IN_TREE]>() as u64,
-                4096
+                4 * 1024,
             );
 
             for page in 0..pages_to_map as usize {
-                PAGE_TABLES.lock().map(
+                let mut table = PAGE_TABLES.lock();
+                table.map(
                     Page::containing_address(HEAP_TREE_START + (page * 4096), PageSize::Kib4),
-                    EntryFlags::WRITABLE,
+                    EntryFlags::from_bits_truncate(0),
                 );
             }
 
@@ -86,7 +87,7 @@ impl Heap {
     ///
     /// Note: `physical_begin_frame` is the frame number of the beginning physical frame to allocate
     /// memory from (i.e address / 4096).
-    pub fn alloc_specific(
+    pub unsafe fn alloc_specific(
         &self,
         physical_begin_frame: usize,
         frames: usize,
@@ -97,6 +98,7 @@ impl Heap {
         if order > MAX_ORDER { return 0 as *mut _ }
 
         let ptr = tree.allocate(order);
+
         if ptr.is_none() { return 0 as *mut _ }
         let ptr = (ptr.unwrap() as usize + HEAP_START) as *mut u8;
 
@@ -107,11 +109,44 @@ impl Heap {
             PAGE_TABLES.lock().map_to(
                 Page::containing_address(page_addr, PageSize::Kib4),
                 PhysicalAddress((physical_begin_frame + page) * 4096),
-                EntryFlags::WRITABLE,
+                EntryFlags::from_bits_truncate(0),
             );
         }
 
         ptr
+    }
+
+    /// The `dealloc` counterpart to `alloc_specific`. This function does not free the backing
+    /// physical memory.
+    pub unsafe fn dealloc_specific(&self, ptr: *mut u8, frames: usize) {
+        if ptr.is_null() || frames == 0 {
+            return;
+        }
+
+        let order = order(frames * 4096);
+
+        assert!(
+            ptr as usize >= HEAP_START &&
+                (ptr as usize) < (HEAP_START + (1 << 30)),
+            "Heap object {:?} pointer not in heap!",
+            ptr,
+        );
+
+        let global_ptr = ptr;
+        let ptr = ptr as usize - HEAP_START;
+
+        self.tree.wait().unwrap().lock().deallocate(ptr as *mut _, order);
+
+        // Unmap pages that have were used for this alloc
+        // 6 is base order so `1 << (order + 6)`
+        for page in 0..util::round_up_divide(1u64 << (order + 6), 4096) as usize {
+            let page_addr = global_ptr as usize + (page * 4096);
+
+            PAGE_TABLES.lock().unmap(
+                Page::containing_address(page_addr, PageSize::Kib4),
+                false,
+            );
+        }
     }
 }
 
@@ -141,7 +176,7 @@ unsafe impl GlobalAlloc for Heap {
             if !mapped {
                 page_tables.map(
                     Page::containing_address(page_addr, PageSize::Kib4),
-                    EntryFlags::WRITABLE,
+                    EntryFlags::from_bits_truncate(0),
                 );
             }
         }
@@ -149,47 +184,47 @@ unsafe impl GlobalAlloc for Heap {
         ptr
     }
 
-    // TODO dealloc_special so we don't free reserved mem -- or rather a flag for reserved mem TODO
-    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        if !ptr.is_null() {
-            let order = order(layout.size());
+   unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        if ptr.is_null() {
+            return;
+        }
 
-            assert!(
-                ptr as usize >= HEAP_START &&
-                    (ptr as usize) < (HEAP_START + (1 << 30)),
-                "Heap object {:?} pointer not in heap!",
-                ptr,
+        let order = order(layout.size());
+
+        assert!(
+            ptr as usize >= HEAP_START &&
+                (ptr as usize) < (HEAP_START + (1 << 30)),
+            "Heap object {:?} pointer not in heap!",
+            ptr,
+        );
+
+        let global_ptr = ptr;
+        let ptr = ptr as usize - HEAP_START;
+
+        self.tree.wait().unwrap().lock().deallocate(ptr as *mut _, order);
+
+        // There will only be pages to unmap which totally contained this allocation if this
+        // allocation was larger or equal to the size of a page
+        // TODO NO: if it happened to be on its own page we must unmap too
+        if order < 12 - 6  { // log2(4096) - base order
+            return;
+        }
+
+        // Unmap pages that have were only used for this alloc
+        // 6 is base order so `1 << (order + 6)`
+        for page in 0..util::round_up_divide(1u64 << (order + 6), 4096) as usize {
+            let page_addr = global_ptr as usize + (page * 4096);
+
+            PAGE_TABLES.lock().unmap(
+                Page::containing_address(page_addr, PageSize::Kib4),
+                true,
             );
-
-            let ptr = ptr as usize - HEAP_START;
-
-            // TODO
-            trace!("Freeing ptr {}", ptr);
-            self.tree.wait().unwrap().lock().deallocate(ptr as *mut _, order);
-
-            // There will only be pages to unmap which totally contained this allocation if this
-            // allocation was larger or equal to the size of a page
-            // TODO NO: if it happened to be on its own page we must unmap too
-            if order < 12 - 6  { // log2(4096) - base order
-                return;
-            }
-
-            // Unmap pages that have were only used for this alloc
-            // 6 is base order so `1 << (order + 6)`
-            for page in 0..util::round_up_divide(1u64 << (order + 6), 4096) as usize {
-                let page_addr = ptr as usize /* TODO use global ptr */ + (page * 4096);
-
-                PAGE_TABLES.lock().unmap(
-                    Page::containing_address(page_addr, PageSize::Kib4),
-                    true
-                );
-            }
         }
     }
 
     unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
         let old_order = order(layout.size());
-        let new_order =  order(new_size);
+        let new_order = order(new_size);
 
         // See if the size is still the same order. If so, do nothing
         if old_order == new_order {
@@ -211,13 +246,22 @@ unsafe impl GlobalAlloc for Heap {
     }
 }
 
-/// Calculates the integer log2 of the given input
-fn order(i: usize) -> u8 {
-    let mut i = i;
-    let mut o = 0;
+
+/// Converts log2 to order
+fn order(val: usize) -> u8 {
+    // Calculates the integer log2 of the given input
+    let mut i = val;
+    let mut log2 = 0;
     while i > 0 {
         i >>= 1;
-        o += 1;
+        log2 += 1;
     }
-    o
+
+    let log2 = log2 - 1;
+
+    if log2 >= 6 {
+        log2 - 6
+    } else {
+        0
+    }
 }

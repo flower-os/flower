@@ -2,6 +2,7 @@
 
 use core::convert::From;
 use core::{iter, mem};
+use arrayvec::ArrayVec;
 
 #[macro_use]
 mod buddy_allocator;
@@ -56,7 +57,7 @@ pub fn init_memory(mb_info: &BootInformation, guard_page_addr: usize) {
     ::HEAP.init();
 
     debug!("mem: initialising pmm (2/2)");
-    setup_physical_allocator_rest(gibbibytes, usable);
+    setup_physical_allocator_rest(gibbibytes, usable.iter());
 
     info!("mem: initialised")
 }
@@ -100,8 +101,7 @@ fn setup_bootstrap_heap(mb_info: &BootInformation) {
 
 fn setup_physical_allocator_prelim(
     mb_info: &BootInformation
-) -> (u8, impl Iterator<Item=Range<usize>> + Clone) {
-    trace!("Trace 1");
+) -> (u8, ArrayVec<[Range<usize>; 256]>) {
     let memory_map = mb_info.memory_map_tag()
         .expect("Expected a multiboot2 memory map tag, but it is not present!");
 
@@ -121,26 +121,27 @@ fn setup_physical_allocator_prelim(
         .memory_areas()
         .map(|area| (area.start_address() as usize, area.end_address() as usize))
         .map(|(start, end)| start..end)
-        .flat_map(move |area| {
+        .flat_map(move |area| { // Remove kernel areas
             // HACK: arrays iterate with moving weirdly
             // Also, filter map to remove `None`s
             let [first, second] = range_sub(&area, &kernel_area);
             iter::once(first).chain(iter::once(second)).filter_map(|i| i)
-        });
+        })
+        .flat_map(move |area| { // Remove areas below 1mib
+            // HACK: arrays iterate with moving weirdly
+            // Also, filter map to remove `None`s
+            let [first, second] = range_sub(&area, &(0..1024 * 1024));
+            iter::once(first).chain(iter::once(second)).filter_map(|i| i)
+        })
+        .collect::<ArrayVec<[_; 256]>>(); // Collect here into a large ArrayVec for performance
 
-    // TODO
-    trace!("prelim init physical alocator");
-
-    PHYSICAL_ALLOCATOR.init_prelim(
-        trees,
-        usable_areas.clone(),
-    );
+    PHYSICAL_ALLOCATOR.init_prelim(usable_areas.iter());
 
     (trees, usable_areas)
 }
 
-fn setup_physical_allocator_rest<I>(gibbibytes: u8, usable_areas: I)
-    where I: Iterator<Item=Range<usize>> + Clone
+fn setup_physical_allocator_rest<'a, I>(gibbibytes: u8, usable_areas: I)
+    where I: Iterator<Item=&'a Range<usize>> + Clone + 'a
 {
     PHYSICAL_ALLOCATOR.init_rest(
         gibbibytes,

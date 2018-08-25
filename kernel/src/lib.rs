@@ -37,6 +37,9 @@ extern crate bit_field;
 extern crate bitflags;
 #[macro_use]
 extern crate lazy_static;
+#[macro_use]
+extern crate static_assertions;
+extern crate arrayvec;
 
 use drivers::keyboard::{Keyboard, KeyEventType, Ps2Keyboard};
 use drivers::keyboard::keymap;
@@ -72,13 +75,6 @@ pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
     interrupts::init();
     let mb_info = unsafe { multiboot2::load(multiboot_info_addr) };
     memory::init_memory(&mb_info, guard_page_addr);
-
-    // TODO
-    let s = ::alloc::string::String::from("Abcs");
-    println!("{}", format!("xyz"));
-
-    // TODO
-
     acpi_impl::acpi_init();
 
     // Initialize the PS/2 controller and run the keyboard echo loop

@@ -120,34 +120,43 @@ impl PageMap {
     }
 
     pub fn map_to(&mut self, page: Page, physical_address: PhysicalAddress, flags: EntryFlags) {
-        let mut p3 = self.p4_mut().next_table_create(page.p4_index())
-            .expect("No next p3 table!");
-        let mut p2 = p3.next_table_create(page.p3_index())
-            .expect("No next p2 table!");
-        let mut p1 = p2.next_table_create(page.p2_index());
+        use self::EntryFlags;
 
-        assert!(page.start_address().is_some(), "Page to map requires size!");
+        let mut p2 = self.p4_mut()
+            .next_table_create(page.p4_index()).expect("No next p3 table!")
+            .next_table_create(page.p3_index()).expect("No next p2 table!");
 
-        if let Some(p1) = p1 {
-            // 4kib huge page
-            p1[page.p1_index()].set(physical_address, flags | self::EntryFlags::PRESENT);
+        assert!(page.size.is_some(), "Page to map requires size!");
+
+        if page.size.unwrap() == PageSize::Kib4 {
+            let mut p1 = p2.next_table_create(page.p2_index())
+                .expect("No next p1 table!");
+
+            // 4kib page
+            p1[page.p1_index()].set(
+                physical_address,
+                flags | EntryFlags::PRESENT | EntryFlags::WRITABLE,
+            );
+
+            tlb::flush(::x86_64::VirtualAddress(page.start_address().unwrap()));
         } else {
-            // 2mib huge page
-            p2[page.p2_index()].set(physical_address, flags | self::EntryFlags::PRESENT);
+            panic!("2mib pages are only partially supported!");
         }
-
-        // TODO flush tlb famm
-        tlb::flush(::x86_64::VirtualAddress(page.start_address().unwrap()));
     }
 
     pub fn map(&mut self, page: Page, flags: EntryFlags) {
         use core::ptr;
 
-        let ptr = PHYSICAL_ALLOCATOR.allocate(0).expect("Out of physical memory!");
+        assert!(page.size.is_some(), "Page needs size!");
+        let order = if page.size.unwrap() == PageSize::Kib4 {
+            0
+        } else {
+            9
+        };
+
+        let ptr = PHYSICAL_ALLOCATOR.allocate(order).expect("Out of physical memory!");
         let frame = PhysicalAddress(ptr as usize);
         self.map_to(page, frame, flags);
-
-        assert!(page.start_address().is_some(), "Page to map requires size!");
 
         // Zero the page
         unsafe {
@@ -160,8 +169,12 @@ impl PageMap {
     }
 
     pub fn unmap(&mut self, page: Page, free_physical_memory: bool) {
-        assert!(self.walk_page_table(page).is_some());
         assert!(page.start_address().is_some(), "Page to map requires size!");
+        assert!(
+            self.walk_page_table(page).is_some(),
+                "Virtual address 0x{:x} is not mapped!",
+                page.start_address().unwrap()
+        );
 
         let mut p2 = self.p4_mut()
             .next_page_table_mut(page.p4_index()).expect("Unmap called on unmapped page!")
@@ -174,9 +187,6 @@ impl PageMap {
 
             let frame = p1[page.p1_index()].physical_address().expect("Page already unmapped!");
             p1[page.p1_index()].set_unused();
-
-            // TODO
-            trace!("Trace 1");
 
             // TODO free p1/p2/p3 tables if they are empty
             if free_physical_memory {
@@ -195,7 +205,7 @@ impl PageMap {
         }
 
         // Flush tlb
-        tlb::flush(::x86_64::VirtualAddress(page.start_address().expect("AAA"))); // TODO
+        tlb::flush(::x86_64::VirtualAddress(page.start_address().unwrap()));
     }
 }
 
@@ -266,7 +276,13 @@ impl PageTableEntry {
 
     pub fn set(&mut self, physical_address: PhysicalAddress, flags: EntryFlags) {
         // Check that the physical address is 1) page aligned and 2) not larger than max
-        assert_eq!(physical_address.0 & !0x000fffff_fffff000, 0);
+        assert_eq!(
+            physical_address.0 & !0x000fffff_fffff000,
+            0,
+            "Physical address 0x{:x} not page aligned/larger than max!",
+            physical_address.0,
+        );
+
         self.0 = (physical_address.0 as u64) | flags.bits();
     }
 }
