@@ -35,11 +35,21 @@ Much thanks to:
  - [Phil Opp](https://phil-opp.com) and his [blog OS](https://os.phil-opp.com);
  - [Redox](https://github.com/redox-os);
  - the people over on the [Rust discord](https://discord.me/rust-lang), such as:
-   - Toor,
-   - Rep nop,
-   - Evrey,
+   - [Toor](https://github.com/too-r),
+   - [Rep nop](https://github.com/repnop), 
+   - [Evrey](https://github.com/Evrey), 
    - Cult Pony,
+   - [Oberien](https://github.com/oberien) 
    - and Nyrox;
+ - the people on the [OSDev discord](https://discordapp.com/invite/aJPTY8Y) such as:
+   - Omarrx024, 
+   - [Mintsuki](https://github.com/mintsuki), 
+   - [Korona](https://github.com/avdgrinten), 
+   - and [Safsom](https://github.com/asfsom);
+ - the people part of the [rust-osdev](https://github.com/rust-osdev), such as
+   - [Isaac Woods](https://github.com/Isaac Woods);
  - the [OsDev wiki](http://wiki.osdev.org);
  - [Bare Metal Rust](http://www.randomhacks.net/bare-metal-rust/);
  - and [Wikipedia](https://wikipedia.org) (of course!);
+
+This is not, of course, an exhaustive list! 
