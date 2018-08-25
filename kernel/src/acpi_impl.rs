@@ -1,5 +1,5 @@
 use acpi::{self, AcpiHandler, PhysicalMapping};
-use core::{ptr::NonNull, alloc::{GlobalAlloc, Layout}};
+use core::ptr::NonNull;
 use util;
 
 pub fn acpi_init() {
@@ -22,32 +22,36 @@ impl AcpiHandler for FlowerAcpiHandler {
         let frames = util::round_up_divide(size as u64, 4096) as usize;
         let physical_begin_frame = physical_address / 4096;
 
-        let alloc_ptr = ::HEAP.alloc_specific(physical_begin_frame, frames) as usize;
+        let alloc_ptr = unsafe {
+            ::HEAP.alloc_specific(physical_begin_frame, frames) as usize
+        };
+
+        if alloc_ptr == 0 {
+            panic!("Ran out of heap memory!");
+        }
+
         let obj_ptr = alloc_ptr + physical_address - (physical_begin_frame * 4096);
 
-        let p = PhysicalMapping {
+        PhysicalMapping {
            physical_start: physical_begin_frame * 4096,
            // alloc_ptr is zero if there is no more heap memory available
            virtual_start: NonNull::new(obj_ptr as *mut T)
                .expect("Ran out of heap memory!"),
            region_length: frames * 4096,
            mapped_length: frames * 4096,
-        };
-        trace!("Mapping {:?}", p.virtual_start);
-        p
+        }
     }
 
-    fn unmap_physical_region<T>(&mut self, mut region: PhysicalMapping<T>) {
-        trace!("Unmapping {:?}", region.virtual_start);
+    fn unmap_physical_region<T>(&mut self, region: PhysicalMapping<T>) {
         let obj_addr = region.virtual_start.as_ptr() as *mut T as usize;
 
         // Clear lower page offset bits
         let page_begin = obj_addr & !0xFFF;
 
         unsafe {
-            ::HEAP.dealloc(
+            ::HEAP.dealloc_specific(
                 page_begin as *mut u8,
-                Layout::from_size_align(region.mapped_length, 4096).unwrap(),
+                region.mapped_length / 4096,
             );
         }
     }

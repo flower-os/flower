@@ -31,14 +31,14 @@ pub struct PhysicalAllocator<'a> {
 impl<'a> PhysicalAllocator<'a> {
     /// Create a new, initialized allocator
     #[cfg(test)]
-    fn new<I>(gibbibytes: u8, usable: I) -> Self
-        where I: Iterator<Item=Range<usize>> + Clone
+    fn new<'r, I>(gibbibytes: u8, usable: I) -> Self
+        where I: Iterator<Item=&'r Range<usize>> + Clone + 'r
     {
         let allocator = PhysicalAllocator {
             trees: Once::new(),
         };
 
-        allocator.init_prelim(gibbibytes, usable.clone());
+        allocator.init_prelim(usable.clone());
         allocator.init_rest(gibbibytes, usable);
 
         allocator
@@ -48,45 +48,41 @@ impl<'a> PhysicalAllocator<'a> {
     /// stage, the first 8 GiBs are set up, using the bootstrap heap. This is enough to set up the
     /// main kernel heap. In the second stage, the rest of the GiBs are set up, using the kernel
     /// heap.
-    pub fn init_prelim<I>(&self, gibbibytes: u8, usable: I)
-        where I: Iterator<Item=Range<usize>> + Clone
+    pub fn init_prelim<'r, I>(&self, usable: I)
+        where I: Iterator<Item=&'r Range<usize>> + Clone + 'r
     {
         self.trees.call_once(|| {
             let mut trees: [Mutex<Option<Tree<TreeBox<'a>>>>; 256] = unsafe {
                 mem::uninitialized()
             };
 
-            trace!("Call once"); // TODO
+            // Set up all as Nones to avoid any UB from `panic`s
+            for slot in trees.iter_mut() {
+                unsafe { ptr::write(slot as *mut _, Mutex::new(None)) };
+            }
 
-            for (i, slot) in trees.iter_mut().enumerate() {
-                if i >= gibbibytes as usize || i >= 8 {
-                    trace!("Trace 2");
-                    unsafe { ptr::write(slot as *mut _, Mutex::new(None)) };
-                } else {
-                    trace!("Trace 3");
-                    let usable = Self::localize(i as u8, usable.clone());
+            // Init the first 8 trees on the bootstrap heap
+            for (i, slot) in trees.iter_mut().take(8).enumerate() {
+                let usable = Self::localize(i as u8, usable.clone());
 
-                    unsafe {
-                        trace!("Trace 4");
-                        #[cfg(not(test))]
-                        let tree = Tree::new(
-                            usable,
-                            TreeBox::Bootstrap(
-                                BOOTSTRAP_HEAP.allocate_zeroed()
-                                    .expect("Ran out of bootstrap heap memory!")
-                            )
-                        );
+                #[cfg(not(test))]
+                let tree = Tree::new(
+                    usable,
+                    TreeBox::Bootstrap(
+                        unsafe {
+                            BOOTSTRAP_HEAP.allocate()
+                            .expect("Ran out of bootstrap heap memory!")
+                        }
+                    )
+                );
 
-                        #[cfg(test)]
-                        let tree = Tree::new(
-                            usable,
-                            TreeBox::Heap(box mem::uninitialized()),
-                        );
+                #[cfg(test)]
+                let tree = Tree::new(
+                    usable,
+                    TreeBox::Heap(box unsafe { mem::uninitialized() }),
+                );
 
-                        trace!("Trace omegA");
-                        ptr::write(slot as *mut _, Mutex::new(Some(tree)));
-                    }
-                }
+                *slot = Mutex::new(Some(tree));
             }
 
             trees
@@ -94,8 +90,8 @@ impl<'a> PhysicalAllocator<'a> {
     }
 
     /// Initialise the rest of the allocator's gibbibytes. See [PhysicalAllocator.init_prelim].
-    pub fn init_rest<I>(&self, gibbibytes: u8, usable: I)
-        where I: Iterator<Item=Range<usize>> + Clone
+    pub fn init_rest<'r, I>(&self, gibbibytes: u8, usable: I)
+        where I: Iterator<Item=&'r Range<usize>> + Clone + 'r
     {
         let trees = self.trees.wait().unwrap();
 
@@ -110,11 +106,10 @@ impl<'a> PhysicalAllocator<'a> {
     }
 
     /// Filter out addresses that apply to a GiB and make them local to it
-    fn localize<I>(gib: u8, usable: I) -> impl Iterator<Item=Range<usize>> + Clone
-        where I: Iterator<Item=Range<usize>> + Clone
+    fn localize<'r, I>(gib: u8, usable: I) -> impl Iterator<Item=Range<usize>> + Clone + 'r
+        where I: Iterator<Item=&'r Range<usize>> + Clone + 'r
     {
         (&usable).clone()
-//            .inspect(|_| {panic!();}) // TODO
             .filter_map(move |range| {
                 let gib = ((gib as usize) << 30)..((gib as usize + 1 << 30) + 1);
 
@@ -136,7 +131,7 @@ impl<'a> PhysicalAllocator<'a> {
 
     /// Allocate a frame of order `order`. Panics if not initialized. Does __not__ zero the memory.
     pub fn allocate(&self, order: u8) -> Option<*const u8> {
-        #[derive(Eq, PartialEq, Copy, Clone)]
+        #[derive(Eq, PartialEq, Copy, Clone, Debug)]
         enum TryState {
             Tried,
             WasInUse,
@@ -155,19 +150,25 @@ impl<'a> PhysicalAllocator<'a> {
 
             let trees = self.trees.wait().unwrap();
 
+            // Try to lock the tree
             if let Some(ref mut tree) = trees[index].try_lock() {
+                // Get Option<&mut Tree>
                 if let Some(ref mut tree) = tree.as_mut() {
+                    // Try to allocate something on the tree
                     match tree.allocate(order) {
-                        Some(b) => return Some(
-                            (b as usize + (index * (1 << MAX_ORDER + BASE_ORDER))) as *const u8
+                        Some(address) => return Some(
+                            (address as usize + (index * (1 << MAX_ORDER + BASE_ORDER))) as *const u8
                         ),
-                        None => tried[index] = TryState::Tried,
+                        None => tried[index] = TryState::Tried, // Tree empty for alloc of this size
                     }
                 } else {
-                    tried[index] = TryState::WasInUse;
+                    // Tree was None and nonexistent. We've tried it so set it to tried
+                    tried[index] = TryState::Tried;
                 }
             } else {
-                tried[index] = TryState::Tried;
+                // Tree was already locked -- it is busy and in use by something else (in futuure,
+                // another core)
+                tried[index] = TryState::WasInUse;
             }
         }
     }
@@ -222,7 +223,7 @@ mod test {
     fn test_alloc_physical_allocator() {
         let allocator = PhysicalAllocator::new(
             2,
-            iter::once(0..(2 << MAX_ORDER + BASE_ORDER) + 1),
+            iter::once(&(0..(2 << MAX_ORDER + BASE_ORDER) + 1)),
         );
 
         assert_eq!(allocator.allocate(0).unwrap(), 0x0 as *const u8);
@@ -230,14 +231,14 @@ mod test {
         let trees = allocator.trees.wait().unwrap();
         let _tree_lock = trees[0].lock();
 
-        assert_eq!(allocator.allocate(0).unwrap(), 2usize.pow((MAX_ORDER + BASE_ORDER) as u32) as *const u8);
+        assert_eq!(allocator.allocate(0).unwrap(), (1 << ((MAX_ORDER + BASE_ORDER) as u32)) as *const u8);
     }
 
     #[test]
     fn test_dealloc_physical_allocator() {
         let allocator = PhysicalAllocator::new(
             2,
-             iter::once(0..(2 << 30) + 1),
+             iter::once(&(0..(2 << 30) + 1)),
         );
 
         allocator.allocate(0).unwrap();
@@ -251,10 +252,7 @@ mod test {
             trees: Once::new(),
         };
 
-        allocator.init_prelim(
-            9,
-            iter::once(0..(9 << 30) + 1),
-        );
+        allocator.init_prelim(iter::once(&(0..(9 << 30) + 1)));
 
         let trees = allocator.trees.wait().unwrap();
 
@@ -263,7 +261,7 @@ mod test {
 
         allocator.init_rest(
             9,
-            iter::once(0..(9 << 30) + 1),
+            iter::once(&(0..(9 << 30) + 1)),
         );
 
         assert!(trees[8].lock().is_some());
