@@ -40,7 +40,7 @@ Much thanks to:
    - [Evrey](https://github.com/Evrey), 
    - Cult Pony,
    - [Oberien](https://github.com/oberien) 
-   - and Nyrox;
+   - and [Nyrox](https://github.com/Nyrox), 
  - the people on the [OSDev discord](https://discordapp.com/invite/aJPTY8Y) such as:
    - Omarrx024, 
    - [Mintsuki](https://github.com/mintsuki), 
