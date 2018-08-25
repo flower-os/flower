@@ -47,7 +47,7 @@ Much thanks to:
    - [Korona](https://github.com/avdgrinten), 
    - and [Safsom](https://github.com/asfsom);
  - the people part of the [rust-osdev](https://github.com/rust-osdev), such as
-   - [Isaac Woods](https://github.com/Isaac Woods);
+   - [Isaac Woods](https://github.com/IsaacWoods);
  - the [OsDev wiki](http://wiki.osdev.org);
  - [Bare Metal Rust](http://www.randomhacks.net/bare-metal-rust/);
  - and [Wikipedia](https://wikipedia.org) (of course!);
