@@ -76,11 +76,21 @@ pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
     // TODO
     use alloc::collections::BTreeMap;
     use alloc::prelude::*;
+    trace!("> ALLOC MAP");
     let mut m: BTreeMap<String, u32> = BTreeMap::new();
-    m.insert("/r/greentext".to_string(), 10);
-    let gt = "/r/greentext".to_string();
-    trace!("{:?}", "/r/greentext".to_string() == "/r/greentext".to_string());
-    trace!("{}", m[&gt]);
+    trace!("< ALLOC MAP");
+    {
+        trace!("> INSERT MAP");
+        m.insert("/r/greentext".to_string(), 10);
+        trace!("< INSERT MAP");
+    }
+    {
+        trace!("> ALLOC LOOKUP");
+        let gt = "/r/greentext".to_string();
+        trace!("< ALLOC LOOKUP");
+        trace!("{:?}", m);
+        trace!("{:?}", m.get(&gt));
+    }
     drop(m);
 
     acpi_impl::acpi_init();

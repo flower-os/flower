@@ -151,7 +151,7 @@ macro_rules! buddy_allocator_bitmap_tree {
                     // If the child is not used (o!=0) or (desired_order in o-1)
                     // Due to the +1 offset, we need to subtract 1 from 0.
                     // However, (o - 1) >= desired_order can be simplified to o > desired_order
-                    node_index = if o != 0 && o >= desired_order {
+                    node_index = if o != 0 && o > desired_order {
                         left_child_index
                     } else {
                         // Move over to the right: if the parent had a free order and the left didn't,
