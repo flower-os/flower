@@ -72,26 +72,6 @@ pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
     let mb_info = unsafe { multiboot2::load(multiboot_info_addr) };
     memory::init_memory(&mb_info, guard_page_addr);
 
-    // TODO
-    use alloc::collections::BTreeMap;
-    use alloc::prelude::*;
-    trace!("> ALLOC MAP");
-    let mut m: BTreeMap<String, u32> = BTreeMap::new();
-    trace!("< ALLOC MAP");
-    {
-        trace!("> INSERT MAP");
-        m.insert("/r/greentext".to_string(), 10);
-        trace!("< INSERT MAP");
-    }
-    {
-        trace!("> ALLOC LOOKUP");
-        let gt = "/r/greentext".to_string();
-        trace!("< ALLOC LOOKUP");
-        trace!("{:?}", m);
-        trace!("{:?}", m.get(&gt));
-    }
-    drop(m);
-
     acpi_impl::acpi_init();
 
     // Initialize the PS/2 controller and run the keyboard echo loop
