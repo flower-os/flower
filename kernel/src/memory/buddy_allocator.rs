@@ -172,6 +172,7 @@ macro_rules! buddy_allocator_bitmap_tree {
 
                 self.update_blocks_above(node_index, max_level);
 
+                debug!("alloc ptr {:?}", addr as *const u8); // TODO
                 Some(addr as *const u8)
             }
 
@@ -179,6 +180,8 @@ macro_rules! buddy_allocator_bitmap_tree {
             /// beginning of the tree's memory) and the order of the block.
             #[inline]
             pub fn deallocate(&mut self, ptr: *const u8, order: u8) {
+                // TODO
+                debug!("dealloc ptr {:?}", ptr);
                 use $crate::memory::buddy_allocator::blocks_in_tree;
                 use $crate::memory::buddy_allocator::flat_tree;
                 use ::core::cmp;
@@ -212,11 +215,9 @@ macro_rules! buddy_allocator_bitmap_tree {
                         let left = self.block(right_child - 1).order_free;
                         let right = self.block(right_child).order_free;
                         if (left == order) && (right == order) {
-
                             self.block_mut(index - 1).order_free = order + 1;
                         } else {
-
-                            debug_assert!(left != 0 && right != 0);
+                            debug_assert!(left != 0 && right != 0, "Children must not be used!");
                             self.block_mut(index - 1).order_free = cmp::max(left, right);
                         }
                     }
@@ -378,6 +379,7 @@ mod test {
         assert_eq!(tree.allocate(MAX_ORDER), None);
     }
 
+
     #[test]
     fn test_free() {
         let mut tree = Tree::new(
@@ -390,6 +392,9 @@ mod test {
         let ptr2 = tree.allocate(3).unwrap();
         assert_eq!(ptr2, ptr);
         tree.deallocate(ptr2, 3);
+
+        let ptr = tree.allocate(1).unwrap();
+        tree.deallocate(ptr, 1);
 
         let ptr = tree.allocate(0).unwrap();
         let ptr2 = tree.allocate(0).unwrap();
