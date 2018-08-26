@@ -40,12 +40,12 @@ impl Pic {
         IO_WAIT_PORT.write(0x0);
 
         // Set the PICs offset
-        self.data_port.write(self.offset);
-        IO_WAIT_PORT.write(0x0);
+        self.write(self.offset);
     }
 
-    pub fn set_mode(&self, mode: u8) {
-        self.data_port.write(mode);
+    #[inline]
+    pub fn write(&self, value: u8) {
+        self.data_port.write(value);
         IO_WAIT_PORT.write(0x0);
     }
 }
@@ -82,18 +82,17 @@ impl ChainedPics {
             pic.initialise();
         }
 
-        for (pic, data) in self.inner.iter().zip([4u8, 2u8].iter()) {
-            pic.data_port.write(*data);
-            IO_WAIT_PORT.write(0x0);
-        }
+        self.inner[0].write(4);
+        self.inner[1].write(2);
 
         // Set PICs to 8086/88 (MCS-80/85) mode
         for pic in self.inner.iter() {
-            pic.set_mode(0x1);
+            pic.write(0x1);
         }
 
         // Mask pics
-        self.inner[0].data_port.write(0xFF);
-        self.inner[1].data_port.write(0xFF);
+        for pic in self.inner.iter() {
+            pic.data_port.write(0xFF);
+        }
     }
 }
