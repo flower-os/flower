@@ -3,13 +3,15 @@ use core::ptr::NonNull;
 use util;
 
 pub fn acpi_init() {
-    info!("acpi: initialising");
+    info!("acpi: initializing");
     let mut handler = FlowerAcpiHandler;
     // We're BIOS. We'd have crashed by now if we weren't.
-    unsafe { acpi::search_for_rsdp_bios(&mut handler).expect("ACPI error") };
-    info!("apci: initialised");
+    let search_result = unsafe { acpi::search_for_rsdp_bios(&mut handler) };
+    match search_result {
+        Ok(_) => info!("acpi: init successful"),
+        Err(e) => error!("acpi: {:?}", e),
+    }
 }
-
 
 struct FlowerAcpiHandler;
 
