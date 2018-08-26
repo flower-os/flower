@@ -197,7 +197,6 @@ unsafe impl GlobalAlloc for Heap {
             "Heap object {:?} pointer not in heap!",
             ptr,
         );
-       trace!("l = {:?}", layout); // TODO
 
         let global_ptr = ptr;
         let ptr = ptr as usize - HEAP_START;

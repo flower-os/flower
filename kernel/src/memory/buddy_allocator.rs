@@ -172,7 +172,6 @@ macro_rules! buddy_allocator_bitmap_tree {
 
                 self.update_blocks_above(node_index, max_level);
 
-                debug!("alloc ptr {:?}", addr as *const u8); // TODO
                 Some(addr as *const u8)
             }
 
@@ -180,8 +179,6 @@ macro_rules! buddy_allocator_bitmap_tree {
             /// beginning of the tree's memory) and the order of the block.
             #[inline]
             pub fn deallocate(&mut self, ptr: *const u8, order: u8) {
-                // TODO
-                debug!("dealloc ptr {:?}", ptr);
                 use $crate::memory::buddy_allocator::blocks_in_tree;
                 use $crate::memory::buddy_allocator::flat_tree;
                 use ::core::cmp;
