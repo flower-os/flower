@@ -197,6 +197,7 @@ unsafe impl GlobalAlloc for Heap {
             "Heap object {:?} pointer not in heap!",
             ptr,
         );
+       trace!("l = {:?}", layout); // TODO
 
         let global_ptr = ptr;
         let ptr = ptr as usize - HEAP_START;
@@ -221,34 +222,39 @@ unsafe impl GlobalAlloc for Heap {
             );
         }
     }
-
-    unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
-        let old_order = order(layout.size());
-        let new_order = order(new_size);
-
-        // See if the size is still the same order. If so, do nothing
-        if old_order == new_order {
-            return ptr;
-        }
-
-        let new_layout = Layout::from_size_align_unchecked(new_size, layout.align());
-        let new_ptr = self.alloc(new_layout);
-        if !new_ptr.is_null() {
-            ptr::copy_nonoverlapping(
-                ptr as *const u8,
-                new_ptr as *mut u8,
-                cmp::min(layout.size(), new_size),
-            );
-            self.dealloc(ptr, layout);
-        }
-
-        new_ptr
-    }
+// TODO
+//
+//    unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
+//        let old_order = order(layout.size());
+//        let new_order = order(new_size);
+//
+//        // See if the size is still the same order. If so, do nothing
+//        if old_order == new_order {
+//            return ptr;
+//        }
+//
+//        let new_layout = Layout::from_size_align_unchecked(new_size, layout.align());
+//        let new_ptr = self.alloc(new_layout);
+//        if !new_ptr.is_null() {
+//            ptr::copy_nonoverlapping(
+//                ptr as *const u8,
+//                new_ptr as *mut u8,
+//                cmp::min(layout.size(), new_size),
+//            );
+//            self.dealloc(ptr, layout);
+//        }
+//
+//        new_ptr
+//    }
 }
 
 
-/// Converts log2 to order
+/// Converts log2 to order (NOT minus 1)
 fn order(val: usize) -> u8 {
+    if val == 0 {
+        return 0;
+    }
+
     // Calculates the integer log2 of the given input
     let mut i = val;
     let mut log2 = 0;
@@ -257,9 +263,9 @@ fn order(val: usize) -> u8 {
         log2 += 1;
     }
 
-    let log2 = log2 - 1;
+    let log2 = log2;
 
-    if log2 >= 6 {
+    if log2 > 6 {
         log2 - 6
     } else {
         0

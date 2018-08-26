@@ -11,6 +11,7 @@ panic = "abort"
 
 [profile.dev]
 panic = "abort"
+opt-level = 3
 
 [dependencies]
 rlibc = "^1.0.0"
