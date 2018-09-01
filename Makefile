@@ -69,6 +69,7 @@ makedirs:
 $(rust_kernel): $(rust_crate_dir)/**/*
 	@cd $(rust_crate_dir) && \
       RUST_TARGET_PATH=$(shell pwd)/$(rust_crate_dir) cargo xbuild --target $(target) $(cargo_flags)
+	@rm -f $(rust_kernel)
 	@mv $(rust_crate_dir)/target/$(target)/$(build_type)/libflower_kernel.a $(rust_kernel)
 
 # Compile kernel.elf
