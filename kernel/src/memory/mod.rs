@@ -64,7 +64,7 @@ fn print_memory_info(memory_map: &MemoryMapTag) {
 
     // Calculate how many GiBs are available
     let bytes_available: usize = memory_map.memory_areas()
-        .map(|area| area.start_address() + area.end_address())
+        .map(|area| area.end_address() - area.start_address())
         .sum();
 
     let gibbibytes_available  = bytes_available as f64 / (1 << 30) as f64;

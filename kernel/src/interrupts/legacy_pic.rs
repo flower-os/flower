@@ -26,14 +26,6 @@ impl Pic {
         Pic { offset, command_port, data_port }
     }
 
-    fn handles_interrupt(&self, interrupt_id: u8) -> bool {
-        self.offset <= interrupt_id && interrupt_id < self.offset + 8
-    }
-
-    fn end_of_interrupt(&self) {
-        self.command_port.write(Commands::EndOfInterrupt as u8);
-    }
-
     pub fn initialise(&self) {
         // Tell the PIC to initialise
         self.command_port.write(Commands::Init as u8);
