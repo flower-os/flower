@@ -52,7 +52,13 @@ pub extern "x86-interrupt" fn general_protection_fault(stack_frame: &mut Excepti
 }
 
 pub extern "x86-interrupt" fn page_fault(stack_frame: &mut ExceptionStackFrame, code: PageFaultErrorCode) {
-    panic!("cpuex: page fault {:?}\n{:#?}", code, stack_frame);
+    let cr2: u64;
+    unsafe { asm!("mov %cr2, $0" : "=r" (cr2)); }
+    panic!(
+        "cpuex: page fault {:?}\n{:#?}\n => note: CR2 = 0x{:x}\
+        \n Check that this address is mapped correctly",
+        code, stack_frame, cr2
+    );
 }
 
 pub extern "x86-interrupt" fn x87_floating_point(stack_frame: &mut ExceptionStackFrame) {

@@ -5,3 +5,4 @@ kernel/Cargo.lock
 *.iml
 build/
 kernel/target/
+*.bxrc

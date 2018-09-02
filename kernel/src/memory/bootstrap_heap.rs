@@ -17,8 +17,8 @@ pub struct BootstrapHeap(Once<BootstrapAllocator<[Block; BLOCKS_IN_TREE]>>);
 impl BootstrapHeap {
     /// Allocates a zeroed object. Panics if bootstrap heap is not initialized
     #[cfg(not(test))]
-    pub unsafe fn allocate_zeroed(&self) -> Option<BootstrapHeapBox<[Block; BLOCKS_IN_TREE]>> {
-        self.0.wait().unwrap().allocate_zeroed()
+    pub unsafe fn allocate(&self) -> Option<BootstrapHeapBox<[Block; BLOCKS_IN_TREE]>> {
+        self.0.wait().unwrap().allocate()
     }
 
     /// Initialises the bootstrap heap with a begin address.
@@ -68,22 +68,16 @@ impl<T> BootstrapAllocator<T> {
         self.bitmap.lock().set_bit(bit, used);
     }
 
-    /// Allocate an object of zeroes and return the address if there is space
-    unsafe fn allocate_zeroed<'a>(&'a self) -> Option<BootstrapHeapBox<'a, T>> {
+    /// Allocate an object and return the address if there is space
+    unsafe fn allocate<'a>(&'a self) -> Option<BootstrapHeapBox<'a, T>> {
         for bit in 0..8 {
             let mut byte = self.bitmap.lock();
 
             if !byte.get_bit(bit) {
                 byte.set_bit(bit, true);
-                drop(byte);
 
-                let ptr = self.start().offset((bit) as isize);
-                *ptr = mem::zeroed();
-
-                return Some(BootstrapHeapBox {
-                    ptr: Unique::new_unchecked(ptr),
-                    allocator: self,
-                });
+                let ptr = Unique::new_unchecked(self.start().offset((bit) as isize));
+                return Some(BootstrapHeapBox { ptr, allocator: self });
             }
         }
 
@@ -153,11 +147,11 @@ mod test {
         let ptr = setup_heap();
         let bitmap = BootstrapAllocator::<u8>::new_unchecked(ptr as usize);
 
-        let heap_box = unsafe { bitmap.allocate_zeroed().unwrap() };
+        let heap_box = unsafe { bitmap.allocate().unwrap() };
         let old_ptr = heap_box.ptr;
         drop(heap_box);
         assert!(ptr::eq(
-            unsafe { bitmap.allocate_zeroed().unwrap().ptr.as_ptr() },
+            unsafe { bitmap.allocate().unwrap().ptr.as_ptr() },
             old_ptr.as_ptr()
         ));
 
@@ -172,7 +166,7 @@ mod test {
         let bitmap = BootstrapAllocator::<u8>::new_unchecked(ptr as usize);
 
         assert_eq!(
-            unsafe { bitmap.allocate_zeroed().unwrap().ptr.as_ptr() },
+            unsafe { bitmap.allocate().unwrap().ptr.as_ptr() },
             ptr as *mut _
         );
 
@@ -180,7 +174,7 @@ mod test {
     }
 
     #[test]
-    fn test_bitmap_allocate_zeroed() {
+    fn test_bitmap_allocate() {
         use ::std::vec::Vec;
 
         let ptr = setup_heap();
@@ -188,9 +182,8 @@ mod test {
         let mut v = Vec::with_capacity(8);
 
         for i in 0..8 {
-            let obj = unsafe { bitmap.allocate_zeroed().unwrap() };
+            let obj = unsafe { bitmap.allocate().unwrap() };
             assert!(ptr::eq(obj.ptr.as_ptr(), (ptr as *mut u8).wrapping_offset(i as isize)));
-            assert_eq!(*obj, 0);
             v.push(obj); // Stop it from being dropped
         }
 
@@ -207,11 +200,11 @@ mod test {
         let mut v = Vec::with_capacity(8);
 
         for _ in 0..8 {
-            let addr = unsafe { bitmap.allocate_zeroed().unwrap() };
+            let addr = unsafe { bitmap.allocate().unwrap() };
             v.push(addr); // Stop it from being dropped
         }
 
-        assert!(unsafe { bitmap.allocate_zeroed() } == None);
+        assert!(unsafe { bitmap.allocate() } == None);
 
         teardown_heap(ptr);
     }

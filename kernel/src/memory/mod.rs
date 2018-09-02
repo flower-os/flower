@@ -1,9 +1,12 @@
+//! All things to do with memory
+
 use core::convert::From;
 use core::{iter, mem};
+use arrayvec::ArrayVec;
 
 #[macro_use]
 mod buddy_allocator;
-mod paging;
+pub mod paging;
 pub mod heap;
 pub mod bootstrap_heap;
 pub mod physical_allocator;
@@ -13,8 +16,9 @@ use multiboot2::{BootInformation, MemoryMapTag};
 use self::physical_allocator::{PHYSICAL_ALLOCATOR, BLOCKS_IN_TREE};
 use self::buddy_allocator::Block;
 use self::bootstrap_heap::BOOTSTRAP_HEAP;
+use util;
 
-/// Represents the size of a page
+/// Represents the size of a page.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 enum PageSize {
     Kib4,
@@ -39,16 +43,22 @@ pub fn init_memory(mb_info: &BootInformation, guard_page_addr: usize) {
         .expect("Expected a multiboot2 memory map tag, but it is not present!");
 
     print_memory_info(memory_map);
-    debug!("mem: initialising bootstrap heap");
-    setup_bootstrap_heap(mb_info);
-    debug!("mem: initialising pmm (1/2)");
-    let (gibbibytes, usable) = setup_physical_allocator_prelim(mb_info);
+
     trace!("mem: setting up guard page");
     setup_guard_page(guard_page_addr);
+
+    debug!("mem: initialising bootstrap heap");
+    setup_bootstrap_heap(mb_info);
+
+    debug!("mem: initialising pmm (1/2)");
+    let (gibbibytes, usable) = setup_physical_allocator_prelim(mb_info);
+
     debug!("mem: setting up kernel heap");
     ::HEAP.init();
+
     debug!("mem: initialising pmm (2/2)");
-    setup_physical_allocator_rest(gibbibytes, usable);
+    setup_physical_allocator_rest(gibbibytes, usable.iter());
+
     info!("mem: initialised")
 }
 
@@ -91,7 +101,7 @@ fn setup_bootstrap_heap(mb_info: &BootInformation) {
 
 fn setup_physical_allocator_prelim(
     mb_info: &BootInformation
-) -> (u8, impl Iterator<Item=Range<usize>> + Clone) {
+) -> (u8, ArrayVec<[Range<usize>; 256]>) {
     let memory_map = mb_info.memory_map_tag()
         .expect("Expected a multiboot2 memory map tag, but it is not present!");
 
@@ -101,7 +111,7 @@ fn setup_physical_allocator_prelim(
         .expect("No usable physical memory available!");
 
     // Do round-up division by 2^30 = 1GiB in bytes
-    let trees = ((highest_address + (1 << 30) - 1) / (1 << 30)) as u8;
+    let trees = util::round_up_divide(highest_address as u64, 1 << 30) as u8;
     trace!("Allocating {} trees", trees);
 
     let kernel_area = kernel_area(mb_info).start..BOOTSTRAP_HEAP.end() + 1;
@@ -111,23 +121,27 @@ fn setup_physical_allocator_prelim(
         .memory_areas()
         .map(|area| (area.start_address() as usize, area.end_address() as usize))
         .map(|(start, end)| start..end)
-        .flat_map(move |area| {
+        .flat_map(move |area| { // Remove kernel areas
             // HACK: arrays iterate with moving weirdly
             // Also, filter map to remove `None`s
             let [first, second] = range_sub(&area, &kernel_area);
             iter::once(first).chain(iter::once(second)).filter_map(|i| i)
-        });
+        })
+        .flat_map(move |area| { // Remove areas below 1mib
+            // HACK: arrays iterate with moving weirdly
+            // Also, filter map to remove `None`s
+            let [first, second] = range_sub(&area, &(0..1024 * 1024));
+            iter::once(first).chain(iter::once(second)).filter_map(|i| i)
+        })
+        .collect::<ArrayVec<[_; 256]>>(); // Collect here into a large ArrayVec for performance
 
-    PHYSICAL_ALLOCATOR.init_prelim(
-        trees,
-        usable_areas.clone(),
-    );
+    PHYSICAL_ALLOCATOR.init_prelim(usable_areas.iter());
 
     (trees, usable_areas)
 }
 
-fn setup_physical_allocator_rest<I>(gibbibytes: u8, usable_areas: I)
-    where I: Iterator<Item=Range<usize>> + Clone
+fn setup_physical_allocator_rest<'a, I>(gibbibytes: u8, usable_areas: I)
+    where I: Iterator<Item=&'a Range<usize>> + Clone + 'a
 {
     PHYSICAL_ALLOCATOR.init_rest(
         gibbibytes,
@@ -138,7 +152,7 @@ fn setup_physical_allocator_rest<I>(gibbibytes: u8, usable_areas: I)
 fn setup_guard_page(addr: usize) {
     use self::paging::*;
 
-    PAGE_TABLES.lock().unmap(Page::containing_address(addr, PageSize::Kib4));
+    PAGE_TABLES.lock().unmap(Page::containing_address(addr, PageSize::Kib4), false);
 }
 
 fn kernel_area(mb_info: &BootInformation) -> Range<usize> {

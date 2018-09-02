@@ -20,8 +20,11 @@
 extern crate std;
 
 extern crate rlibc;
+#[cfg_attr(not(test), macro_use)]
 extern crate alloc;
 extern crate volatile;
+extern crate log as log_facade;
+extern crate acpi;
 extern crate spin;
 extern crate x86_64;
 extern crate array_init; // Used as a workaround until const-generics arrives
@@ -31,6 +34,9 @@ extern crate bit_field;
 extern crate bitflags;
 #[macro_use]
 extern crate lazy_static;
+#[macro_use]
+extern crate static_assertions;
+extern crate arrayvec;
 
 use drivers::keyboard::{Keyboard, KeyEventType, Ps2Keyboard};
 use drivers::keyboard::keymap;
@@ -40,17 +46,18 @@ use terminal::TerminalOutput;
 #[cfg(not(test))]
 mod lang;
 #[macro_use]
-mod log;
-#[macro_use]
 mod util;
 #[macro_use]
 mod color;
+#[macro_use]
+mod log;
 #[macro_use]
 mod terminal;
 mod io;
 mod interrupts;
 mod memory;
 mod drivers;
+mod acpi_impl;
 
 use memory::heap::Heap;
 
@@ -61,9 +68,12 @@ pub static HEAP: Heap = Heap::new();
 #[no_mangle]
 pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
     say_hello();
+    log::init();
     interrupts::init();
     let mb_info = unsafe { multiboot2::load(multiboot_info_addr) };
     memory::init_memory(&mb_info, guard_page_addr);
+
+    acpi_impl::acpi_init();
 
     // Initialize the PS/2 controller and run the keyboard echo loop
     let mut controller = ps2::CONTROLLER.lock();
