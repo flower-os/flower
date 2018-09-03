@@ -19,11 +19,16 @@ volatile = "^0.2.3"
 spin = "^0.4.6"
 x86_64 = "^0.1.2"
 bitflags = "^1.0.1"
-multiboot2 = { git = "https://github.com/Restioson/multiboot2-elf64", branch = "clone-tagsiter-moduleiter" }
 bit_field = "^0.9.0"
 log = "^0.4.3"
 static_assertions = "^0.2.5"
-acpi = { git = "https://github.com/Restioson/acpi", branch = "fixes" }
+
+[dependencies.multiboot2]
+git = "https://github.com/Restioson/multiboot2-elf64"
+branch = "clone-tagsiter-moduleiter"
+
+[dependencies.acpi]
+git = "https://github.com/rust-osdev/acpi"
 
 [dependencies.arrayvec]
 version = "^0.4.7"
