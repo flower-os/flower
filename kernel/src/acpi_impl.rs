@@ -1,8 +1,8 @@
-use acpi::{self, AcpiHandler, PhysicalMapping, Acpi};
+use acpi::{self, AcpiHandler, PhysicalMapping, Acpi, AcpiError};
 use core::ptr::NonNull;
 use util;
 
-pub fn acpi_init() -> Acpi {
+pub fn acpi_init() -> Result<Acpi, AcpiError> {
     info!("acpi: initializing");
     let mut handler = FlowerAcpiHandler;
     // We're BIOS. We'd have crashed by now if we weren't.
@@ -10,9 +10,12 @@ pub fn acpi_init() -> Acpi {
     match search_result {
         Ok(acpi) => {
             info!("acpi: init successful");
-            acpi
+            Ok(acpi)
         },
-        Err(e) => error!("acpi: {:?}", e),
+        Err(e) => {
+            error!("acpi: init unsuccessful {:?}", e);
+            Err(e)
+        },
     }
 }
 

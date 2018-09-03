@@ -8,8 +8,8 @@ const HEAP_TREE_START: usize = 4 * 1024 * 1024 * 1024;
 const HEAP_START: usize = HEAP_TREE_START + mem::size_of::<[Block; BLOCKS_IN_TREE]>() + 1;
 
 use core::alloc::{GlobalAlloc, Layout};
-use core::{iter, cmp, mem};
-use core::ptr::{self, Unique};
+use core::{iter, mem};
+use core::ptr::Unique;
 use core::ops::{Deref, DerefMut};
 use spin::{Once, Mutex};
 use super::paging::{PAGE_TABLES, Page, PageSize, EntryFlags};

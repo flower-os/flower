@@ -8,12 +8,6 @@ pub static CHAINED_PICS: Mutex<ChainedPics> = Mutex::new(ChainedPics::new((0x20,
 /// Used to pause execution temporarily
 pub static IO_WAIT_PORT: SynchronizedPort<u8> = unsafe { SynchronizedPort::new(0x80) };
 
-#[repr(u8)]
-enum Commands {
-    Init = 0x10,
-    EndOfInterrupt = 0x20,
-}
-
 /// Represents an 8295/8295A PIC (superseded by APIC)
 pub struct Pic {
     pub offset: u8,
@@ -28,7 +22,7 @@ impl Pic {
 
     pub fn initialise(&self) {
         // Tell the PIC to initialise
-        self.command_port.write(Commands::Init as u8);
+        self.command_port.write(0x10);
         IO_WAIT_PORT.write(0x0);
 
         // Set the PICs offset
