@@ -1,14 +1,17 @@
-use acpi::{self, AcpiHandler, PhysicalMapping};
+use acpi::{self, AcpiHandler, PhysicalMapping, Acpi};
 use core::ptr::NonNull;
 use util;
 
-pub fn acpi_init() {
+pub fn acpi_init() -> Acpi {
     info!("acpi: initializing");
     let mut handler = FlowerAcpiHandler;
     // We're BIOS. We'd have crashed by now if we weren't.
     let search_result = unsafe { acpi::search_for_rsdp_bios(&mut handler) };
     match search_result {
-        Ok(_) => info!("acpi: init successful"),
+        Ok(acpi) => {
+            info!("acpi: init successful");
+            acpi
+        },
         Err(e) => error!("acpi: {:?}", e),
     }
 }

@@ -73,7 +73,7 @@ pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
     let mb_info = unsafe { multiboot2::load(multiboot_info_addr) };
     memory::init_memory(&mb_info, guard_page_addr);
 
-    acpi_impl::acpi_init();
+    let _acpi = acpi_impl::acpi_init();
 
     // Initialize the PS/2 controller and run the keyboard echo loop
     let mut controller = ps2::CONTROLLER.lock();
