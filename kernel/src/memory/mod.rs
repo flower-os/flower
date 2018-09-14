@@ -11,7 +11,7 @@ pub mod heap;
 pub mod bootstrap_heap;
 pub mod physical_allocator;
 
-use core::ops::Range;
+use core::{ops::Range, ptr::NonNull};
 use multiboot2::{BootInformation, MemoryMapTag};
 use self::physical_allocator::{PHYSICAL_ALLOCATOR, BLOCKS_IN_TREE};
 use self::buddy_allocator::Block;
@@ -36,6 +36,58 @@ impl From<PageSize> for usize {
         }
     }
 }
+
+pub struct PhysicalMapper;
+
+struct PhysicalMapping<T> {
+    physical_start: usize,
+    virtual_start: NonNull<T>,
+    mapped_length: usize,
+}
+
+impl PhysicalMapper {
+    fn map_physical_region<T>(
+        physical_address: usize,
+    ) -> PhysicalMapping<T> {
+        let frames = util::round_up_divide(mem::size_of::<T> as u64, 4096) as usize;
+        let physical_begin_frame = physical_address / 4096;
+
+        let alloc_ptr = unsafe {
+            ::HEAP.alloc_specific(physical_begin_frame, frames) as usize
+        };
+
+        if alloc_ptr == 0 {
+            panic!("Ran out of heap memory!");
+        }
+
+        let obj_ptr = alloc_ptr + physical_address - (physical_begin_frame * 4096);
+
+        PhysicalMapping {
+            physical_start: physical_begin_frame * 4096,
+            // alloc_ptr is zero if there is no more heap memory available
+            virtual_start: NonNull::new(obj_ptr as *mut T)
+                .expect("Ran out of heap memory!"),
+            mapped_length: frames * 4096,
+        }
+    }
+}
+
+impl<T> Drop for PhysicalMapping<T> {
+    fn drop(&mut self) {
+        let obj_addr = self.virtual_start.as_ptr() as *mut T as usize;
+
+        // Clear lower page offset bits
+        let page_begin = obj_addr & !0xFFF;
+
+        unsafe {
+            ::HEAP.dealloc_specific(
+                page_begin as *mut u8,
+                self.mapped_length / 4096,
+            );
+        }
+    }
+}
+
 
 pub fn init_memory(mb_info: &BootInformation, guard_page_addr: usize) {
     info!("mem: initialising");
