@@ -11,7 +11,8 @@ pub mod heap;
 pub mod bootstrap_heap;
 pub mod physical_allocator;
 
-use core::{ops::Range, ptr::NonNull};
+use core::ops::{Range, Deref, DerefMut};
+use core::ptr::NonNull;
 use multiboot2::{BootInformation, MemoryMapTag};
 use self::physical_allocator::{PHYSICAL_ALLOCATOR, BLOCKS_IN_TREE};
 use self::buddy_allocator::Block;
@@ -37,39 +38,37 @@ impl From<PageSize> for usize {
     }
 }
 
-pub struct PhysicalMapper;
+pub fn map_physical_region<T>(physical_address: usize, size: usize) -> PhysicalMapping<T> {
+    let frames = util::round_up_divide(size as u64, 4096) as usize;
+    let physical_begin_frame = physical_address / 4096;
 
-struct PhysicalMapping<T> {
+    let alloc_ptr = unsafe {
+        ::HEAP.alloc_specific(physical_begin_frame, frames) as usize
+    };
+
+    if alloc_ptr == 0 {
+        panic!("Ran out of heap memory!");
+    }
+
+    let obj_ptr = alloc_ptr + physical_address - (physical_begin_frame * 4096);
+
+    PhysicalMapping {
+        physical_start: physical_begin_frame * 4096,
+        // alloc_ptr is zero if there is no more heap memory available
+        virtual_start: NonNull::new(obj_ptr as *mut T)
+            .expect("Ran out of heap memory!"),
+        mapped_length: frames * 4096,
+    }
+}
+
+pub fn map_physical_type<T>(physical_address: usize) -> PhysicalMapping<T> {
+    map_physical_region(physical_address, mem::size_of::<T>())
+}
+
+pub struct PhysicalMapping<T> {
     physical_start: usize,
     virtual_start: NonNull<T>,
     mapped_length: usize,
-}
-
-impl PhysicalMapper {
-    fn map_physical_region<T>(
-        physical_address: usize,
-    ) -> PhysicalMapping<T> {
-        let frames = util::round_up_divide(mem::size_of::<T> as u64, 4096) as usize;
-        let physical_begin_frame = physical_address / 4096;
-
-        let alloc_ptr = unsafe {
-            ::HEAP.alloc_specific(physical_begin_frame, frames) as usize
-        };
-
-        if alloc_ptr == 0 {
-            panic!("Ran out of heap memory!");
-        }
-
-        let obj_ptr = alloc_ptr + physical_address - (physical_begin_frame * 4096);
-
-        PhysicalMapping {
-            physical_start: physical_begin_frame * 4096,
-            // alloc_ptr is zero if there is no more heap memory available
-            virtual_start: NonNull::new(obj_ptr as *mut T)
-                .expect("Ran out of heap memory!"),
-            mapped_length: frames * 4096,
-        }
-    }
 }
 
 impl<T> Drop for PhysicalMapping<T> {
@@ -88,6 +87,32 @@ impl<T> Drop for PhysicalMapping<T> {
     }
 }
 
+impl<T> Deref for PhysicalMapping<T> {
+    type Target = T;
+
+    fn deref(&self) -> &T {
+        unsafe { self.virtual_start.as_ref() }
+    }
+}
+
+impl<T> DerefMut for PhysicalMapping<T> {
+    fn deref_mut(&mut self) -> &mut T {
+        unsafe { self.virtual_start.as_mut() }
+    }
+}
+
+impl<T> Into<::acpi::PhysicalMapping<T>> for PhysicalMapping<T> {
+    fn into(self) -> ::acpi::PhysicalMapping<T> {
+        let mapping = ::acpi::PhysicalMapping {
+            physical_start: self.physical_start,
+            virtual_start: self.virtual_start,
+            region_length: self.mapped_length,
+            mapped_length: self.mapped_length,
+        };
+        mem::forget(self);
+        mapping
+    }
+}
 
 pub fn init_memory(mb_info: &BootInformation, guard_page_addr: usize) {
     info!("mem: initialising");
@@ -119,7 +144,7 @@ fn print_memory_info(memory_map: &MemoryMapTag) {
 
     // For when log_level != debug | trace
     #[allow(unused_variables)]
-    for area in memory_map.memory_areas() {
+        for area in memory_map.memory_areas() {
         trace!(" 0x{:x} to 0x{:x}",
                area.start_address(), area.end_address());
     }
@@ -129,7 +154,7 @@ fn print_memory_info(memory_map: &MemoryMapTag) {
         .map(|area| area.end_address() - area.start_address())
         .sum();
 
-    let gibbibytes_available  = bytes_available as f64 / (1 << 30) as f64;
+    let gibbibytes_available = bytes_available as f64 / (1 << 30) as f64;
     info!("{:.3} GiB of RAM available", gibbibytes_available);
 }
 
@@ -138,7 +163,7 @@ fn setup_bootstrap_heap(mb_info: &BootInformation) {
 
     // MB info struct could be higher than kernel, so take max
     let kernel_end = kernel_area(mb_info).end;
-    let mb_info_end =  mb_info.end_address();
+    let mb_info_end = mb_info.end_address();
     let end_address = cmp::max(kernel_end, mb_info_end) as *const u8;
 
     let end_address = unsafe {
@@ -227,7 +252,7 @@ fn kernel_area(mb_info: &BootInformation) -> Range<usize> {
 /// Subtracts a range from another one
 fn range_sub<T>(
     main: &Range<T>,
-    sub: &Range<T>
+    sub: &Range<T>,
 ) -> [Option<Range<T>>; 2]
     where T: Ord + Copy,
 {
