@@ -17,7 +17,7 @@ use multiboot2::{BootInformation, MemoryMapTag};
 use self::physical_allocator::{PHYSICAL_ALLOCATOR, BLOCKS_IN_TREE};
 use self::buddy_allocator::Block;
 use self::bootstrap_heap::BOOTSTRAP_HEAP;
-use self::paging::{remap, Page, PhysicalAddress, TemporaryPage};
+use self::paging::remap;
 use util;
 
 /// Represents the size of a page.
@@ -47,9 +47,7 @@ pub unsafe fn map_physical_region<T>(
     let frames = util::round_up_divide(size as u64, 4096) as usize;
     let physical_begin_frame = physical_address / 4096;
 
-    let alloc_ptr = unsafe {
-        ::HEAP.alloc_specific(physical_begin_frame, frames) as usize
-    };
+    let alloc_ptr = ::HEAP.alloc_specific(physical_begin_frame, frames) as usize;
 
     if alloc_ptr == 0 {
         panic!("Ran out of heap memory!");
@@ -63,7 +61,7 @@ pub unsafe fn map_physical_region<T>(
         virtual_start: NonNull::new(obj_ptr as *mut T)
             .expect("Ran out of heap memory!"),
         mapped_length: frames * 4096,
-        mutable
+        mutable,
     }
 }
 

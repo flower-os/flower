@@ -1,4 +1,4 @@
-use core::{ops::RangeInclusive, alloc::Layout};
+use core::alloc::Layout;
 use multiboot2::BootInformation;
 use memory::paging::{self, Page, PhysicalAddress, EntryFlags, page_map::TemporaryPage};
 use memory::{bootstrap_heap::BOOTSTRAP_HEAP, physical_allocator::PHYSICAL_ALLOCATOR};
@@ -101,7 +101,7 @@ pub fn remap_kernel(boot_info: &BootInformation) {
 
     // Map heap pages
     for page_no in (HEAP_TREE_START / 4096)..=((HEAP_START - 1) / 4096) {
-        let page = Page::containing_address((page_no * 4096), PageSize::Kib4);
+        let page = Page::containing_address(page_no * 4096, PageSize::Kib4);
         let phys_addr = paging::PAGE_TABLES.lock().walk_page_table(page).unwrap().0;
 
         active_table.with_inactive_p4(&mut new_table, &mut temporary_page, |mapper| {

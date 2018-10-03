@@ -90,10 +90,6 @@ impl Page {
     pub fn containing_address(addr: usize, size: PageSize) -> Page {
         Page { number: addr / size.bytes(), size: Some(size) }
     }
-
-    pub fn number(number: usize) -> Page {
-        Page { number, size: None }
-    }
 }
 
 /// An entry in a page table
@@ -102,11 +98,6 @@ impl Page {
 pub struct PageTableEntry(u64);
 
 impl PageTableEntry {
-    #[cfg(not(test))]
-    pub fn is_unused(&self) -> bool {
-        self.0 == 0
-    }
-
     pub fn set_unused(&mut self) {
         self.0 = 0;
     }

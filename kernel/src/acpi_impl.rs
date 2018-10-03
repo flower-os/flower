@@ -1,7 +1,5 @@
 use acpi::{self, AcpiHandler, Acpi, AcpiError};
-use core::ptr::NonNull;
 use memory::{self, PhysicalMapping};
-use util;
 
 pub fn acpi_init() -> Result<Acpi, AcpiError> {
     info!("acpi: initializing");

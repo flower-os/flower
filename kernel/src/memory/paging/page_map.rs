@@ -230,50 +230,6 @@ impl TemporaryPage {
     }
 }
 
-struct TinyAllocator([Option<PhysicalAddress>; 3]);
-
-impl TinyAllocator {
-    fn new() -> TinyAllocator {
-        let mut f = || {
-            let ptr = PHYSICAL_ALLOCATOR.allocate(0).expect("No physical frames available!");
-            Some(PhysicalAddress(ptr as usize))
-        };
-
-        let frames = [f(), f(), f()];
-        TinyAllocator(frames)
-    }
-
-    fn allocate(&mut self) -> Option<PhysicalAddress> {
-        for frame_option in &mut self.0 {
-            if frame_option.is_some() {
-                return frame_option.take();
-            }
-        }
-        None
-    }
-
-    fn deallocate(&mut self, frame: PhysicalAddress) {
-        for frame_option in &mut self.0 {
-            if frame_option.is_none() {
-                *frame_option = Some(frame);
-                return;
-            }
-        }
-
-        panic!("Tiny allocator can hold only 3 frames!");
-    }
-}
-
-impl Drop for TinyAllocator {
-    fn drop(&mut self) {
-        for frame_option in &mut self.0 {
-            if let Some(addr) = frame_option {
-                PHYSICAL_ALLOCATOR.deallocate(addr.0 as *const u8, 0);
-            }
-        }
-    }
-}
-
 pub struct ActivePageMap {
     mapper: Mapper,
 }
