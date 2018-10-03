@@ -171,10 +171,11 @@ setup_paging:
     or eax, 1 << 5
     mov cr4, eax
     
-    ; Set long mode bit
+    ; Set long mode and nxe bits
     mov ecx, 0xc0000080
     rdmsr
     or eax, 1 << 8
+    or eax, 1 << 11
     wrmsr
 
     ; Enable paging

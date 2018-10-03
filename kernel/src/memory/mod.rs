@@ -17,6 +17,7 @@ use multiboot2::{BootInformation, MemoryMapTag};
 use self::physical_allocator::{PHYSICAL_ALLOCATOR, BLOCKS_IN_TREE};
 use self::buddy_allocator::Block;
 use self::bootstrap_heap::BOOTSTRAP_HEAP;
+use self::paging::{remap, Page, PhysicalAddress, TemporaryPage};
 use util;
 
 /// Represents the size of a page.
@@ -142,11 +143,19 @@ pub fn init_memory(mb_info: &BootInformation, guard_page_addr: usize) {
     debug!("mem: initialising pmm (1/2)");
     let (gibbibytes, usable) = setup_physical_allocator_prelim(mb_info);
 
+    // ** IMPORTANT! **
+    // The heap must NOT BE USED except in
     debug!("mem: setting up kernel heap");
     ::HEAP.init();
 
     debug!("mem: initialising pmm (2/2)");
     setup_physical_allocator_rest(gibbibytes, usable.iter());
+
+    debug!("mem: remapping kernel");
+    remap::remap_kernel(mb_info);
+
+    trace!("mem: setting up guard page again");
+    setup_guard_page(guard_page_addr); // TODO when kernel is moved this will be different
 
     info!("mem: initialised")
 }
@@ -184,8 +193,8 @@ fn setup_bootstrap_heap(mb_info: &BootInformation) {
         )
     };
 
-    let heap_start = end_address;
-    unsafe { BOOTSTRAP_HEAP.init_unchecked(heap_start as usize); }
+    let heap_start = end_address as usize;
+    unsafe { BOOTSTRAP_HEAP.init_unchecked(heap_start); }
 }
 
 fn setup_physical_allocator_prelim(
@@ -241,8 +250,11 @@ fn setup_physical_allocator_rest<'a, I>(gibbibytes: u8, usable_areas: I)
 fn setup_guard_page(addr: usize) {
     use self::paging::*;
 
-    PAGE_TABLES.lock().unmap(Page::containing_address(addr, PageSize::Kib4), false);
+    unsafe {
+        PAGE_TABLES.lock().unmap(Page::containing_address(addr, PageSize::Kib4), false, true);
+    }
 }
+
 
 fn kernel_area(mb_info: &BootInformation) -> Range<usize> {
     let elf_sections = mb_info.elf_sections_tag()

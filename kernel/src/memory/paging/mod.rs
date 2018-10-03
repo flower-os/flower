@@ -1,13 +1,17 @@
 //! Various functions and structures to work with paging, page tables, and page table entries.
 //! Thanks a __lot__ to [Phil Opp's paging blogpost](https://os.phil-opp.com/page-tables/).
 
+pub mod remap;
+mod page_map;
+pub use self::page_map::*;
+
 use spin::Mutex;
 use core::{marker::PhantomData, convert::From, ops::{Index, IndexMut}, ptr::Unique};
 use super::physical_allocator::PHYSICAL_ALLOCATOR;
 use x86_64::instructions::tlb;
 
 const PAGE_TABLE_ENTRIES: usize = 512;
-pub static PAGE_TABLES: Mutex<PageMap> = Mutex::new(PageMap::new());
+pub static PAGE_TABLES: Mutex<ActivePageMap> = Mutex::new(unsafe { ActivePageMap::new() });
 
 #[derive(Debug, Eq, PartialEq, Copy, Clone, Ord, PartialOrd)]
 pub struct PhysicalAddress(pub usize);
@@ -55,160 +59,6 @@ impl PageSize {
     }
 }
 
-pub struct PageMap {
-    p4: Unique<PageTable<Level4>>,
-}
-
-impl PageMap {
-    const fn new() -> PageMap {
-        PageMap {
-            // The address points to the recursively mapped entry in the P4 table, which we can use
-            // to access the P4 table itself.
-            p4: unsafe { Unique::new_unchecked(0xffffffff_fffff000 as *mut _) },
-        }
-    }
-
-    fn p4(&self) -> &PageTable<Level4> {
-        unsafe { self.p4.as_ref() }
-    }
-
-    fn p4_mut(&mut self) -> &mut PageTable<Level4> {
-        unsafe { self.p4.as_mut() }
-    }
-
-    /// Walks the page tables and translates this page into a physical address
-    pub fn walk_page_table(&self, page: Page) -> Option<(PhysicalAddress, PageSize)> {
-        let p3 = self.p4().next_page_table(page.p4_index());
-
-        let huge_page = || {
-            p3.and_then(|p3| {
-                // 1GiB page
-                let p3_entry = &p3[page.p3_index()];
-                if p3_entry.physical_address().is_some() {
-                    if p3_entry.flags().contains(EntryFlags::HUGE_PAGE) {
-                        panic!("1 GiB pages are not supported!");
-                    }
-                }
-
-                if let Some(p2) = p3.next_page_table(page.p3_index()) {
-                    let p2_entry = &p2[page.p2_index()];
-
-                    // 2MiB page
-                    if let Some(start_frame) = p2_entry.physical_address() {
-                        if p2_entry.flags().contains(EntryFlags::HUGE_PAGE) {
-                            // Check that the address is 2MiB aligned
-                            assert_eq!(
-                                start_frame.0 >> 12 % PAGE_TABLE_ENTRIES,
-                                0,
-                                "Adress is not 2MiB aligned!"
-                            );
-                            return Some((
-                                PhysicalAddress(start_frame.0 >> 12 + page.p1_index()),
-                                PageSize::Mib2,
-                            ));
-                        }
-                    }
-                }
-                None
-            })
-        };
-
-        p3.and_then(|p3| p3.next_page_table(page.p3_index()))
-            .and_then(|p2| p2.next_page_table(page.p2_index()))
-            .and_then(|p1| Some((p1[page.p1_index()].physical_address()?, PageSize::Kib4)))
-            .or_else(huge_page)
-    }
-
-    pub fn map_to(&mut self, page: Page, physical_address: PhysicalAddress, flags: EntryFlags) {
-        use self::EntryFlags;
-
-        let mut p2 = self.p4_mut()
-            .next_table_create(page.p4_index()).expect("No next p3 table!")
-            .next_table_create(page.p3_index()).expect("No next p2 table!");
-
-        assert!(page.size.is_some(), "Page to map requires size!");
-
-        if page.size.unwrap() == PageSize::Kib4 {
-            let mut p1 = p2.next_table_create(page.p2_index())
-                .expect("No next p1 table!");
-
-            // 4kib page
-            p1[page.p1_index()].set(
-                physical_address,
-                flags | EntryFlags::PRESENT | EntryFlags::WRITABLE,
-            );
-
-            tlb::flush(::x86_64::VirtualAddress(page.start_address().unwrap()));
-        } else {
-            panic!("2mib pages are only partially supported!");
-        }
-    }
-
-    pub fn map(&mut self, page: Page, flags: EntryFlags) {
-        use core::ptr;
-
-        assert!(page.size.is_some(), "Page needs size!");
-        let order = if page.size.unwrap() == PageSize::Kib4 {
-            0
-        } else {
-            9
-        };
-
-        let ptr = PHYSICAL_ALLOCATOR.allocate(order).expect("Out of physical memory!");
-        let frame = PhysicalAddress(ptr as usize);
-        self.map_to(page, frame, flags);
-
-        // Zero the page
-        unsafe {
-            ptr::write_bytes(
-                page.start_address().unwrap() as *mut u8,
-                0,
-                page.size.unwrap().bytes()
-            );
-        }
-    }
-
-    pub fn unmap(&mut self, page: Page, free_physical_memory: bool) {
-        assert!(page.start_address().is_some(), "Page to map requires size!");
-        assert!(
-            self.walk_page_table(page).is_some(),
-                "Virtual address 0x{:x} is not mapped!",
-                page.start_address().unwrap()
-        );
-
-        let mut p2 = self.p4_mut()
-            .next_page_table_mut(page.p4_index()).expect("Unmap called on unmapped page!")
-            .next_page_table_mut(page.p3_index()).expect("Unmap called on unmapped page!");
-
-        let p1 = p2.next_page_table_mut(page.p2_index());
-
-        if let Some(p1) = p1 {
-            // 4kib page
-
-            let frame = p1[page.p1_index()].physical_address().expect("Page already unmapped!");
-            p1[page.p1_index()].set_unused();
-
-            // TODO free p1/p2/p3 tables if they are empty
-            if free_physical_memory {
-                PHYSICAL_ALLOCATOR.deallocate(frame.0 as *const _, 0);
-            }
-        } else {
-            // Huge 2mib page
-
-            let frame = p2[page.p2_index()].physical_address().expect("Page already unmapped!");
-            p2[page.p2_index()].set_unused();
-
-            // TODO free p2/p3 tables if they are empty
-            if free_physical_memory {
-                PHYSICAL_ALLOCATOR.deallocate(frame.0 as *const _, 9);
-            }
-        }
-
-        // Flush tlb
-        tlb::flush(::x86_64::VirtualAddress(page.start_address().unwrap()));
-    }
-}
-
 #[derive(Copy, Clone)]
 pub struct Page {
     number: usize,
@@ -233,7 +83,7 @@ impl Page {
         self.number & 0o777
     }
 
-    fn start_address(&self) -> Option<usize> {
+    pub fn start_address(&self) -> Option<usize> {
         self.size.map(|size| self.number * size.bytes())
     }
 

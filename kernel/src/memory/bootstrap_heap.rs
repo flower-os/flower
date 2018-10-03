@@ -26,6 +26,11 @@ impl BootstrapHeap {
         self.0.call_once(|| BootstrapAllocator::new_unchecked(address));
     }
 
+    /// Get the start address of the bootstrap heap. Panics if uninitialized
+    pub fn start(&self) -> usize {
+        self.0.wait().unwrap().start() as usize
+    }
+
     /// Get the end address of the bootstrap heap. Inclusive. Panics if uninitialized
     pub fn end(&self) -> usize {
         self.0.wait().unwrap().start() as usize +

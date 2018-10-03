@@ -13,7 +13,7 @@ endif
 ifeq ($(debug), 1)
     nasm_flags := -f elf64 -F dwarf -g
     build_type := debug
-    qemu_flags := -s -m 256M
+    qemu_flags := -s -m 256M -d int -no-reboot
     cargo_flags := --features $(log_level)
 else
     nasm_flags := -f elf64

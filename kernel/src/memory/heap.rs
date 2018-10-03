@@ -1,11 +1,11 @@
-const HEAP_TREE_START: usize = 4 * 1024 * 1024 * 1024;
+pub const HEAP_TREE_START: usize = 4 * 1024 * 1024 * 1024;
 /// The base heap address. The first 4GiB is identity mapped, so we put the heap
 /// straight above. We place the info needed for the heap (block tree) above _that_, so the heap
 /// only begins after that.
 ///
 /// Should be aligned to 64 bytes _at least_.
 // We add 1 because the size of the blocks in tree is a power of two - 1 and we want to be aligned
-const HEAP_START: usize = HEAP_TREE_START + mem::size_of::<[Block; BLOCKS_IN_TREE]>() + 1;
+pub const HEAP_START: usize = HEAP_TREE_START + mem::size_of::<[Block; BLOCKS_IN_TREE]>() + 1;
 
 use core::alloc::{GlobalAlloc, Layout};
 use core::{iter, mem};
@@ -65,10 +65,13 @@ impl Heap {
 
             for page in 0..pages_to_map as usize {
                 let mut table = PAGE_TABLES.lock();
-                table.map(
-                    Page::containing_address(HEAP_TREE_START + (page * 4096), PageSize::Kib4),
-                    EntryFlags::from_bits_truncate(0),
-                );
+                unsafe {
+                    table.map(
+                        Page::containing_address(HEAP_TREE_START + (page * 4096), PageSize::Kib4),
+                        EntryFlags::from_bits_truncate(0),
+                        true, // Do invplg
+                    );
+                }
             }
 
             let tree = unsafe {
@@ -99,7 +102,10 @@ impl Heap {
 
         let ptr = tree.allocate(order);
 
-        if ptr.is_none() { return 0 as *mut _ }
+        if ptr.is_none() {
+            return 0 as *mut _;
+        }
+
         let ptr = (ptr.unwrap() as usize + HEAP_START) as *mut u8;
 
         // Map pages that must be mapped
@@ -110,6 +116,7 @@ impl Heap {
                 Page::containing_address(page_addr, PageSize::Kib4),
                 PhysicalAddress((physical_begin_frame + page) * 4096),
                 EntryFlags::from_bits_truncate(0),
+                true, // Do invplg
             );
         }
 
@@ -144,7 +151,8 @@ impl Heap {
 
             PAGE_TABLES.lock().unmap(
                 Page::containing_address(page_addr, PageSize::Kib4),
-                false,
+                false, // Do not free backing memory
+                true, // Do invplg
             );
         }
     }
@@ -177,6 +185,7 @@ unsafe impl GlobalAlloc for Heap {
                 page_tables.map(
                     Page::containing_address(page_addr, PageSize::Kib4),
                     EntryFlags::from_bits_truncate(0),
+                    true, // Do invplg
                 );
             }
         }
@@ -217,34 +226,13 @@ unsafe impl GlobalAlloc for Heap {
 
             PAGE_TABLES.lock().unmap(
                 Page::containing_address(page_addr, PageSize::Kib4),
-                true,
+                true, // Free backing memory
+                true, // Do invplg
             );
         }
-    }
-// TODO
-//
-//    unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
-//        let old_order = order(layout.size());
-//        let new_order = order(new_size);
-//
-//        // See if the size is still the same order. If so, do nothing
-//        if old_order == new_order {
-//            return ptr;
-//        }
-//
-//        let new_layout = Layout::from_size_align_unchecked(new_size, layout.align());
-//        let new_ptr = self.alloc(new_layout);
-//        if !new_ptr.is_null() {
-//            ptr::copy_nonoverlapping(
-//                ptr as *const u8,
-//                new_ptr as *mut u8,
-//                cmp::min(layout.size(), new_size),
-//            );
-//            self.dealloc(ptr, layout);
-//        }
-//
-//        new_ptr
-//    }
+
+       trace!("Top block = {}", self.tree.wait().unwrap().lock().flat_blocks[0].order_free);
+   }
 }
 
 
