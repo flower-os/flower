@@ -1,5 +1,5 @@
 use acpi::{self, AcpiHandler, Acpi, AcpiError};
-use memory::{self, PhysicalMapping};
+use memory::physical_mapping::{self, PhysicalMapping};
 
 pub fn acpi_init() -> Result<Acpi, AcpiError> {
     info!("acpi: initializing");
@@ -28,7 +28,7 @@ impl AcpiHandler for FlowerAcpiHandler {
     ) -> acpi::PhysicalMapping<T> {
         // Map immutable region
         let region: PhysicalMapping<T> = unsafe {
-            memory::map_physical_region(physical_address, size, false)
+            physical_mapping::map_physical_region(physical_address, size, false)
         };
 
         region.into()

@@ -108,9 +108,7 @@ impl PageTableEntry {
 
     pub fn physical_address(&self) -> Option<PhysicalAddress> {
         if self.flags().contains(self::EntryFlags::PRESENT) {
-            // Mask out the flag bits
-            // TODO could break sign ext
-            Some(PhysicalAddress(self.0 as usize & 0x000FFFFF_FFFFF000))
+            Some(PhysicalAddress(self.0 as usize & 0x000FFFFF_FFFFF000)) // Mask out the flag bits
         } else {
             None
         }
