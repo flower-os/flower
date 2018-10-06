@@ -1,4 +1,4 @@
-pub const HEAP_TREE_START: usize = 4 * 1024 * 1024 * 1024;
+pub const HEAP_TREE_START: usize = 4 * 1024 * 1024 * 1024; // TODO higher half pl0x
 /// The base heap address. The first 4GiB is identity mapped, so we put the heap
 /// straight above. We place the info needed for the heap (block tree) above _that_, so the heap
 /// only begins after that.
@@ -73,7 +73,6 @@ impl Heap {
                     );
                 }
             }
-
             let tree = unsafe {
                 Tree::new(
                     iter::once(0..(1 << 30 + 1)),
@@ -189,7 +188,6 @@ unsafe impl GlobalAlloc for Heap {
                 );
             }
         }
-
         ptr
     }
 
@@ -230,8 +228,6 @@ unsafe impl GlobalAlloc for Heap {
                 true, // Do invplg
             );
         }
-
-       trace!("Top block = {}", self.tree.wait().unwrap().lock().flat_blocks[0].order_free);
    }
 }
 

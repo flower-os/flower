@@ -8,8 +8,11 @@ use spin::RwLock;
 use util::{self, FromDiscriminator};
 use color::{Color, ColorPair};
 use terminal::*;
+use memory::KERNEL_MAPPING_BEGIN;
 
 pub static WRITER: RwLock<VgaWriter> = RwLock::new(VgaWriter::new());
+
+pub const VIRTUAL_VGA_PTR: usize = KERNEL_MAPPING_BEGIN + 0xb8000;
 
 /// The resolution of VGA
 pub const RESOLUTION: Resolution = Resolution::new(80, 25);
@@ -30,7 +33,7 @@ impl fmt::Debug for VgaWriter {
 impl VgaWriter {
     pub const fn new() -> Self {
         VgaWriter {
-            buffer: unsafe { Unique::new_unchecked(0xb8000 as *mut _) },
+            buffer: unsafe { Unique::new_unchecked((VIRTUAL_VGA_PTR) as *mut _) },
             cursor: Point::new(0, RESOLUTION.y - 1),
             color: color!(White on Black),
         }

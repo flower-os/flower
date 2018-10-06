@@ -43,6 +43,7 @@ pub fn remap_kernel(boot_info: &BootInformation) {
         let elf_sections_tag = boot_info.elf_sections_tag()
             .expect("Memory map tag required");
 
+        // Map kernel sections
         for section in elf_sections_tag.sections() {
             if !section.is_allocated() { continue; }
 
@@ -53,14 +54,11 @@ pub fn remap_kernel(boot_info: &BootInformation) {
                 section.name(),
             );
 
-            trace!(
-                "Mapping section \"{}\" at addr: {:#x}, size: {:#x}",
-                section.name(),
-                section.start_address(),
-                section.size(),
-            );
-
             let mut flags = paging::EntryFlags::from_bits_truncate(0);
+
+            if !section.flags().contains(ElfSectionFlags::ALLOCATED) {
+                continue;
+            }
 
             if section.flags().contains(ElfSectionFlags::WRITABLE) {
                 flags = flags | paging::EntryFlags::WRITABLE;
@@ -70,28 +68,26 @@ pub fn remap_kernel(boot_info: &BootInformation) {
                 flags = flags | paging::EntryFlags::NO_EXECUTE;
             }
 
-            if section.flags().contains(ElfSectionFlags::ALLOCATED) {
-                unsafe {
-                    mapper.id_map_range(
-                        section.start_address() as usize..=section.end_address() as usize - 1,
-                        flags,
-                        false,
-                    );
-                }
+            unsafe {
+                mapper.higher_half_map_range(
+                    section.start_address() as usize..=section.end_address() as usize,
+                    flags,
+                    false
+                );
             }
         }
 
         unsafe {
             // Map VGA buffer
             mapper.map_to(
-                Page::containing_address(0xb8000, PageSize::Kib4),
+                Page::containing_address(::drivers::vga::VIRTUAL_VGA_PTR, PageSize::Kib4),
                 PhysicalAddress(0xb8000 as usize),
                 EntryFlags::WRITABLE,
                 false,
             );
 
             // Map bootstrap heap
-            mapper.id_map_range(
+            mapper.higher_half_map_range(
                 BOOTSTRAP_HEAP.start()..=BOOTSTRAP_HEAP.end(),
                 EntryFlags::WRITABLE,
                 false
@@ -112,7 +108,6 @@ pub fn remap_kernel(boot_info: &BootInformation) {
     }
 
     // Remap heap page so it can be deallocated correctly
-    trace!("page: 0x{:x} frame: 0x{:x}", heap_page.start_address().unwrap(), heap_frame_addr.0);
     unsafe {
         paging::PAGE_TABLES.lock().map_to(
             heap_page,

@@ -20,6 +20,8 @@ use self::bootstrap_heap::BOOTSTRAP_HEAP;
 use self::paging::remap;
 use util;
 
+pub const KERNEL_MAPPING_BEGIN: usize = 0xffffffff80000000;
+
 /// Represents the size of a page.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 enum PageSize {
@@ -132,9 +134,6 @@ pub fn init_memory(mb_info: &BootInformation, guard_page_addr: usize) {
 
     print_memory_info(memory_map);
 
-    trace!("mem: setting up guard page");
-    setup_guard_page(guard_page_addr);
-
     debug!("mem: initialising bootstrap heap");
     setup_bootstrap_heap(mb_info);
 
@@ -142,7 +141,8 @@ pub fn init_memory(mb_info: &BootInformation, guard_page_addr: usize) {
     let (gibbibytes, usable) = setup_physical_allocator_prelim(mb_info);
 
     // ** IMPORTANT! **
-    // The heap must NOT BE USED except in
+    // The heap must NOT BE USED except in one specific place -- all heap objects will be corrupted
+    // after the remap.
     debug!("mem: setting up kernel heap");
     ::HEAP.init();
 
@@ -152,8 +152,8 @@ pub fn init_memory(mb_info: &BootInformation, guard_page_addr: usize) {
     debug!("mem: remapping kernel");
     remap::remap_kernel(mb_info);
 
-    trace!("mem: setting up guard page again");
-    setup_guard_page(guard_page_addr); // TODO when kernel is moved this will be different
+    trace!("mem: setting up guard page");
+    setup_guard_page(guard_page_addr);
 
     info!("mem: initialised")
 }
@@ -181,6 +181,8 @@ fn setup_bootstrap_heap(mb_info: &BootInformation) {
     use core::cmp;
 
     // MB info struct could be higher than kernel, so take max
+    // All of these addresses are relative to 0gib and not -2gib, so we make them relative by adding
+    // KERNEL_MAPPING_BEGIN later on just before the end
     let kernel_end = kernel_area(mb_info).end;
     let mb_info_end = mb_info.end_address();
     let end_address = cmp::max(kernel_end, mb_info_end) as *const u8;
@@ -191,7 +193,7 @@ fn setup_bootstrap_heap(mb_info: &BootInformation) {
         )
     };
 
-    let heap_start = end_address as usize;
+    let heap_start = end_address as usize + KERNEL_MAPPING_BEGIN;
     unsafe { BOOTSTRAP_HEAP.init_unchecked(heap_start); }
 }
 
@@ -210,7 +212,7 @@ fn setup_physical_allocator_prelim(
     let trees = util::round_up_divide(highest_address as u64, 1 << 30) as u8;
     trace!("Allocating {} trees", trees);
 
-    let kernel_area = kernel_area(mb_info).start..BOOTSTRAP_HEAP.end() + 1;
+    let kernel_area = kernel_area(mb_info).start..(BOOTSTRAP_HEAP.end() - KERNEL_MAPPING_BEGIN + 1);
 
     // Calculate the usable memory areas by using the MB2 memory map but excluding kernel areas
     let usable_areas = memory_map
@@ -248,25 +250,34 @@ fn setup_physical_allocator_rest<'a, I>(gibbibytes: u8, usable_areas: I)
 fn setup_guard_page(addr: usize) {
     use self::paging::*;
 
+    let page = Page::containing_address(addr, PageSize::Kib4);
+
+    // Check it is a 4kib page
+    let size = PAGE_TABLES.lock().walk_page_table(page).expect("Guard page must be mapped!").1;
+    assert_eq!(size, PageSize::Kib4, "Guard page must be on a 4kib page!");
+
     unsafe {
-        PAGE_TABLES.lock().unmap(Page::containing_address(addr, PageSize::Kib4), false, true);
+        PAGE_TABLES.lock().unmap(page, false, true);
     }
 }
 
 
 fn kernel_area(mb_info: &BootInformation) -> Range<usize> {
+    use multiboot2::ElfSectionFlags;
+
     let elf_sections = mb_info.elf_sections_tag()
         .expect("Expected a multiboot2 elf sections tag, but it is not present!");
-    let modules = mb_info.module_tags();
 
     let used_areas = elf_sections.sections()
-        .map(|section| section.start_address()..section.end_address() + 1)
-        .chain(modules.map(|module|
-            module.start_address() as u64..module.end_address() as u64
-        ));
+        .filter(|section| section.flags().contains(ElfSectionFlags::ALLOCATED))
+        .map(|section| section.start_address()..section.end_address() + 1);
 
-    let begin = used_areas.clone().map(|range| range.start).min().unwrap() as usize;
-    let end = (used_areas.map(|range| range.end).max().unwrap() + 1) as usize;
+    let begin = used_areas.clone().map(
+        |range| range.start - KERNEL_MAPPING_BEGIN as u64
+    ).min().unwrap() as usize;
+    let end = used_areas.map(
+        |range| range.end - KERNEL_MAPPING_BEGIN as u64
+    ).max().unwrap() as usize;
 
     begin..end
 }

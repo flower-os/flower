@@ -11,10 +11,13 @@ pub struct Mapper {
 
 impl Mapper {
     const unsafe fn new() -> Self {
+        // The address points to the recursively mapped entry (511) in the P4 table, which we can
+        // use to access the P4 table itself.
+        //                sign ext  p4  p3  p2  p1  offset
+        const P4: usize = 0o177_777_776_776_776_776_0000;
+
         Mapper {
-            // The address points to the recursively mapped entry in the P4 table, which we can use
-            // to access the P4 table itself.
-            p4: Unique::new_unchecked(0xffffffff_fffff000 as *mut _),
+            p4: Unique::new_unchecked(P4 as *mut _),
         }
     }
 
@@ -48,12 +51,12 @@ impl Mapper {
                         if p2_entry.flags().contains(EntryFlags::HUGE_PAGE) {
                             // Check that the address is 2MiB aligned
                             assert_eq!(
-                                start_frame.0 >> 12 % PAGE_TABLE_ENTRIES,
+                                (start_frame.0 >> 12) % PAGE_TABLE_ENTRIES,
                                 0,
                                 "Adress is not 2MiB aligned!"
                             );
                             return Some((
-                                PhysicalAddress(start_frame.0 >> 12 + page.p1_index()),
+                                PhysicalAddress((start_frame.0 >> 12) + page.p1_index()),
                                 PageSize::Mib2,
                             ));
                         }
@@ -94,6 +97,7 @@ impl Mapper {
                 flags | EntryFlags::PRESENT | EntryFlags::WRITABLE,
             );
 
+            // TODO only invplg if this is an overwrite
             if invplg {
                 tlb::flush(::x86_64::VirtualAddress(page.start_address().unwrap()));
             }
@@ -184,6 +188,24 @@ impl Mapper {
         }
     }
 
+    /// Maps a range of addresses as 4kib pages in the -2GiB higher "half".
+    pub unsafe fn higher_half_map_range(
+        &mut self,
+        addresses: RangeInclusive<usize>,
+        flags: EntryFlags,
+        invplg: bool,
+    ) {
+        for frame_no in (addresses.start() / 4096)..=((addresses.end()) / 4096) {
+            let address = (frame_no * 4096) as usize;
+
+            self.map_to(
+                Page::containing_address(address, PageSize::Kib4),
+                PhysicalAddress((address - ::memory::KERNEL_MAPPING_BEGIN) as usize),
+                flags,
+                invplg,
+            );
+        }
+    }
 
 }
 
@@ -259,7 +281,7 @@ impl ActivePageMap {
             };
 
             // overwrite recursive mapping
-            self.p4_mut()[511].set(
+            self.p4_mut()[510].set(
                 table.p4_frame.clone(),
                 EntryFlags::PRESENT | EntryFlags::WRITABLE
             );
@@ -270,7 +292,7 @@ impl ActivePageMap {
             let ret = f(self);
 
             // restore recursive mapping to original p4 table
-            p4_table[511].set(backup, EntryFlags::PRESENT | EntryFlags::WRITABLE);
+            p4_table[510].set(backup, EntryFlags::PRESENT | EntryFlags::WRITABLE);
 
             tlb::flush_all();
 
@@ -331,7 +353,7 @@ impl InactivePageMap {
             table.zero();
 
             // Set up recursive mapping for table
-            table[511].set(frame.clone(), EntryFlags::PRESENT | EntryFlags::WRITABLE);
+            table[510].set(frame.clone(), EntryFlags::PRESENT | EntryFlags::WRITABLE);
         }
 
         unsafe {

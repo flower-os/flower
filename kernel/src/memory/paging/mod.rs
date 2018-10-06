@@ -109,20 +109,39 @@ impl PageTableEntry {
     pub fn physical_address(&self) -> Option<PhysicalAddress> {
         if self.flags().contains(self::EntryFlags::PRESENT) {
             // Mask out the flag bits
-            Some(PhysicalAddress(self.0 as usize & 0x000fffff_fffff000))
+            // TODO could break sign ext
+            Some(PhysicalAddress(self.0 as usize & 0x000FFFFF_FFFFF000))
         } else {
             None
         }
     }
 
     pub fn set(&mut self, physical_address: PhysicalAddress, flags: EntryFlags) {
-        // Check that the physical address is 1) page aligned and 2) not larger than max
+        // Check that the physical address is page aligned
         assert_eq!(
-            physical_address.0 & !0x000fffff_fffff000,
+            physical_address.0 & 0xFFF,
             0,
-            "Physical address 0x{:x} not page aligned/larger than max!",
+            "Physical address 0x{:x} not page aligned!",
             physical_address.0,
         );
+
+        // Check that physical address is correctly sign extended
+        let bit_47 = (physical_address.0 >> 48) & 1;
+        if bit_47 == 1 {
+            assert_eq!(
+                physical_address.0 >> 48,
+                0xFFFF,
+                "Physical address 0x{:x} is not correctly sign extended!",
+                physical_address.0,
+            )
+        } else {
+            assert_eq!(
+                physical_address.0 >> 48,
+                0,
+                "Physical address 0x{:x} is not correctly sign extended!",
+                physical_address.0,
+            )
+        }
 
         self.0 = (physical_address.0 as u64) | flags.bits();
     }
@@ -206,9 +225,12 @@ impl<L: TableLevel> PageTable<L> {
         where L: HierarchicalLevel
     {
         let entry_flags = self[index].flags();
+
         if entry_flags.contains(self::EntryFlags::PRESENT) && !entry_flags.contains(self::EntryFlags::HUGE_PAGE) {
             let table_address = self as *const _ as usize;
-            Some((table_address << 9) | (index << 12))
+            Some((0xFFFF << 48) | (table_address << 9) | (index << 12))
+            // HEADS UP ^. This first mask would change if the p4 table were recursively mapped to
+            // an entry in the 0 sign extended half of the address space. BEWARE!
         } else {
             None
         }
