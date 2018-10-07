@@ -1,4 +1,4 @@
-pub const HEAP_TREE_START: usize = 4 * 1024 * 1024 * 1024; // TODO higher half pl0x
+pub const HEAP_TREE_START: usize = 0xffffffff00000000;
 /// The base heap address. The first 4GiB is identity mapped, so we put the heap
 /// straight above. We place the info needed for the heap (block tree) above _that_, so the heap
 /// only begins after that.
