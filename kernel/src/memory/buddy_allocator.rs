@@ -39,8 +39,8 @@ pub mod flat_tree {
     }
 
     #[inline]
-        pub fn parent(index: usize) -> usize {
-            index >> 1
+    pub fn parent(index: usize) -> usize {
+        index >> 1
     }
 }
 
