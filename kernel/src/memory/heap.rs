@@ -69,7 +69,7 @@ impl Heap {
                     table.map(
                         Page::containing_address(HEAP_TREE_START + (page * 4096), PageSize::Kib4),
                         EntryFlags::from_bits_truncate(0),
-                        true, // Do invplg
+                        false, // Don't invplg -- this is not an overwrite
                     );
                 }
             }
@@ -184,7 +184,7 @@ unsafe impl GlobalAlloc for Heap {
                 page_tables.map(
                     Page::containing_address(page_addr, PageSize::Kib4),
                     EntryFlags::from_bits_truncate(0),
-                    true, // Do invplg
+                    false, // Do not invplg -- not an overwrite
                 );
             }
         }

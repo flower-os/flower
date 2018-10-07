@@ -97,7 +97,6 @@ impl Mapper {
                 flags | EntryFlags::PRESENT | EntryFlags::WRITABLE,
             );
 
-            // TODO only invplg if this is an overwrite
             if invplg {
                 tlb::flush(::x86_64::VirtualAddress(page.start_address().unwrap()));
             }
