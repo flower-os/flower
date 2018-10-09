@@ -162,7 +162,7 @@ fn print_memory_info(memory_map: &MemoryMapTag) {
     }
 
     // Calculate how many GiBs are available
-    let bytes_available: usize = memory_map.memory_areas()
+    let bytes_available: u64 = memory_map.memory_areas()
         .map(|area| area.end_address() - area.start_address())
         .sum();
 
