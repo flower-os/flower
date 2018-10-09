@@ -58,6 +58,7 @@ mod interrupts;
 mod memory;
 mod drivers;
 mod acpi_impl;
+mod cpuid;
 
 use memory::heap::Heap;
 
