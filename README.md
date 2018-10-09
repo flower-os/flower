@@ -1,4 +1,4 @@
-# FlowerOS
+# FlowerOS [![Gitter](https://badges.gitter.im/flower-os/Lobby.png)](https://gitter.im/flower-os/Lobby)
 
 *A small learning OS*
 
