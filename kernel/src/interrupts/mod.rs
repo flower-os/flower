@@ -5,6 +5,8 @@ use x86_64::structures::idt::Idt;
 mod legacy_pic;
 mod exceptions;
 
+mod syscalls;
+
 lazy_static! {
     static ref IDT: Idt = {
         let mut idt = Idt::new();
@@ -26,6 +28,9 @@ lazy_static! {
         idt.simd_floating_point.set_handler_fn(exceptions::simd_floating_point);
         idt.virtualization.set_handler_fn(exceptions::virtualization);
         idt.security_exception.set_handler_fn(exceptions::security_exception);
+
+        idt[0x80].set_handler_fn(syscalls::syscall);
+
         idt
     };
 }

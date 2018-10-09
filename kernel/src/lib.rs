@@ -82,6 +82,8 @@ pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
         Err(error) => error!("ps2c: {:?}", error),
     }
 
+    test_syscalls();
+
     keyboard_echo_loop(&mut controller);
 
     halt()
@@ -103,6 +105,12 @@ fn say_hello() {
     // Reset colors
     terminal::STDOUT.write().set_color(color!(White on Black))
         .expect("Color should be supported");
+}
+
+fn test_syscalls() {
+    unsafe {
+        asm!("mov rax, 3; int 0x80" :::: "intel");
+    }
 }
 
 fn print_flower() -> Result<(), terminal::TerminalOutputError<()>> {
