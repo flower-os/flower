@@ -54,6 +54,7 @@ mod log;
 #[macro_use]
 mod terminal;
 mod io;
+mod syscalls;
 mod interrupts;
 mod memory;
 mod drivers;
@@ -109,7 +110,7 @@ fn say_hello() {
 
 fn test_syscalls() {
     unsafe {
-        asm!("mov rax, 3; int 0x80" :::: "intel");
+        asm!("mov rax, 0; int 0x80" :::: "intel");  // Call "ping" syscall
     }
 }
 

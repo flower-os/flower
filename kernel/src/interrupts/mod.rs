@@ -29,7 +29,7 @@ lazy_static! {
         idt.virtualization.set_handler_fn(exceptions::virtualization);
         idt.security_exception.set_handler_fn(exceptions::security_exception);
 
-        idt[0x80].set_handler_fn(syscalls::syscall);
+        idt[0x80].set_handler_fn(syscalls::syscall_int);
 
         idt
     };
