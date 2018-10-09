@@ -3,63 +3,56 @@ use core::arch::x86_64::__cpuid;
 const CPUID_GET_FEATURES: u32 = 0x1;
 
 bitflags! {
+    /// Represents the collection of flags returned from `CPUID_GET_FEATURES`. This is combined into
+    /// a `u64` from the two `u32`s returned by the CPUID command.
+    ///
+    /// Documentation of these opcodes can be found in:
+    ///  - (AMD CPUID Spec)[https://www.amd.com/system/files/TechDocs/25481.pdf]
+    ///  - (Intel CPUID Spec)[http://bochs.sourceforge.net/techspec/24161821.pdf]
     pub struct Features: u64 {
-        const FPU = 1 << 0;
-        const VME = 1 << 1;
-        const DE = 1 << 2;
-        const PSE = 1 << 3;
-        const TSC = 1 << 4;
-        const MSR = 1 << 5;
-        const PAE = 1 << 6;
-        const MCE = 1 << 7;
-        const CX8 = 1 << 8;
+        const FLOATING_POINT_UNIT = 1 << 0;
+        const VIRTUAL_MODE_EXTENSION = 1 << 1;
+        const DEBUGGING_EXTENSION = 1 << 2;
+        const PAGE_SIZE_EXTENSION = 1 << 3;
+        const TIME_STAMP_COUNTER = 1 << 4;
+        const MODEL_SPECIFIC_REGISTERS = 1 << 5;
+        const PHYSICAL_ADDRESS_EXTENSION = 1 << 6;
+        const MACHINE_CHECK_EXCEPTION = 1 << 7;
+        const CMPXCHG8_INSTRUCTION = 1 << 8;
         const APIC = 1 << 9;
-        const SEP = 1 << 11;
-        const MTRR = 1 << 12;
-        const PGE = 1 << 13;
-        const MCA = 1 << 14;
-        const CMOV = 1 << 15;
-        const PAT = 1 << 16;
-        const PSE36 = 1 << 17;
-        const PSN = 1 << 18;
-        const CLF = 1 << 19;
-        const DTES = 1 << 21;
+        const FAST_SYSTEM_CALL = 1 << 11;
+        const MEMORY_TYPE_RANGE_REGISTERS = 1 << 12;
+        const PAGE_GLOBAL_ENABLE = 1 << 13;
+        const MACHINE_CHECK_ARCHITECTURE = 1 << 14;
+        const CMOV_INSTRUCTION = 1 << 15;
+        const PAGE_ATTRIBUTE_TABLE = 1 << 16;
+        const PAGE_SIZE_36_EXTENSION = 1 << 17;
+        const PROCESSOR_SERIAL_NUMBER_PRESENT = 1 << 18;
+        const CLFLUSH_INSTRUCTION = 1 << 19;
+        const DEBUG_STORE = 1 << 21;
         const ACPI = 1 << 22;
-        const MMX = 1 << 23;
-        const FXSR = 1 << 24;
-        const SSE = 1 << 25;
-        const SSE2 = 1 << 26;
-        const SS = 1 << 27;
-        const HTT = 1 << 28;
-        const TM1 = 1 << 29;
-        const IA64 = 1 << 30;
-        const PBE = 1 << 31;
-        const SSE3 = 1 << 32;
-        const PCLMUL = 1 << 33;
-        const DTES64 = 1 << 34;
-        const MONITOR = 1 << 35;
-        const DS_CPL = 1 << 36;
-        const VMX = 1 << 37;
-        const SMX = 1 << 38;
-        const EST = 1 << 39;
-        const TM2 = 1 << 40;
-        const SSSE3 = 1 << 41;
-        const CID = 1 << 42;
-        const FMA = 1 << 44;
-        const CX16 = 1 << 45;
-        const ETPRD = 1 << 46;
-        const PDCM = 1 << 47;
-        const PCIDE = 1 << 49;
-        const DCA = 1 << 50;
-        const SSE4_1 = 1 << 51;
-        const SSE4_2 = 1 << 52;
+        const INTEL_MMX = 1 << 23;
+        const FAST_FLOATING_POINT_SAVE_RESTORE = 1 << 24;
+        const STREAMING_SIMD_EXTENSIONS = 1 << 25;
+        const STREAMING_SIMD_EXTENSIONS_2 = 1 << 26;
+        const SELF_SNOOP = 1 << 27;
+        const HYPER_THREADING_TECHNOLOGY = 1 << 28;
+        const THERMAL_MONITOR = 1 << 29;
+        const STREAMING_SIMD_EXTENSIONS_3 = 1 << 32;
+        const PCLMUL_INSTRUCTION = 1 << 33;
+        const MONITOR_INSTRUCTION = 1 << 35;
+        const SUPPLEMENTAL_STREAMING_SIMD_EXTENSIONS_3 = 1 << 41;
+        const FMA_INSTRUCTION = 1 << 44;
+        const CMPXCHG16B = 1 << 45;
+        const STREAMING_SIMD_EXTENSION_4_1 = 1 << 51;
+        const STREAMING_SIMD_EXTENSION_4_2 = 1 << 52;
         const x2APIC = 1 << 53;
-        const MOVBE = 1 << 54;
-        const POPCNT = 1 << 55;
-        const AES = 1 << 57;
-        const XSAVE = 1 << 58;
-        const OSXSAVE = 1 << 59;
-        const AVX = 1 << 60;
+        const POPCNT_INSTRUCTION = 1 << 55;
+        const AES_INSTRUCTION = 1 << 57;
+        const XSAVE_INSTRUCTION = 1 << 58;
+        const OSXSAVE_INSTRUCTION = 1 << 59;
+        const AVX_INSTRUCTION = 1 << 60;
+        const F16C_INSTRUCTION = 1 << 61;
     }
 }
 
