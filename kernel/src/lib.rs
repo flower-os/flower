@@ -27,7 +27,8 @@ extern crate log as log_facade;
 extern crate acpi;
 extern crate spin;
 extern crate x86_64;
-extern crate array_init; // Used as a workaround until const-generics arrives
+extern crate array_init;
+// Used as a workaround until const-generics arrives
 extern crate multiboot2;
 extern crate bit_field;
 #[macro_use]
@@ -70,7 +71,9 @@ pub static HEAP: Heap = Heap::new();
 pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
     say_hello();
     log::init();
-    interrupts::init();
+
+    interrupts::initialize();
+
     let mb_info = unsafe { multiboot2::load(multiboot_info_addr) };
     memory::init_memory(&mb_info, guard_page_addr);
 
