@@ -303,6 +303,7 @@ gdt64:
 
 section .text
 bits 64
+extern setup_syscall
 long_mode_start:
     
     ; Set all data segment registers to 0
@@ -322,6 +323,8 @@ long_mode_start:
 
     ; Pass guard page address to kmain through rsi
     mov rsi, guard_page_begin
+
+    call setup_syscall
 
     call kmain
 

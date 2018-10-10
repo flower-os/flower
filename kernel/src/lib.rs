@@ -62,6 +62,8 @@ mod acpi_impl;
 
 use memory::heap::Heap;
 
+pub use syscalls::syscall_handler;
+
 #[cfg_attr(not(test), global_allocator)]
 pub static HEAP: Heap = Heap::new();
 
@@ -110,7 +112,7 @@ fn say_hello() {
 
 fn test_syscalls() {
     unsafe {
-        asm!("mov rax, 0; int 0x80" :::: "intel");  // Call "ping" syscall
+        asm!("mov rax, 0; syscall" :::: "intel");  // Call "ping" syscall
     }
 }
 
