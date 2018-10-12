@@ -56,7 +56,7 @@ iso: $(grub_iso)
 
 # Run with qemu
 run: $(grub_iso)
-	@qemu-system-x86_64 -cdrom $(grub_iso) $(qemu_flags) -m 128M
+	@qemu-system-x86_64 -cdrom $(grub_iso) $(qemu_flags) -m 128M #-d int
 
 # Clean build dir
 clean:

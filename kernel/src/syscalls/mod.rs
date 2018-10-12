@@ -1,7 +1,12 @@
 mod test;
 
 #[no_mangle]
-pub extern fn syscall_handler() {
+pub extern fn syscall_callback() {
+    syscall_handler();
+    unsafe{asm!("sysret");}
+}
+
+pub fn syscall_handler() {
     let mut id: usize;
     unsafe{asm!("nop" : "={rax}"(id))}
 
@@ -9,4 +14,6 @@ pub extern fn syscall_handler() {
          0 => test::ping(),
          _ => {},
     };
+
+    let mut rcx: u64;
 }

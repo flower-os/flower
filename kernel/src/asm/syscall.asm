@@ -1,6 +1,6 @@
 global setup_syscall
 
-extern syscall_handler
+extern syscall_callback
 
 bits 64
 
@@ -16,7 +16,7 @@ setup_syscall:
     mov rax, 0x00000000
     wrmsr
     mov rcx, 0xc0000082
-    mov rax, syscall_handler
+    mov rax, syscall_callback
     mov rdx, rax
     shr rdx, 32
     and rax, 0xffffffff

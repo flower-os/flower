@@ -62,7 +62,7 @@ mod acpi_impl;
 
 use memory::heap::Heap;
 
-pub use syscalls::syscall_handler;
+pub use syscalls::syscall_callback;
 
 #[cfg_attr(not(test), global_allocator)]
 pub static HEAP: Heap = Heap::new();
@@ -111,6 +111,11 @@ fn say_hello() {
 }
 
 fn test_syscalls() {
+    // NOTE! This code that is commented out will crash the
+    // kernel, and is "supposed" to (at least i think)
+    // unsafe {
+    //     asm!("mov rax, 0; syscall" :::: "intel");  // Call "ping" syscall
+    // }
     unsafe {
         asm!("mov rax, 0; syscall" :::: "intel");  // Call "ping" syscall
     }
