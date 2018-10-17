@@ -54,6 +54,7 @@ mod log;
 #[macro_use]
 mod terminal;
 mod io;
+mod syscalls;
 mod interrupts;
 mod memory;
 mod drivers;
@@ -61,6 +62,8 @@ mod acpi_impl;
 mod cpuid;
 
 use memory::heap::Heap;
+
+pub use syscalls::syscall_callback;
 
 #[cfg_attr(not(test), global_allocator)]
 pub static HEAP: Heap = Heap::new();
@@ -83,6 +86,8 @@ pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
         Err(error) => error!("ps2c: {:?}", error),
     }
 
+    test_syscalls();
+
     keyboard_echo_loop(&mut controller);
 
     halt()
@@ -104,6 +109,17 @@ fn say_hello() {
     // Reset colors
     terminal::STDOUT.write().set_color(color!(White on Black))
         .expect("Color should be supported");
+}
+
+fn test_syscalls() {
+    // NOTE! This code that is commented out will crash the
+    // kernel, and is "supposed" to (at least i think)
+    // unsafe {
+    //     asm!("mov rax, 0; syscall" :::: "intel");  // Call "ping" syscall
+    // }
+    unsafe {
+        asm!("mov rax, 0; syscall" :::: "intel");  // Call "ping" syscall
+    }
 }
 
 fn print_flower() -> Result<(), terminal::TerminalOutputError<()>> {
