@@ -16,10 +16,10 @@ const COMMAND_READ_IRR: u8 = 0x0A;
 const COMMAND_READ_ISR: u8 = 0x0B;
 
 /// Represents an 8295/8295A PIC (superseded by APIC)
-pub struct Pic {
-    pub offset: u8,
-    pub command_port: SynchronizedPort<u8>,
-    pub data_port: SynchronizedPort<u8>,
+struct Pic {
+    offset: u8,
+    command_port: SynchronizedPort<u8>,
+    data_port: SynchronizedPort<u8>,
 }
 
 impl Pic {
@@ -27,7 +27,7 @@ impl Pic {
         Pic { offset, command_port, data_port }
     }
 
-    pub fn initialize(&mut self) {
+    fn initialize(&mut self) {
         // Tell the PIC to initialize
         self.write_command(COMMAND_INIT);
 
@@ -35,47 +35,47 @@ impl Pic {
         self.write_data(self.offset);
     }
 
-    pub fn end_of_interrupt(&mut self) {
+    fn end_of_interrupt(&mut self) {
         self.write_command(COMMAND_END_OF_INTERRUPT);
     }
 
-    pub fn enable_line(&mut self, irq: u8) {
+    fn enable_line(&mut self, irq: u8) {
         let mask = self.read_data();
         self.write_data(mask & !(1 << irq));
     }
 
-    pub fn disable_line(&mut self, irq: u8) {
+    fn disable_line(&mut self, irq: u8) {
         let mask = self.read_data();
         self.write_data(mask | (1 << irq));
     }
 
     /// Fetches the value of the interrupt request register
-    pub fn irr(&self) -> u8 {
+    fn irr(&self) -> u8 {
         self.write_command(COMMAND_READ_IRR);
         self.command_port.read()
     }
 
     /// Fetches the value of the in-service register
-    pub fn isr(&self) -> u8 {
+    fn isr(&self) -> u8 {
         self.write_command(COMMAND_READ_ISR);
         self.command_port.read()
     }
 
-    pub fn is_spurious(&self, irq: u8) -> bool {
+    fn is_spurious(&self, irq: u8) -> bool {
         (self.isr() & (1 << irq)) == 0
     }
 
-    pub fn write_command(&self, command: u8) {
+    fn write_command(&self, command: u8) {
         self.command_port.write(command);
         IO_WAIT_PORT.write(0x0);
     }
 
-    pub fn write_data(&mut self, value: u8) {
+    fn write_data(&mut self, value: u8) {
         self.data_port.write(value);
         IO_WAIT_PORT.write(0x0);
     }
 
-    pub fn read_data(&self) -> u8 {
+    fn read_data(&self) -> u8 {
         let value = self.data_port.read();
         IO_WAIT_PORT.write(0x0);
         value
