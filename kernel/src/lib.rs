@@ -27,7 +27,8 @@ extern crate log as log_facade;
 extern crate acpi;
 extern crate spin;
 extern crate x86_64;
-extern crate array_init; // Used as a workaround until const-generics arrives
+extern crate array_init;
+// Used as a workaround until const-generics arrives
 extern crate multiboot2;
 extern crate bit_field;
 #[macro_use]
@@ -42,6 +43,7 @@ use drivers::keyboard::{Keyboard, KeyEventType, Ps2Keyboard};
 use drivers::keyboard::keymap;
 use drivers::ps2;
 use terminal::TerminalOutput;
+use interrupts::Irq;
 
 #[cfg(not(test))]
 mod lang;
@@ -70,9 +72,14 @@ pub static HEAP: Heap = Heap::new();
 pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
     say_hello();
     log::init();
-    interrupts::init();
+
     let mb_info = unsafe { multiboot2::load(multiboot_info_addr) };
     memory::init_memory(&mb_info, guard_page_addr);
+
+    interrupts::initialize();
+
+    interrupts::enable();
+    info!("interrupts: ready");
 
     let _acpi = acpi_impl::acpi_init();
 
