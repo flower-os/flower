@@ -43,6 +43,7 @@ use drivers::keyboard::{Keyboard, KeyEventType, Ps2Keyboard};
 use drivers::keyboard::keymap;
 use drivers::ps2;
 use terminal::TerminalOutput;
+use interrupts::Irq;
 
 #[cfg(not(test))]
 mod lang;
@@ -72,13 +73,21 @@ pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
     say_hello();
     log::init();
 
+    let mb_info = unsafe { multiboot2::load(multiboot_info_addr) };
+    memory::init_memory(&mb_info, guard_page_addr);
+
     interrupts::initialize();
 
     interrupts::enable();
     info!("interrupts: ready");
 
-    let mb_info = unsafe { multiboot2::load(multiboot_info_addr) };
-    memory::init_memory(&mb_info, guard_page_addr);
+    interrupts::listen(Irq::Pit, || {
+        println!("pit");
+    });
+
+    interrupts::listen(Irq::Ps2Keyboard, || {
+        println!("kbd");
+    });
 
     let _acpi = acpi_impl::acpi_init();
 

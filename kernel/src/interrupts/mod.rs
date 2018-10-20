@@ -1,34 +1,49 @@
 //! Module for interrupt handling/IDT
 
-use x86_64::structures::idt::Idt;
+use x86_64::structures::idt::{Idt, ExceptionStackFrame};
+
+use alloc::vec::Vec;
+use spin::RwLock;
+use array_init;
 
 mod pic;
 mod exceptions;
-mod handlers;
 
 lazy_static! {
     static ref IDT: Idt = {
         let mut idt = Idt::new();
-        init_exception_handlers(&mut idt);
-        init_irq_handlers(&mut idt);
+        init_interrupt_handlers(&mut idt);
         idt
     };
 }
 
+lazy_static! {
+    static ref LISTENERS: RwLock<[Vec<fn()>; 16]> = RwLock::new(
+        array_init::array_init(|_| Vec::with_capacity(1))
+    );
+}
+
+/// Registers a listener for the given IRQ
+pub fn listen<I: Into<u8>>(irq: I, listener: fn()) {
+    LISTENERS.write()[irq.into() as usize].push(listener);
+}
+
+/// Dispatches the given IRQ to all relevant registered listeners
+pub fn dispatch_irq(irq: u8) {
+    for listener in LISTENERS.read()[irq as usize].iter() {
+        listener();
+    }
+}
+
 #[repr(u8)]
-enum StandardIrq {
+pub enum Irq {
     Pit = 0,
     Ps2Keyboard = 1,
+    Ps2Mouse = 12,
 }
 
-impl Into<u8> for StandardIrq {
+impl Into<u8> for Irq {
     fn into(self) -> u8 { self as u8 }
-}
-
-impl StandardIrq {
-    fn handle(self, handler: fn()) {
-        pic::CHAINED_PICS.lock().handle_interrupt(self as u8, handler).unwrap();
-    }
 }
 
 /// Setup IDTs and initialize and remap PICs
@@ -50,7 +65,20 @@ pub fn disable() {
     unsafe { asm!("cli" :::: "volatile"); }
 }
 
-fn init_exception_handlers(idt: &mut Idt) {
+macro_rules! init_irq_handlers {
+    ($idt:expr, $($irq:expr),*) => {
+        $(
+            {
+                extern "x86-interrupt" fn handle_irq(_: &mut ExceptionStackFrame) {
+                    pic::CHAINED_PICS.lock().handle_interrupt($irq, || dispatch_irq($irq));
+                }
+                $idt.interrupts[$irq].set_handler_fn(handle_irq);
+            }
+        )*
+    };
+}
+
+fn init_interrupt_handlers(idt: &mut Idt) {
     idt.divide_by_zero.set_handler_fn(exceptions::divide_by_zero);
     idt.breakpoint.set_handler_fn(exceptions::breakpoint);
     idt.overflow.set_handler_fn(exceptions::overflow);
@@ -69,9 +97,6 @@ fn init_exception_handlers(idt: &mut Idt) {
     idt.simd_floating_point.set_handler_fn(exceptions::simd_floating_point);
     idt.virtualization.set_handler_fn(exceptions::virtualization);
     idt.security_exception.set_handler_fn(exceptions::security_exception);
-}
 
-fn init_irq_handlers(idt: &mut Idt) {
-    idt.interrupts[StandardIrq::Pit as usize].set_handler_fn(handlers::irq_pit);
-    idt.interrupts[StandardIrq::Ps2Keyboard as usize].set_handler_fn(handlers::irq_kbd);
+    init_irq_handlers!(idt, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
 }

@@ -1,17 +1,19 @@
 // Thanks to http://www.randomhacks.net/2015/11/16/bare-metal-rust-configure-your-pic-interrupts/
 
 use io::SynchronizedPort;
+use interrupts;
 use spin::Mutex;
 
-pub static CHAINED_PICS: Mutex<ChainedPics> = Mutex::new(ChainedPics::new((0x20, 0x28)));
+pub static CHAINED_PICS: Mutex<ChainedPics> = Mutex::new(ChainedPics::new());
 
 /// Used to pause execution temporarily
 pub static IO_WAIT_PORT: SynchronizedPort<u8> = unsafe { SynchronizedPort::new(0x80) };
 
-const COMMAND_INIT: u8 = 0x10 | 0x1;
+const COMMAND_INIT: u8 = 0x11;
 const COMMAND_END_OF_INTERRUPT: u8 = 0x20;
 
-// TODO: Handle spurious interrupts
+const COMMAND_READ_IRR: u8 = 0x0A;
+const COMMAND_READ_ISR: u8 = 0x0B;
 
 /// Represents an 8295/8295A PIC (superseded by APIC)
 pub struct Pic {
@@ -37,7 +39,33 @@ impl Pic {
         self.write_command(COMMAND_END_OF_INTERRUPT);
     }
 
-    pub fn write_command(&mut self, command: u8) {
+    pub fn enable_line(&mut self, irq: u8) {
+        let mask = self.read_data();
+        self.write_data(mask & !(1 << irq));
+    }
+
+    pub fn disable_line(&mut self, irq: u8) {
+        let mask = self.read_data();
+        self.write_data(mask | (1 << irq));
+    }
+
+    /// Fetches the value of the interrupt request register
+    pub fn irr(&self) -> u8 {
+        self.write_command(COMMAND_READ_IRR);
+        self.command_port.read()
+    }
+
+    /// Fetches the value of the in-service register
+    pub fn isr(&self) -> u8 {
+        self.write_command(COMMAND_READ_ISR);
+        self.command_port.read()
+    }
+
+    pub fn is_spurious(&self, irq: u8) -> bool {
+        (self.isr() & (1 << irq)) == 0
+    }
+
+    pub fn write_command(&self, command: u8) {
         self.command_port.write(command);
         IO_WAIT_PORT.write(0x0);
     }
@@ -56,24 +84,24 @@ impl Pic {
 
 /// Represents two [Pic]s chained together as they are in the hardware
 pub struct ChainedPics {
-    inner: [Pic; 2],
+    master: Pic,
+    slave: Pic,
 }
 
 impl ChainedPics {
-    pub const fn new(offsets: (u8, u8)) -> Self {
+    pub const fn new() -> Self {
         unsafe {
             ChainedPics {
-                inner: [
-                    Pic::new(offsets.0,
-                             SynchronizedPort::new(0x20),
-                             SynchronizedPort::new(0x21),
-                    ),
-                    Pic::new(
-                        offsets.1,
-                        SynchronizedPort::new(0xA0),
-                        SynchronizedPort::new(0xA1),
-                    ),
-                ],
+                master: Pic::new(
+                    0x20,
+                    SynchronizedPort::new(0x20),
+                    SynchronizedPort::new(0x21),
+                ),
+                slave: Pic::new(
+                    0x28,
+                    SynchronizedPort::new(0xA0),
+                    SynchronizedPort::new(0xA1),
+                ),
             }
         }
     }
@@ -81,83 +109,79 @@ impl ChainedPics {
     /// Initializes the PICs and remaps them to avoid IRQ overlaps
     pub fn init_and_remap(&mut self) {
         // Cache chip masks
-        let mask_1 = self.inner[0].read_data();
-        let mask_2 = self.inner[1].read_data();
+        let master_mask = self.master.read_data();
+        let slave_mask = self.slave.read_data();
 
         IO_WAIT_PORT.write(0x0);
 
         // Tell both of the PICs to initialise
-        for pic in self.inner.iter_mut() {
-            pic.initialize();
-        }
+        self.master.initialize();
+        self.slave.initialize();
 
-        self.inner[0].write_data(4);
-        self.inner[1].write_data(2);
+        self.master.write_data(4);
+        self.slave.write_data(2);
 
         // Set PICs to 8086/88 (MCS-80/85) mode
-        for pic in self.inner.iter_mut() {
-            pic.write_data(0x1);
-        }
+        self.master.write_data(0x1);
+        self.slave.write_data(0x1);
 
         // Restore chip masks
-        self.inner[0].write_data(mask_1);
-        self.inner[1].write_data(mask_2);
+        self.master.write_data(master_mask);
+        self.slave.write_data(slave_mask);
     }
 
     /// Masks all interrupts on both PICs. This will cause all fired interrupts to be ignored
     pub fn disable(&mut self) {
-        for pic in self.inner.iter_mut() {
-            pic.write_data(0xFF);
+        self.master.write_data(0xFF);
+        self.slave.write_data(0xFF);
+    }
+
+    pub fn handle_interrupt(&mut self, irq: u8, handler: fn()) {
+        match self.destination(irq) {
+            IrqDestination::Master(_) => {
+                if !self.master.is_spurious(irq) {
+                    handler();
+                    self.master.end_of_interrupt();
+                }
+            },
+            IrqDestination::Slave(_) => {
+                if !self.slave.is_spurious(irq) {
+                    handler();
+                    self.slave.end_of_interrupt();
+                } else {
+                    self.master.end_of_interrupt();
+                }
+            },
         }
     }
 
-    #[inline]
-    pub fn handle_interrupt(&mut self, irq: u8, handle: fn()) -> Result<(), ()> {
-        handle();
-        self.end_of_interrupt(irq)
-    }
-
-    pub fn end_of_interrupt(&mut self, irq: u8) -> Result<(), ()> {
-        if let Some((target_pic, _)) = self.line_target(irq) {
-            target_pic.end_of_interrupt();
-            Ok(())
-        } else {
-            Err(())
+    pub fn enable_line(&mut self, irq: u8) {
+        match self.destination(irq) {
+            IrqDestination::Master(local_irq) => self.master.enable_line(local_irq),
+            IrqDestination::Slave(local_irq) => self.slave.enable_line(local_irq),
         }
     }
 
-    pub fn enable_line(&mut self, irq: u8) -> Result<(), ()> {
-        if let Some((target_pic, local_irq)) = self.line_target(irq) {
-            let mask = target_pic.read_data();
-            target_pic.write_data(mask & !(1 << local_irq));
-            Ok(())
-        } else {
-            Err(())
+    pub fn disable_line(&mut self, irq: u8) {
+        match self.destination(irq) {
+            IrqDestination::Master(local_irq) => self.master.disable_line(local_irq),
+            IrqDestination::Slave(local_irq) => self.slave.disable_line(local_irq),
         }
     }
 
-    pub fn disable_line(&mut self, irq: u8) -> Result<(), ()> {
-        if let Some((target_pic, local_irq)) = self.line_target(irq) {
-            let mask = target_pic.read_data();
-            target_pic.write_data(mask | (1 << local_irq));
-            Ok(())
-        } else {
-            Err(())
-        }
-    }
-
-    fn line_target(&mut self, irq: u8) -> Option<(&mut Pic, u8)> {
+    fn destination(&mut self, irq: u8) -> IrqDestination {
         // IRQs 0-7 go to the master PIC, while 8-15 go to the slave
         if irq < 8 {
-            Some((&mut self.inner[0], irq))
+            IrqDestination::Master(irq & 7)
         } else if irq < 16 {
-            Some((&mut self.inner[1], irq - 8))
+            IrqDestination::Slave(irq & 7)
         } else {
-            None
+            panic!("irq {} out of bounds, expected range 0-15", irq);
         }
     }
+}
 
-    pub fn master(&mut self) -> &mut Pic { &mut self.inner[0] }
-
-    pub fn slave(&mut self) -> &mut Pic { &mut self.inner[1] }
+enum IrqDestination {
+    Master(u8),
+    Slave(u8),
 }
