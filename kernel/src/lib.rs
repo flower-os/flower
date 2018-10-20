@@ -74,6 +74,9 @@ pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
 
     interrupts::initialize();
 
+    interrupts::enable();
+    info!("interrupts: ready");
+
     let mb_info = unsafe { multiboot2::load(multiboot_info_addr) };
     memory::init_memory(&mb_info, guard_page_addr);
 

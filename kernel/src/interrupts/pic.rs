@@ -33,6 +33,10 @@ impl Pic {
         self.write_data(self.offset);
     }
 
+    pub fn end_of_interrupt(&mut self) {
+        self.write_command(COMMAND_END_OF_INTERRUPT);
+    }
+
     pub fn write_command(&mut self, command: u8) {
         self.command_port.write(command);
         IO_WAIT_PORT.write(0x0);
@@ -107,14 +111,15 @@ impl ChainedPics {
         }
     }
 
-    pub fn handle_interrupt<F: FnOnce()>(&mut self, irq: u8, handle: F) -> Result<(), ()> {
+    #[inline]
+    pub fn handle_interrupt(&mut self, irq: u8, handle: fn()) -> Result<(), ()> {
         handle();
         self.end_of_interrupt(irq)
     }
 
     pub fn end_of_interrupt(&mut self, irq: u8) -> Result<(), ()> {
-        if let Some((target_pic, local_irq)) = self.line_target(irq) {
-            target_pic.write_command(COMMAND_END_OF_INTERRUPT);
+        if let Some((target_pic, _)) = self.line_target(irq) {
+            target_pic.end_of_interrupt();
             Ok(())
         } else {
             Err(())
@@ -151,4 +156,8 @@ impl ChainedPics {
             None
         }
     }
+
+    pub fn master(&mut self) -> &mut Pic { &mut self.inner[0] }
+
+    pub fn slave(&mut self) -> &mut Pic { &mut self.inner[1] }
 }
