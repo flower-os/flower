@@ -27,9 +27,6 @@ impl Into<u8> for StandardIrq {
 
 impl StandardIrq {
     fn handle(self, handler: fn()) {
-        // TODO: This is a magic call. It makes things compile. Do not question magic.
-        ::drivers::ps2::CONTROLLER.lock();
-
         pic::CHAINED_PICS.lock().handle_interrupt(self as u8, handler).unwrap();
     }
 }
