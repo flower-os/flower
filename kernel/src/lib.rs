@@ -81,14 +81,6 @@ pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
     interrupts::enable();
     info!("interrupts: ready");
 
-    interrupts::listen(Irq::Pit, || {
-        println!("pit");
-    });
-
-    interrupts::listen(Irq::Ps2Keyboard, || {
-        println!("kbd");
-    });
-
     let _acpi = acpi_impl::acpi_init();
 
     // Initialize the PS/2 controller and run the keyboard echo loop

@@ -147,7 +147,7 @@ impl Controller {
         self.config = self.read_config()?;
 
         // Set all required config flags
-        self.config.set(ConfigFlags::PORT_INTERRUPT_1, true);
+        self.config.set(ConfigFlags::PORT_INTERRUPT_1, false);
         self.config.set(ConfigFlags::PORT_INTERRUPT_2, false);
         self.config.set(ConfigFlags::PORT_TRANSLATION_1, false);
 
