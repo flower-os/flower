@@ -65,6 +65,14 @@ pub fn disable() {
     unsafe { asm!("cli" :::: "volatile"); }
 }
 
+pub fn enable_irq<I: Into<u8>>(irq: I) {
+    pic::CHAINED_PICS.lock().enable_line(irq.into());
+}
+
+pub fn disable_irq<I: Into<u8>>(irq: I) {
+    pic::CHAINED_PICS.lock().disable_line(irq.into());
+}
+
 macro_rules! init_irq_handlers {
     ($idt:expr, $($irq:expr),*) => {
         $(
