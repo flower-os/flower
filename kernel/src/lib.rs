@@ -14,6 +14,7 @@
 #![feature(compiler_builtins_lib)]
 #![feature(panic_handler)]
 #![feature(panic_info_message)]
+#![feature(integer_atomics)]
 
 #[cfg(test)]
 #[cfg_attr(test, macro_use)]
@@ -80,6 +81,8 @@ pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
 
     interrupts::enable();
     info!("interrupts: ready");
+
+    drivers::pit::CONTROLLER.lock().initialize();
 
     let _acpi = acpi_impl::acpi_init();
 
