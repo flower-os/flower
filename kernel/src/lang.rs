@@ -43,7 +43,6 @@ extern fn panic_fmt(info: &PanicInfo) -> ! {
 
 #[lang = "oom"]
 #[no_mangle]
-#[allow(private_no_mangle_fns)] // publicity is not required, but no mangle is
 extern fn oom(_layout: Layout) -> ! {
     panic!("Ran out of kernel heap memory!");
 }

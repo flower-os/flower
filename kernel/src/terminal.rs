@@ -172,6 +172,12 @@ impl Resolution {
     pub const fn new(x: usize, y: usize) -> Self {
         Resolution { x, y }
     }
+    pub fn center(&self) -> Point {
+        Point {
+            x: self.x / 2,
+            y: self.y / 2,
+        }
+    }
 }
 
 /// A writable terminal
