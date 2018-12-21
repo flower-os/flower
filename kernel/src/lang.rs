@@ -14,12 +14,10 @@ use terminal::{Stdout, TerminalOutput};
 
 #[lang = "eh_personality"]
 #[no_mangle]
-#[allow(private_no_mangle_fns)] // publicity is not required, but no mangle is
 extern fn eh_personality() {}
 
-#[panic_implementation]
+#[panic_handler]
 #[no_mangle]
-#[allow(private_no_mangle_fns)] // publicity is not required, but no mangle is
 // TODO backtrace
 extern fn panic_fmt(info: &PanicInfo) -> ! {
     let vga_writer = RwLock::new(VgaWriter::new());

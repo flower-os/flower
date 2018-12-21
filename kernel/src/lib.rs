@@ -12,7 +12,7 @@
 #![feature(alloc, allocator_api, box_syntax)]
 #![feature(abi_x86_interrupt)]
 #![feature(compiler_builtins_lib)]
-#![feature(panic_implementation)]
+#![feature(panic_handler)]
 #![feature(panic_info_message)]
 
 #[cfg(test)]
