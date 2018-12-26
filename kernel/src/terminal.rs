@@ -174,8 +174,8 @@ impl Resolution {
     }
     pub fn center(&self) -> Point {
         Point {
-            x: self.x / 2,
-            y: self.y / 2,
+            x: (self.x - 1) / 2,
+            y: (self.y - 1) / 2,
         }
     }
 }

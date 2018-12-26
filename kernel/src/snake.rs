@@ -5,27 +5,117 @@ use drivers::{pit, ps2, vga};
 use drivers::keyboard::{Ps2Keyboard, Keyboard, KeyEventType, keymap::codes::*};
 use halt;
 
-//const BLOCK: char = 219u8 as char;
 const HEAD_CHAR: char = 2 as char;
 lazy_static! {
     static ref RNG: Random = Random::new();
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-enum Cell {
-    Empty,
-    Head,
-    Body,
-    Apple,
+struct Game<'a> {
+    grid: Grid,
+    snake: Snake,
+    ups: usize,
+    keyboard: &'a mut Ps2Keyboard<'a>,
+    highscore: u16,
 }
 
-impl Cell {
-    fn character(&self) -> TerminalCharacter {
-        match self {
-            Cell::Empty => TerminalCharacter::new(' ', color!(Black on Black)),
-            Cell::Head => TerminalCharacter::new(HEAD_CHAR, color!(White on Black)),
-            Cell::Body => TerminalCharacter::new(' ', color!(Green on Green)),
-            Cell::Apple => TerminalCharacter::new(' ', color!(Red on Red))
+impl<'a> Game<'a> {
+    fn new(keyboard: &'a mut Ps2Keyboard<'a>) -> Game<'a> {
+        let res = STDOUT.read().resolution();
+
+        Game {
+            grid: Grid::empty(res.x as usize, res.y as usize),
+            snake: Snake::new(),
+            ups: 20,
+            keyboard,
+            highscore: 0,
+        }
+    }
+
+    fn run(&mut self) {
+        STDOUT.write().clear().expect("Error clearing screen");
+        self.notification("Welcome to snake! Press any key to continue...");
+
+        STDOUT.write().clear().expect("Error clearing screen");
+        self.grid.set(generate_apple_pos(&self.grid), Cell::Apple);
+
+        loop {
+            pit::sleep(1000 / self.ups);
+
+            if let Ok(Some(event)) = self.keyboard.read_event() {
+                if event.event_type != KeyEventType::Break {
+
+                    // Change direction of motion
+                    let new_direction = match event.keycode {
+                        UP_ARROW | W => Some(Direction::Up),
+                        DOWN_ARROW | S => Some(Direction::Down),
+                        LEFT_ARROW | A => Some(Direction::Left),
+                        RIGHT_ARROW | D => Some(Direction::Right),
+                        _ => None,
+                    };
+
+                    if let Some(new_direction) = new_direction {
+                        if new_direction != self.snake.direction.opposite() {
+                            self.snake.direction = new_direction;
+                        }
+                    }
+
+                    // Make the UPS lower (to lower apparent velocity) snake is travelling up because
+                    // the cells are higher than they are wide
+                    self.ups = match self.snake.direction {
+                        Direction::Up | Direction::Down => 10,
+                        Direction::Left | Direction::Right => 20,
+                    };
+                }
+            }
+
+            // See if the game is over and if so restart it
+            let win = match self.snake.update(&mut self.grid) {
+                MoveResult::Win => true,
+                MoveResult::Lose => false,
+                _ => continue,
+            };
+
+            self.restart(win);
+        }
+    }
+
+    fn restart(&mut self, win: bool) {
+        let won = if win { "win" } else { "lose" };
+        let highscore = if self.snake.score() > self.highscore {
+            self.highscore = self.snake.score();
+            " New highscore!"
+        } else {
+            ""
+        };
+        self.notification(
+            &format!("You {}! Final score: {}.{}", won, self.snake.score(), highscore)
+        );
+
+        self.snake = Snake::new();
+        let res = STDOUT.read().resolution();
+        self.grid.clear();
+        STDOUT.write().clear().expect("Error clearing screen");
+        self.grid.set(generate_apple_pos(&self.grid), Cell::Apple);
+    }
+
+    fn notification(&mut self, message: &str) {
+        let old_color = STDOUT.read().color();
+        STDOUT.write().set_color(color!(White on Black)).expect("Error setting color!");
+        let center = STDOUT.read().resolution().center();
+
+        centered_text(message, center.x, center.y);
+        centered_text("Press any key to continue...", center.x, center.y - 1);
+
+        STDOUT.write().set_color(old_color).expect("Error setting color!");
+
+        pit::sleep(1000);
+
+        loop {
+            if let Ok(Some(event)) = self.keyboard.read_event() {
+                if event.event_type == KeyEventType::Break {
+                    break;
+                }
+            }
         }
     }
 }
@@ -42,6 +132,12 @@ impl Grid {
             cells: vec![Cell::Empty; width * height],
             width,
             height,
+        }
+    }
+
+    fn clear(&mut self) {
+        for cell in self.cells.iter_mut() {
+            *cell = Cell::Empty;
         }
     }
 
@@ -68,66 +164,22 @@ impl Grid {
     }
 }
 
-pub fn snake(controller: &mut ps2::Controller) {
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+enum Cell {
+    Empty,
+    Head,
+    Body,
+    Apple,
+}
 
-    // Initialise keyboard
-    let keyboard_device = controller.device(ps2::DevicePort::Keyboard);
-    let mut keyboard = Ps2Keyboard::new(keyboard_device);
-    if let Ok(_) = keyboard.enable() {
-        info!("kbd: successfully enabled");
-    } else {
-        error!("kbd: enable unsuccessful");
-        halt();
-    }
-
-    // Set up snake
-    let mut ups = 20;
-    let mut rng = Random::new();
-    let mut snake = Snake::new();
-
-    let res = STDOUT.read().resolution();
-    let mut grid = Grid::empty(res.x as usize, res.y as usize);
-    STDOUT.write().clear().expect("Error clearing screen");
-    grid.set(generate_apple_pos(&grid), Cell::Apple);
-
-    loop {
-        pit::sleep(1000 / ups);
-
-        // maybe extract this to fn or smth idk
-        if let Ok(Some(event)) = keyboard.read_event() {
-            if event.event_type != KeyEventType::Break {
-                // Change direction of motion
-                let new_direction = match event.keycode {
-                    UP_ARROW | W => Some(Direction::Up),
-                    DOWN_ARROW | S => Some(Direction::Down),
-                    LEFT_ARROW | A => Some(Direction::Left),
-                    RIGHT_ARROW | D => Some(Direction::Right),
-                    _ => None,
-                };
-                if let Some(new_direction) = new_direction {
-                    if new_direction != snake.direction.opposite() {
-                        snake.direction = new_direction;
-                    }
-                }
-
-                // Make the sleep time longer if snake is travelling up because the cells are higher
-                // than they are wide
-                match snake.direction {
-                    Direction::Up | Direction::Down => ups = 10,
-                    Direction::Left | Direction::Right => ups = 20,
-                }
-
-                // Revive snake if was dead
-                if !snake.alive {
-                    snake = Snake::new();
-                    grid = Grid::empty(res.x as usize, res.y as usize);
-                    STDOUT.write().clear().expect("Error clearing screen");
-                    grid.set( generate_apple_pos(&grid), Cell::Apple);
-                }
-            }
+impl Cell {
+    fn character(&self) -> TerminalCharacter {
+        match self {
+            Cell::Empty => TerminalCharacter::new(' ', color!(Black on Black)),
+            Cell::Head => TerminalCharacter::new(HEAD_CHAR, color!(White on Black)),
+            Cell::Body => TerminalCharacter::new(' ', color!(Green on Green)),
+            Cell::Apple => TerminalCharacter::new(' ', color!(Red on Red))
         }
-
-        snake.update(&mut grid);
     }
 }
 
@@ -139,33 +191,12 @@ enum Direction {
     Right,
 }
 
-impl Direction {
-    fn offset(&self, point: Point, amount: usize) -> Point {
-        match self {
-            Direction::Up => Point::new(point.x, point.y + amount),
-            Direction::Down => Point::new(point.x, point.y - amount),
-            Direction::Left => Point::new(point.x - amount, point.y),
-            Direction::Right => Point::new(point.x + amount, point.y),
-        }
-    }
-
-    fn opposite(&self) -> Direction {
-        match self {
-            Direction::Up => Direction::Down,
-            Direction::Down => Direction::Up,
-            Direction::Left => Direction::Right,
-            Direction::Right => Direction::Left,
-        }
-    }
-}
-
 struct Snake {
     head: Point,
     direction: Direction,
     blocks: Vec<Point>,
     len: u16,
     first_tick: bool,
-    alive: bool,
 }
 
 impl Snake {
@@ -176,15 +207,10 @@ impl Snake {
             blocks: Vec::with_capacity(128),
             len: 4,
             first_tick: true,
-            alive: true,
         }
     }
 
-    fn update(&mut self, grid: &mut Grid) {
-        if !self.alive {
-            return;
-        }
-
+    fn update(&mut self, grid: &mut Grid) -> MoveResult {
         // Replace the previous head position with a snake body block
         if self.first_tick {
             self.first_tick = false;
@@ -195,14 +221,8 @@ impl Snake {
         let move_result = self.try_move(grid);
         match move_result {
             MoveResult::Moved(point) => self.head = point,
-            MoveResult::Win => {
-                self.game_over(&format!("You win! Final score: {}", self.len - 4));
-                return;
-            }
-            MoveResult::Lose => {
-                self.game_over(&format!("You died! Final score: {}", self.len - 4));
-                return;
-            }
+            MoveResult::Win => return MoveResult::Win,
+            MoveResult::Lose => return MoveResult::Lose,
         }
 
         // Draw the head
@@ -220,6 +240,8 @@ impl Snake {
             self.blocks.rotate_right(1);
             self.blocks[0] = self.head;
         }
+
+        move_result
     }
 
     fn try_move(&mut self, grid: &mut Grid) -> MoveResult {
@@ -245,17 +267,28 @@ impl Snake {
         MoveResult::Moved(moved_head)
     }
 
-    fn game_over(&mut self, message: &str) {
-        self.alive = false;
+    fn score(&self) -> u16 {
+        self.len - 4
+    }
+}
 
-        let mut stdout = STDOUT.write();
+impl Direction {
+    fn offset(&self, point: Point, amount: usize) -> Point {
+        match self {
+            Direction::Up => Point::new(point.x, point.y + amount),
+            Direction::Down => Point::new(point.x, point.y - amount),
+            Direction::Left => Point::new(point.x - amount, point.y),
+            Direction::Right => Point::new(point.x + amount, point.y),
+        }
+    }
 
-        let cursor = stdout.resolution().center();
-        let cursor = Point::new(cursor.x - message.len() / 2, cursor.y);
-
-        stdout.set_color(color!(White on Black)).expect("Error setting color!");
-        stdout.set_cursor_pos(cursor).expect("Error setting cursor pos!");
-        stdout.write_string(message).expect("Error writing string!");
+    fn opposite(&self) -> Direction {
+        match self {
+            Direction::Up => Direction::Down,
+            Direction::Down => Direction::Up,
+            Direction::Left => Direction::Right,
+            Direction::Right => Direction::Left,
+        }
     }
 }
 
@@ -263,17 +296,6 @@ enum MoveResult {
     Moved(Point),
     Win,
     Lose,
-}
-
-fn generate_apple_pos(grid: &Grid) -> Point {
-    loop {
-        let x = RNG.next_bounded(grid.width as u64) as usize;
-        let y = RNG.next_bounded(grid.height as u64) as usize;
-        let point = Point::new(x, y);
-        if *grid.get(point) == Cell::Empty {
-            return point;
-        }
-    }
 }
 
 struct Random {
@@ -288,13 +310,9 @@ impl Random {
         }
     }
 
-    fn with_seed(seed: u64) -> Random {
-        Random { seed: AtomicU64::new(seed) }
-    }
-
     /// Thanks to https://stackoverflow.com/a/3062783/4871468 and
-    /// https://en.wikipedia.org/wiki/Linear_congruential_generator#Parameters_in_common_use (glibc's
-    /// values used here).
+    /// https://en.wikipedia.org/wiki/Linear_congruential_generator#Parameters_in_common_use
+    /// (glibc's values used here).
     fn next_bounded(&self, bound: u64) -> u64 {
         self.next() % bound
     }
@@ -305,11 +323,48 @@ impl Random {
         const C: u64 = 12345;
 
         loop {
-            let seed = self.seed.load(Ordering::SeqCst); // TODO ordering
+            let seed = self.seed.load(Ordering::SeqCst);
             let next = (A * seed + C) % M;
             if self.seed.compare_and_swap(seed, next, Ordering::SeqCst) == seed {
                 return next;
             }
         }
     }
+}
+
+
+pub fn snake(controller: &mut ps2::Controller) {
+    let keyboard_device = controller.device(ps2::DevicePort::Keyboard);
+    let mut keyboard = Ps2Keyboard::new(keyboard_device);
+    if let Ok(_) = keyboard.enable() {
+        info!("kbd: successfully enabled");
+    } else {
+        error!("kbd: enable unsuccessful");
+        halt();
+    }
+
+    let mut game = Game::new(&mut keyboard);
+    game.run()
+}
+
+fn generate_apple_pos(grid: &Grid) -> Point {
+    loop {
+        let x = RNG.next_bounded(grid.width as u64) as usize;
+        let y = RNG.next_bounded(grid.height as u64) as usize;
+        let point = Point::new(x, y);
+        if *grid.get(point) == Cell::Empty {
+            return point;
+        }
+    }
+}
+
+fn centered_text(message: &str, x_center: usize, y: usize) {
+    let mut stdout = STDOUT.write();
+
+    let cursor = Point::new(x_center - message.len() / 2, y);
+    let old_cursor = stdout.cursor_pos();
+
+    stdout.set_cursor_pos(cursor).expect("Error setting cursor pos!");
+    stdout.write_string(message).expect("Error writing string!");
+    stdout.set_cursor_pos(old_cursor).expect("Error setting cursor pos!");
 }
