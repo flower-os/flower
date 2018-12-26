@@ -2,7 +2,7 @@ use core::sync::atomic::{Ordering, AtomicU64};
 use alloc::vec::Vec;
 use crate::terminal::{TerminalOutput, TerminalCharacter, Point, STDOUT};
 use crate::drivers::{pit, ps2};
-use crate::drivers::keyboard::{Ps2Keyboard, Keyboard, KeyEventType, keymap::codes::*};
+use crate::drivers::keyboard::{Ps2Keyboard, Keyboard, KeyEventType};
 use crate::halt;
 
 const HEAD_CHAR: char = 2 as char;
@@ -33,40 +33,26 @@ impl<'a> Game<'a> {
 
     fn run(&mut self) {
         STDOUT.write().clear().expect("Error clearing screen");
-        self.notification("Welcome to snake! Press any key to continue...");
-
-        STDOUT.write().clear().expect("Error clearing screen");
-        self.grid.set(generate_apple_pos(&self.grid), Cell::Apple);
+        self.notification("Welcome to snake!");
+        self.initialise();
 
         loop {
             pit::sleep(1000 / self.ups);
 
-            if let Ok(Some(event)) = self.keyboard.read_event() {
-                if event.event_type != KeyEventType::Break {
+            let new_direction = self.get_input();
 
-                    // Change direction of motion
-                    let new_direction = match event.keycode {
-                        UP_ARROW | W => Some(Direction::Up),
-                        DOWN_ARROW | S => Some(Direction::Down),
-                        LEFT_ARROW | A => Some(Direction::Left),
-                        RIGHT_ARROW | D => Some(Direction::Right),
-                        _ => None,
-                    };
-
-                    if let Some(new_direction) = new_direction {
-                        if new_direction != self.snake.direction.opposite() {
-                            self.snake.direction = new_direction;
-                        }
-                    }
-
-                    // Make the UPS lower (to lower apparent velocity) snake is travelling up because
-                    // the cells are higher than they are wide
-                    self.ups = match self.snake.direction {
-                        Direction::Up | Direction::Down => 10,
-                        Direction::Left | Direction::Right => 20,
-                    };
+            if let Some(new_direction) = new_direction {
+                if new_direction != self.snake.direction.opposite() {
+                    self.snake.direction = new_direction;
                 }
             }
+
+            // Make the UPS lower (to lower apparent velocity) snake is travelling up because
+            // the cells are higher than they are wide
+            self.ups = match self.snake.direction {
+                Direction::Up | Direction::Down => 10,
+                Direction::Left | Direction::Right => 20,
+            };
 
             // See if the game is over and if so restart it
             let win = match self.snake.update(&mut self.grid) {
@@ -77,6 +63,31 @@ impl<'a> Game<'a> {
 
             self.restart(win);
         }
+    }
+
+    fn get_input(&mut self) -> Option<Direction> {
+        use crate::drivers::keyboard::keymap::codes::*;
+
+        let event = self.keyboard.read_event().expect("Error reading keyboard input!")?;
+
+        if event.event_type != KeyEventType::Break {
+            match event.keycode {
+                UP_ARROW | W => Some(Direction::Up),
+                DOWN_ARROW | S => Some(Direction::Down),
+                LEFT_ARROW | A => Some(Direction::Left),
+                RIGHT_ARROW | D => Some(Direction::Right),
+                _ => None,
+            }
+        } else {
+            None
+        }
+    }
+
+    fn initialise(&mut self) {
+        self.snake = Snake::new();
+        self.grid.clear();
+        STDOUT.write().clear().expect("Error clearing screen");
+        self.grid.set(generate_apple_pos(&self.grid), Cell::Apple);
     }
 
     fn restart(&mut self, win: bool) {
@@ -91,11 +102,7 @@ impl<'a> Game<'a> {
             &format!("You {}! Final score: {}.{}", won, self.snake.score(), highscore)
         );
 
-        self.snake = Snake::new();
-        let _res = STDOUT.read().resolution();
-        self.grid.clear();
-        STDOUT.write().clear().expect("Error clearing screen");
-        self.grid.set(generate_apple_pos(&self.grid), Cell::Apple);
+        self.initialise();
     }
 
     fn notification(&mut self, message: &str) {
@@ -192,7 +199,6 @@ struct Snake {
     direction: Direction,
     blocks: Vec<Point>,
     len: u16,
-    first_tick: bool,
 }
 
 impl Snake {
@@ -202,15 +208,12 @@ impl Snake {
             direction: Direction::Right,
             blocks: Vec::with_capacity(128),
             len: 4,
-            first_tick: true,
         }
     }
 
     fn update(&mut self, grid: &mut Grid) -> MoveResult {
         // Replace the previous head position with a snake body block
-        if self.first_tick {
-            self.first_tick = false;
-        } else {
+        if !self.blocks.is_empty() {
             grid.set(self.head, Cell::Body);
         }
 
@@ -318,11 +321,15 @@ impl Random {
         const M: u64 = 1 << 31;
         const C: u64 = 12345;
 
+        let mut seed = self.seed.load(Ordering::SeqCst);
         loop {
-            let seed = self.seed.load(Ordering::SeqCst);
             let next = (A * seed + C) % M;
-            if self.seed.compare_and_swap(seed, next, Ordering::SeqCst) == seed {
+            let cas_result = self.seed.compare_and_swap(seed, next, Ordering::SeqCst);
+
+            if cas_result == seed {
                 return next;
+            } else {
+                seed = cas_result;
             }
         }
     }
