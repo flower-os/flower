@@ -13,8 +13,8 @@ use core::ptr::Unique;
 use core::ops::{Deref, DerefMut};
 use spin::{Once, Mutex};
 use super::paging::{PAGE_TABLES, Page, PageSize, EntryFlags};
-use memory::paging::PhysicalAddress;
-use util;
+use crate::memory::paging::PhysicalAddress;
+use crate::util;
 // use ...::Block // <-- this one comes from the macro invocation below
 
 buddy_allocator_bitmap_tree!(LEVEL_COUNT = 25, BASE_ORDER = 6);

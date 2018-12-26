@@ -1,9 +1,9 @@
 /// Programmable Interval Timer controller for sleeping and measuring time passage
 /// Note: This is a very low accuracy driver, with a drift of ~1ms every 6 seconds
 
-use interrupts;
+use crate::interrupts;
 use spin::Mutex;
-use io::SynchronizedPort;
+use crate::io::SynchronizedPort;
 use core::sync::atomic::{AtomicUsize, AtomicU16, Ordering};
 
 static COUNTER: AtomicUsize = AtomicUsize::new(0);

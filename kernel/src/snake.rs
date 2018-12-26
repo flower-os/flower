@@ -1,9 +1,9 @@
 use core::sync::atomic::{Ordering, AtomicU64};
 use alloc::vec::Vec;
-use terminal::{TerminalOutput, TerminalCharacter, Point, Resolution, STDOUT};
-use drivers::{pit, ps2, vga};
-use drivers::keyboard::{Ps2Keyboard, Keyboard, KeyEventType, keymap::codes::*};
-use halt;
+use crate::terminal::{TerminalOutput, TerminalCharacter, Point, Resolution, STDOUT};
+use crate::drivers::{pit, ps2, vga};
+use crate::drivers::keyboard::{Ps2Keyboard, Keyboard, KeyEventType, keymap::codes::*};
+use crate::halt;
 
 const HEAD_CHAR: char = 2 as char;
 lazy_static! {
@@ -92,7 +92,7 @@ impl<'a> Game<'a> {
         );
 
         self.snake = Snake::new();
-        let res = STDOUT.read().resolution();
+        let _res = STDOUT.read().resolution();
         self.grid.clear();
         STDOUT.write().clear().expect("Error clearing screen");
         self.grid.set(generate_apple_pos(&self.grid), Cell::Apple);

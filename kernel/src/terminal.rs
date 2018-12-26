@@ -12,11 +12,11 @@
 //! generally writing to VGA. This can be invoked through the `print!` and `println!` macros,
 //! or directly referencing it through `drivers::terminal::STDOUT`
 
-use color::{Color, ColorPair};
+use crate::color::{Color, ColorPair};
 use core::fmt::{self, Debug, Write};
 use core::ops::Add;
 use core::result::Result;
-use drivers::vga;
+use crate::drivers::vga;
 use spin::RwLock;
 
 #[cfg(not(test))]

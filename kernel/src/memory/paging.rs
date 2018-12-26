@@ -122,14 +122,14 @@ impl PageMap {
     pub fn map_to(&mut self, page: Page, physical_address: PhysicalAddress, flags: EntryFlags) {
         use self::EntryFlags;
 
-        let mut p2 = self.p4_mut()
+        let p2 = self.p4_mut()
             .next_table_create(page.p4_index()).expect("No next p3 table!")
             .next_table_create(page.p3_index()).expect("No next p2 table!");
 
         assert!(page.size.is_some(), "Page to map requires size!");
 
         if page.size.unwrap() == PageSize::Kib4 {
-            let mut p1 = p2.next_table_create(page.p2_index())
+            let p1 = p2.next_table_create(page.p2_index())
                 .expect("No next p1 table!");
 
             // 4kib page
@@ -176,7 +176,7 @@ impl PageMap {
                 page.start_address().unwrap()
         );
 
-        let mut p2 = self.p4_mut()
+        let p2 = self.p4_mut()
             .next_page_table_mut(page.p4_index()).expect("Unmap called on unmapped page!")
             .next_page_table_mut(page.p3_index()).expect("Unmap called on unmapped page!");
 

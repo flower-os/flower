@@ -39,11 +39,11 @@ extern crate lazy_static;
 extern crate static_assertions;
 extern crate arrayvec;
 
-use drivers::keyboard::{Keyboard, KeyEventType, Ps2Keyboard};
-use drivers::keyboard::keymap;
-use drivers::ps2;
-use terminal::TerminalOutput;
-use interrupts::Irq;
+use crate::drivers::keyboard::{Keyboard, KeyEventType, Ps2Keyboard};
+use crate::drivers::keyboard::keymap;
+use crate::drivers::ps2;
+use crate::terminal::TerminalOutput;
+use crate::interrupts::Irq;
 
 #[cfg(not(test))]
 mod lang;
@@ -63,7 +63,7 @@ mod acpi_impl;
 mod cpuid;
 mod snake;
 
-use memory::heap::Heap;
+use crate::memory::heap::Heap;
 
 #[cfg_attr(not(test), global_allocator)]
 pub static HEAP: Heap = Heap::new();

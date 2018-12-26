@@ -11,8 +11,8 @@
 
 pub mod io;
 
-use drivers::ps2::io::Ps2Error;
-use drivers::ps2::io::commands::{self, ControllerCommand, ControllerReturnCommand, ControllerDataCommand, DeviceCommand, DeviceDataCommand};
+use crate::drivers::ps2::io::Ps2Error;
+use crate::drivers::ps2::io::commands::{self, ControllerCommand, ControllerReturnCommand, ControllerDataCommand, DeviceCommand, DeviceDataCommand};
 use spin::Mutex;
 
 pub const RESEND: u8 = 0xFE;

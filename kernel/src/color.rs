@@ -47,9 +47,9 @@ impl Default for ColorPair {
 
 macro_rules! color {
     ($foreground:ident, $background:ident) => {
-        ::color::ColorPair {
-            foreground: ::color::Color::$foreground,
-            background: ::color::Color::$background,
+        crate::color::ColorPair {
+            foreground: crate::color::Color::$foreground,
+            background: crate::color::Color::$background,
         }
     };
 
