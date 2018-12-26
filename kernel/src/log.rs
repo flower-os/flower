@@ -50,8 +50,8 @@ macro_rules! debug {
     ($thing:expr, $($extra:tt)*) => {
         #[cfg(feature = "debug")]
         {
-            use terminal::TerminalOutput;
-            ::terminal::STDOUT.write().write_string_colored("[debug] ", color!(Cyan on Black))
+            use crate::terminal::TerminalOutput;
+            crate::terminal::STDOUT.write().write_string_colored("[debug] ", color!(Cyan on Black))
                 .expect("Error logging");
             println!($thing, $($extra)*);
         }
@@ -66,8 +66,8 @@ macro_rules! trace {
     ($thing:expr, $($extra:tt)*) => {
         #[cfg(feature = "trace")]
         {
-            use terminal::TerminalOutput;
-            ::terminal::STDOUT.write().write_string_colored("[trace] ", color!(White on Black))
+            use crate::terminal::TerminalOutput;
+            crate::terminal::STDOUT.write().write_string_colored("[trace] ", color!(White on Black))
                 .expect("Error logging");
             println!($thing, $($extra)*);
         }

@@ -2,6 +2,7 @@
 name = "flower_kernel"
 version = "0.1.0"
 authors = ["Restioson <restiosondev@gmail.com>", "Gegy1000 <gegy1000@gmail.com>"]
+edition = "2018"
 
 [lib]
 crate-type = ["staticlib"]
