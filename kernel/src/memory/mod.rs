@@ -46,9 +46,7 @@ pub unsafe fn map_physical_region<T>(
     let frames = util::round_up_divide(size as u64, 4096) as usize;
     let physical_begin_frame = physical_address / 4096;
 
-    let alloc_ptr = unsafe {
-        crate::HEAP.alloc_specific(physical_begin_frame, frames) as usize
-    };
+    let alloc_ptr = crate::HEAP.alloc_specific(physical_begin_frame, frames) as usize;
 
     if alloc_ptr == 0 {
         panic!("Ran out of heap memory!");

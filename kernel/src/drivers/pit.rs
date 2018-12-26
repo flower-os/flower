@@ -4,7 +4,7 @@
 use crate::interrupts;
 use spin::Mutex;
 use crate::io::SynchronizedPort;
-use core::sync::atomic::{AtomicUsize, AtomicU16, Ordering};
+use core::sync::atomic::{AtomicUsize, Ordering};
 
 static COUNTER: AtomicUsize = AtomicUsize::new(0);
 

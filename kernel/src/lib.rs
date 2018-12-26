@@ -43,7 +43,6 @@ use crate::drivers::keyboard::{Keyboard, KeyEventType, Ps2Keyboard};
 use crate::drivers::keyboard::keymap;
 use crate::drivers::ps2;
 use crate::terminal::TerminalOutput;
-use crate::interrupts::Irq;
 
 #[cfg(not(test))]
 mod lang;

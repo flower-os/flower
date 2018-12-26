@@ -1,7 +1,7 @@
 use core::sync::atomic::{Ordering, AtomicU64};
 use alloc::vec::Vec;
-use crate::terminal::{TerminalOutput, TerminalCharacter, Point, Resolution, STDOUT};
-use crate::drivers::{pit, ps2, vga};
+use crate::terminal::{TerminalOutput, TerminalCharacter, Point, STDOUT};
+use crate::drivers::{pit, ps2};
 use crate::drivers::keyboard::{Ps2Keyboard, Keyboard, KeyEventType, keymap::codes::*};
 use crate::halt;
 
@@ -149,10 +149,6 @@ impl Grid {
 
     fn get(&self, point: Point) -> &Cell {
         &self.cells[Grid::index(point)]
-    }
-
-    fn get_mut(&mut self, point: Point) -> &mut Cell {
-        &mut self.cells[Grid::index(point)]
     }
 
     #[inline]

@@ -1,7 +1,6 @@
 // Thanks to http://www.randomhacks.net/2015/11/16/bare-metal-rust-configure-your-pic-interrupts/
 
 use crate::io::SynchronizedPort;
-use crate::interrupts;
 use spin::Mutex;
 
 pub static CHAINED_PICS: Mutex<ChainedPics> = Mutex::new(ChainedPics::new());
