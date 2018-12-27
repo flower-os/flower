@@ -17,7 +17,7 @@ use multiboot2::{BootInformation, MemoryMapTag};
 use self::physical_allocator::{PHYSICAL_ALLOCATOR, BLOCKS_IN_TREE};
 use self::buddy_allocator::Block;
 use self::bootstrap_heap::BOOTSTRAP_HEAP;
-use util;
+use crate::util;
 
 /// Represents the size of a page.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
@@ -46,9 +46,7 @@ pub unsafe fn map_physical_region<T>(
     let frames = util::round_up_divide(size as u64, 4096) as usize;
     let physical_begin_frame = physical_address / 4096;
 
-    let alloc_ptr = unsafe {
-        ::HEAP.alloc_specific(physical_begin_frame, frames) as usize
-    };
+    let alloc_ptr = crate::HEAP.alloc_specific(physical_begin_frame, frames) as usize;
 
     if alloc_ptr == 0 {
         panic!("Ran out of heap memory!");
@@ -97,7 +95,7 @@ impl<T> Drop for PhysicalMapping<T> {
         let page_begin = obj_addr & !0xFFF;
 
         unsafe {
-            ::HEAP.dealloc_specific(
+            crate::HEAP.dealloc_specific(
                 page_begin as *mut u8,
                 self.mapped_length / 4096,
             );
@@ -143,7 +141,7 @@ pub fn init_memory(mb_info: &BootInformation, guard_page_addr: usize) {
     let (gibbibytes, usable) = setup_physical_allocator_prelim(mb_info);
 
     debug!("mem: setting up kernel heap");
-    ::HEAP.init();
+    crate::HEAP.init();
 
     debug!("mem: initialising pmm (2/2)");
     setup_physical_allocator_rest(gibbibytes, usable.iter());

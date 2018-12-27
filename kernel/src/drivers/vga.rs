@@ -5,9 +5,9 @@ use core::ptr::Unique;
 use core::result::Result;
 use spin::RwLock;
 
-use util::{self, FromDiscriminator};
-use color::{Color, ColorPair};
-use terminal::*;
+use crate::util::{self, FromDiscriminator};
+use crate::color::{Color, ColorPair};
+use crate::terminal::*;
 
 pub static WRITER: RwLock<VgaWriter> = RwLock::new(VgaWriter::new());
 

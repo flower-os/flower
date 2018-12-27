@@ -12,7 +12,6 @@
 #![feature(alloc, allocator_api, box_syntax)]
 #![feature(abi_x86_interrupt)]
 #![feature(compiler_builtins_lib)]
-#![feature(panic_handler)]
 #![feature(panic_info_message)]
 #![feature(integer_atomics)]
 
@@ -40,11 +39,10 @@ extern crate lazy_static;
 extern crate static_assertions;
 extern crate arrayvec;
 
-use drivers::keyboard::{Keyboard, KeyEventType, Ps2Keyboard};
-use drivers::keyboard::keymap;
-use drivers::ps2;
-use terminal::TerminalOutput;
-use interrupts::Irq;
+use crate::drivers::keyboard::{Keyboard, KeyEventType, Ps2Keyboard};
+use crate::drivers::keyboard::keymap;
+use crate::drivers::ps2;
+use crate::terminal::TerminalOutput;
 
 #[cfg(not(test))]
 mod lang;
@@ -62,8 +60,9 @@ mod memory;
 mod drivers;
 mod acpi_impl;
 mod cpuid;
+mod snake;
 
-use memory::heap::Heap;
+use crate::memory::heap::Heap;
 
 #[cfg_attr(not(test), global_allocator)]
 pub static HEAP: Heap = Heap::new();
@@ -93,6 +92,7 @@ pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
         Err(error) => error!("ps2c: {:?}", error),
     }
 
+    snake::snake(&mut controller);
     keyboard_echo_loop(&mut controller);
 
     halt()

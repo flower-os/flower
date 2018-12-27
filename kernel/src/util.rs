@@ -38,11 +38,11 @@ macro_rules! from_discriminator {
             $($member = $discriminator),+
         }
 
-        impl ::util::FromDiscriminator for $name {
-            fn from_discriminator(discriminator: u64) -> Result<Self, ::util::UnknownDiscriminator> {
+        impl crate::util::FromDiscriminator for $name {
+            fn from_discriminator(discriminator: u64) -> Result<Self, crate::util::UnknownDiscriminator> {
                 match discriminator {
                     $($discriminator => Ok($name::$member)),+,
-                    unknown => Err(::util::UnknownDiscriminator(unknown))
+                    unknown => Err(crate::util::UnknownDiscriminator(unknown))
                 }
             }
         }

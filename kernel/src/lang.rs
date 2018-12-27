@@ -1,13 +1,13 @@
 //! Lang items
 
-use ::halt;
-use color::{Color, ColorPair};
+use crate::halt;
+use crate::color::{Color, ColorPair};
 use core::fmt::Write;
 use core::panic::PanicInfo;
 use core::alloc::Layout;
-use drivers::vga::VgaWriter;
+use crate::drivers::vga::VgaWriter;
 use spin::RwLock;
-use terminal::{Stdout, TerminalOutput};
+use crate::terminal::{Stdout, TerminalOutput};
 
 // A note on the `#[no_mangle]`s:
 // Apparently, removing them makes it link-error with undefined symbols, so we include them
@@ -43,7 +43,6 @@ extern fn panic_fmt(info: &PanicInfo) -> ! {
 
 #[lang = "oom"]
 #[no_mangle]
-#[allow(private_no_mangle_fns)] // publicity is not required, but no mangle is
 extern fn oom(_layout: Layout) -> ! {
     panic!("Ran out of kernel heap memory!");
 }
