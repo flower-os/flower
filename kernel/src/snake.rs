@@ -159,13 +159,18 @@ impl Grid {
     fn get(&self, point: Point) -> &Cell {
         &self.cells[Grid::index(point)]
     }
+    
+    #[inline]
+    fn contains(&self, point: Point) -> bool {
+        point.x < self.width && point.y < self.height
+    }
 
     #[inline]
     fn index(point: Point) -> usize {
-        if point.x >= 80 || point.y >= 25 {
+        if !self.contains(point) {
             panic!("point out of bounds {} {}", point.x, point.y);
         }
-        point.x + point.y * 80
+        point.x + point.y * self.width
     }
 }
 
@@ -247,7 +252,7 @@ impl Snake {
 
     fn try_move(&mut self, grid: &mut Grid) -> MoveResult {
         let moved_head = self.direction.offset(self.head, 1);
-        if !STDOUT.read().in_bounds(moved_head) {
+        if !grid.contains(moved_head) {
             return MoveResult::Lose;
         }
 
