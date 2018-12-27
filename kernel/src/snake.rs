@@ -151,13 +151,14 @@ impl Grid {
     }
 
     fn set(&mut self, point: Point, cell: Cell) {
-        self.cells[Grid::index(point)] = cell;
+        let index = self.index(point);
+        self.cells[index] = cell;
         STDOUT.write().set_char(cell.character(), point)
             .expect("failed to draw cell to screen");
     }
 
     fn get(&self, point: Point) -> &Cell {
-        &self.cells[Grid::index(point)]
+        &self.cells[self.index(point)]
     }
     
     #[inline]
@@ -166,7 +167,7 @@ impl Grid {
     }
 
     #[inline]
-    fn index(point: Point) -> usize {
+    fn index(&self, point: Point) -> usize {
         if !self.contains(point) {
             panic!("point out of bounds {} {}", point.x, point.y);
         }
