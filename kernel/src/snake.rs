@@ -6,6 +6,8 @@ use crate::drivers::keyboard::{Ps2Keyboard, Keyboard, KeyEventType};
 use crate::halt;
 
 const HEAD_CHAR: char = 2 as char;
+const BASE_LENGTH: u16 = 4;
+
 lazy_static! {
     static ref RNG: Random = Random::new();
 }
@@ -34,7 +36,7 @@ impl<'a> Game<'a> {
     fn run(&mut self) {
         STDOUT.write().clear().expect("Error clearing screen");
         self.notification("Welcome to snake!");
-        self.initialise();
+        self.initialize();
 
         loop {
             pit::sleep(1000 / self.ups);
@@ -83,7 +85,7 @@ impl<'a> Game<'a> {
         }
     }
 
-    fn initialise(&mut self) {
+    fn initialize(&mut self) {
         self.snake = Snake::new();
         self.grid.clear();
         STDOUT.write().clear().expect("Error clearing screen");
@@ -102,7 +104,7 @@ impl<'a> Game<'a> {
             &format!("You {}! Final score: {}.{}", won, self.snake.score(), highscore)
         );
 
-        self.initialise();
+        self.initialize();
     }
 
     fn notification(&mut self, message: &str) {
@@ -207,7 +209,7 @@ impl Snake {
             head: STDOUT.read().resolution().center(),
             direction: Direction::Right,
             blocks: Vec::with_capacity(128),
-            len: 4,
+            len: BASE_LENGTH,
         }
     }
 
@@ -267,7 +269,7 @@ impl Snake {
     }
 
     fn score(&self) -> u16 {
-        self.len - 4
+        self.len - BASE_LENGTH
     }
 }
 
