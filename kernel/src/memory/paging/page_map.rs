@@ -30,7 +30,7 @@ impl Mapper {
     }
 
     /// Walks the page tables and translates this page into a physical address
-    pub fn walk_page_table(&self, page: Page) -> Option<(PhysicalAddress, PageSize)> {
+    pub fn walk_page_table(&self, page: Page) -> Option<(PageTableEntry, PageSize)> {
         let p3 = self.p4().next_page_table(page.p4_index());
 
         let huge_page = || {
@@ -56,7 +56,7 @@ impl Mapper {
                                 "Adress is not 2MiB aligned!"
                             );
                             return Some((
-                                PhysicalAddress((start_frame.0 >> 12) + page.p1_index()),
+                                *p2_entry,
                                 PageSize::Mib2,
                             ));
                         }
@@ -68,7 +68,7 @@ impl Mapper {
 
         p3.and_then(|p3| p3.next_page_table(page.p3_index()))
             .and_then(|p2| p2.next_page_table(page.p2_index()))
-            .and_then(|p1| Some((p1[page.p1_index()].physical_address()?, PageSize::Kib4)))
+            .and_then(|p1| Some((p1[page.p1_index()], PageSize::Kib4)))
             .or_else(huge_page)
     }
 
@@ -88,8 +88,18 @@ impl Mapper {
         assert!(page.size.is_some(), "Page to map requires size!");
 
         if page.size.unwrap() == PageSize::Kib4 {
-            let mut p1 = p2.next_table_create(page.p2_index())
-                .expect("No next p1 table!");
+
+            let mut p1 = match p2.next_table_create(page.p2_index()) {
+                Some(p1) => p1,
+                None => {
+                    if p2[page.p2_index()].flags().contains(EntryFlags::HUGE_PAGE) {
+                        panic!("No next p1 table - the area is mapped in 2mib pages")
+                    } else {
+                        panic!("No next p1 table (unknown reason)")
+                    }
+                }
+            };
+
 
             // 4kib page
             p1[page.p1_index()].set(
@@ -187,7 +197,8 @@ impl Mapper {
         }
     }
 
-    /// Maps a range of addresses as 4kib pages in the -2GiB higher "half".
+    /// Maps a range of higher half addresses as 4kib pages in the -2GiB higher "half", mapping
+    /// them to their address minus `KERNEL_MAPPING_BEGIN`.
     pub unsafe fn higher_half_map_range(
         &mut self,
         addresses: RangeInclusive<usize>,
@@ -195,7 +206,7 @@ impl Mapper {
         invplg: bool,
     ) {
         for frame_no in (addresses.start() / 4096)..=((addresses.end()) / 4096) {
-            let address = (frame_no * 4096) as usize;
+            let address = frame_no * 4096;
 
             self.map_to(
                 Page::containing_address(address, PageSize::Kib4),
@@ -206,6 +217,45 @@ impl Mapper {
         }
     }
 
+    pub unsafe fn map_page_range(&mut self, mapping: PageRangeMapping, invplg: bool, flags: EntryFlags) {
+        let frames = mapping.start_frame..=mapping.start_frame + mapping.pages.size_hint().1.unwrap();
+
+        for (frame_no, page_no) in frames.zip(mapping.pages) {
+            let phys_address = frame_no * 4096;
+            let virtual_address = page_no * 4096;
+
+            self.map_to(
+                Page::containing_address(virtual_address, PageSize::Kib4),
+                PhysicalAddress(phys_address as usize),
+                flags,
+                invplg,
+            );
+        }
+    }
+
+}
+
+/// A 4kib page range mapping -- represents a contigous area of 4kib pages mapped to a contigous
+/// area of 4kib frames. However, this does not need to be an identity mapping, i.e there may be
+/// an offset
+pub struct PageRangeMapping {
+    /// Range of page numbers
+    pages: RangeInclusive<usize>,
+
+    /// The start frame number
+    start_frame: usize,
+}
+
+impl PageRangeMapping {
+    pub fn new(start_page: Page, start_frame: usize, pages: usize) -> PageRangeMapping {
+        assert_eq!(start_page.page_size(), Some(PageSize::Kib4), "Start page needs to be 4kib!");
+        let page_number = start_page.start_address().unwrap() / 4096;
+
+        PageRangeMapping {
+            pages: page_number..=(page_number + pages),
+            start_frame,
+        }
+    }
 }
 
 pub struct TemporaryPage {
@@ -282,7 +332,7 @@ impl ActivePageMap {
             // overwrite recursive mapping
             self.p4_mut()[510].set(
                 table.p4_frame.clone(),
-                EntryFlags::PRESENT | EntryFlags::WRITABLE
+                EntryFlags::PRESENT | EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE
             );
 
             tlb::flush_all();
@@ -291,7 +341,10 @@ impl ActivePageMap {
             let ret = f(self);
 
             // restore recursive mapping to original p4 table
-            p4_table[510].set(backup, EntryFlags::PRESENT | EntryFlags::WRITABLE);
+            p4_table[510].set(
+                backup,
+              EntryFlags::PRESENT | EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE
+            );
 
             tlb::flush_all();
 
@@ -352,7 +405,10 @@ impl InactivePageMap {
             table.zero();
 
             // Set up recursive mapping for table
-            table[510].set(frame.clone(), EntryFlags::PRESENT | EntryFlags::WRITABLE);
+            table[510].set(
+                frame.clone(),
+                EntryFlags::PRESENT | EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE
+            );
         }
 
         unsafe {

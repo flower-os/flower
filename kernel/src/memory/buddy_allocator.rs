@@ -1,4 +1,5 @@
 /// A block in the bitmap
+#[derive(Copy, Clone)]
 pub struct Block {
     /// The order of the biggest block under this block - 1. 0 denotes used
     pub order_free: u8,
@@ -181,8 +182,6 @@ macro_rules! buddy_allocator_bitmap_tree {
             #[inline]
             pub fn deallocate(&mut self, ptr: *const u8, order: u8) {
                 use $crate::memory::buddy_allocator::blocks_in_tree;
-                use $crate::memory::buddy_allocator::flat_tree;
-                use ::core::cmp;
 
                 assert!(order <= MAX_ORDER, "Block order > maximum order!");
 
@@ -264,11 +263,14 @@ mod test {
     #[test]
     fn test_usable() {
         let mut tree = Tree::new(
-            iter::once(0x1000..0x2001),
+            [
+                0x100000..0x385df8,
+                0x386241..0x387000,
+                0x786ff9..0x7fe0000usize,
+            ].iter().map(|x| x.clone()),
             unsafe { box mem::uninitialized() }
         );
-        assert_eq!(tree.allocate(0), Some(0x1000 as *const u8));
-        assert_eq!(tree.allocate(0), None);
+        assert_eq!(tree.allocate(0), Some(0x100000 as *const u8));
     }
 
     #[test]

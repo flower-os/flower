@@ -5,8 +5,9 @@ pub mod remap;
 mod page_map;
 pub use self::page_map::*;
 
+use core::{marker::PhantomData, convert::From, ptr::Unique};
+use core::ops::{Add, Index, IndexMut};
 use spin::Mutex;
-use core::{marker::PhantomData, convert::From, ops::{Index, IndexMut}, ptr::Unique};
 use super::physical_allocator::PHYSICAL_ALLOCATOR;
 use x86_64::instructions::tlb;
 
@@ -17,7 +18,7 @@ pub static PAGE_TABLES: Mutex<ActivePageMap> = Mutex::new(unsafe { ActivePageMap
 pub struct PhysicalAddress(pub usize);
 
 #[derive(Debug, Eq, PartialEq, Copy, Clone, Ord, PartialOrd)]
-pub struct VirtualAddress(usize);
+pub struct VirtualAddress(pub usize);
 
 // TODO tryfrom
 impl From<VirtualAddress> for PhysicalAddress {
@@ -36,7 +37,7 @@ impl From<VirtualAddress> for PhysicalAddress {
         let (start, size) = PAGE_TABLES.lock().walk_page_table(page)
             .expect("Virtual address not mapped!");
 
-        PhysicalAddress(start.0 + (vaddr.0 % size.bytes()))
+        PhysicalAddress(start.physical_address().unwrap().0 + (vaddr.0 % size.bytes()))
     }
 }
 
@@ -58,6 +59,8 @@ impl PageSize {
         }
     }
 }
+
+// TODO frame struct
 
 #[derive(Copy, Clone)]
 pub struct Page {
@@ -83,12 +86,32 @@ impl Page {
         self.number & 0o777
     }
 
+    pub fn number(&self) -> usize {
+        self.number
+    }
+
     pub fn start_address(&self) -> Option<usize> {
         self.size.map(|size| self.number * size.bytes())
     }
 
+    // TODO use this when required
+    pub fn page_size(&self) -> Option<PageSize> {
+        self.size
+    }
+
     pub fn containing_address(addr: usize, size: PageSize) -> Page {
         Page { number: addr / size.bytes(), size: Some(size) }
+    }
+}
+
+impl Add<usize> for Page {
+    type Output = Page;
+
+    fn add(self, other: usize) -> Page {
+        Page {
+            number: self.number + other,
+            size: self.size
+        }
     }
 }
 
@@ -263,7 +286,12 @@ impl<L: TableLevel> PageTable<L> {
                 let ptr = PHYSICAL_ALLOCATOR.allocate(0).expect("No physical frames available!");
                 let frame = PhysicalAddress(ptr as usize);
 
-                self.entries[index].set(frame, self::EntryFlags::PRESENT | self::EntryFlags::WRITABLE);
+                self.entries[index].set(
+                    frame,
+                    self::EntryFlags::PRESENT |
+                        self::EntryFlags::WRITABLE |
+                        self::EntryFlags::NO_EXECUTE
+                );
                 self.next_page_table_mut(index).expect("No next table!").zero();
             }
         }

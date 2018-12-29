@@ -2,10 +2,10 @@ use core::alloc::Layout;
 use multiboot2::BootInformation;
 use memory::paging::{self, Page, PhysicalAddress, EntryFlags, page_map::TemporaryPage};
 use memory::{bootstrap_heap::BOOTSTRAP_HEAP, physical_allocator::PHYSICAL_ALLOCATOR};
-use memory::heap::{HEAP_TREE_START, HEAP_START};
+use memory::heap::Heap;
 use memory::paging::PageSize;
 
-pub fn remap_kernel(boot_info: &BootInformation) {
+pub fn remap_kernel(boot_info: &BootInformation, heap_tree_start: usize) {
     use core::alloc::GlobalAlloc;
     use multiboot2::ElfSectionFlags;
     use x86_64::registers::control_regs::{cr0, cr0_write, Cr0};
@@ -82,27 +82,33 @@ pub fn remap_kernel(boot_info: &BootInformation) {
             mapper.map_to(
                 Page::containing_address(::drivers::vga::VIRTUAL_VGA_PTR, PageSize::Kib4),
                 PhysicalAddress(0xb8000 as usize),
-                EntryFlags::WRITABLE,
+                EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE,
                 false,
             );
 
             // Map bootstrap heap
             mapper.higher_half_map_range(
                 BOOTSTRAP_HEAP.start()..=BOOTSTRAP_HEAP.end(),
-                EntryFlags::WRITABLE,
+                EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE,
                 false
             );
         }
     });
 
     // Map heap pages
-    for page_no in (HEAP_TREE_START / 4096)..=((HEAP_START - 1) / 4096) {
+    let heap_tree_end = heap_tree_start + Heap::tree_size();
+    for page_no in (heap_tree_start / 4096)..=(heap_tree_end / 4096) {
         let page = Page::containing_address(page_no * 4096, PageSize::Kib4);
         let phys_addr = paging::PAGE_TABLES.lock().walk_page_table(page).unwrap().0;
 
         active_table.with_inactive_p4(&mut new_table, &mut temporary_page, |mapper| {
             unsafe {
-                mapper.map_to(page, phys_addr, EntryFlags::WRITABLE, false);
+                mapper.map_to(
+                    page,
+                    phys_addr.physical_address().unwrap(),
+                    EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE,
+                    false
+                );
             }
         });
     }
@@ -111,7 +117,7 @@ pub fn remap_kernel(boot_info: &BootInformation) {
     unsafe {
         paging::PAGE_TABLES.lock().map_to(
             heap_page,
-            heap_frame_addr,
+            heap_frame_addr.physical_address().unwrap(),
             paging::EntryFlags::from_bits_truncate(0),
             true, // Invplg
         );

@@ -1,11 +1,5 @@
-pub const HEAP_TREE_START: usize = 0xffffffff00000000;
-/// The base heap address. The first 4GiB is identity mapped, so we put the heap
-/// straight above. We place the info needed for the heap (block tree) above _that_, so the heap
-/// only begins after that.
-///
-/// Should be aligned to 64 bytes _at least_.
-// We add 1 because the size of the blocks in tree is a power of two - 1 and we want to be aligned
-pub const HEAP_START: usize = HEAP_TREE_START + mem::size_of::<[Block; BLOCKS_IN_TREE]>() + 1;
+/// The base heap address.
+pub const HEAP_START: usize = 0xffffffff00000000;
 
 use core::alloc::{GlobalAlloc, Layout};
 use core::{iter, mem};
@@ -27,7 +21,7 @@ buddy_allocator_bitmap_tree!(LEVEL_COUNT = 25, BASE_ORDER = 6);
 struct DerefPtr<T>(Unique<T>);
 
 impl<T> DerefPtr<T> {
-    const unsafe fn new(unique: Unique<T>) -> Self {
+    const fn new(unique: Unique<T>) -> Self {
         DerefPtr(unique)
     }
 }
@@ -54,31 +48,36 @@ impl Heap {
     pub const fn new() -> Self {
         Heap { tree: Once::new() }
     }
-
-    pub fn init(&self) {
+    
+    /// Initializes the heap. Required for it to be usable, otherwise all of its methods will panic.
+    ///
+    /// # Unsafety
+    ///
+    /// Unsafe because `heap_tree_start` needs to be correct (unused) and well-aligned (currently
+    /// non applicable as Block is a u8).
+    pub unsafe fn init(&self, heap_tree_start: usize) {
         self.tree.call_once(|| {
+            // Get the next page up from the given heap start
+            let heap_tree_start = ((heap_tree_start / 4096) + 1) * 4096;
+
             // Map pages for the tree to use for accounting info
             let pages_to_map = util::round_up_divide(
                 mem::size_of::<[Block; BLOCKS_IN_TREE]>() as u64,
-                4 * 1024,
+                4096,
             );
 
             for page in 0..pages_to_map as usize {
                 let mut table = PAGE_TABLES.lock();
-                unsafe {
-                    table.map(
-                        Page::containing_address(HEAP_TREE_START + (page * 4096), PageSize::Kib4),
-                        EntryFlags::from_bits_truncate(0),
-                        false, // Don't invplg -- this is not an overwrite
-                    );
-                }
+                table.map(
+                    Page::containing_address(heap_tree_start + (page * 4096), PageSize::Kib4),
+                    EntryFlags::from_bits_truncate(0),
+                    false, // Don't invplg -- this is not an overwrite
+                );
             }
-            let tree = unsafe {
-                Tree::new(
-                    iter::once(0..(1 << 30 + 1)),
-                    DerefPtr::new(Unique::new_unchecked(HEAP_TREE_START as *mut _)),
-                )
-            };
+            let tree = Tree::new(
+                iter::once(0..(1 << 30 + 1)),
+                DerefPtr::new(Unique::new_unchecked(heap_tree_start as *mut _)),
+            );
 
             Mutex::new(tree)
         });
@@ -89,13 +88,22 @@ impl Heap {
     ///
     /// Note: `physical_begin_frame` is the frame number of the beginning physical frame to allocate
     /// memory from (i.e address / 4096).
+    ///
+    /// # Panicking
+    ///
+    /// Panics if the heap is not initialized.
+    ///
+    /// # Unsafety
+    ///
+    /// Unsafe as it remaps pages, which could cause memory unsafety if the heap is not set up
+    /// correctly.
     pub unsafe fn alloc_specific(
         &self,
         physical_begin_frame: usize,
         frames: usize,
     ) -> *mut u8 {
-        let mut tree = self.tree.wait().unwrap().lock();
-
+        let mut tree = self.tree.wait().expect("Heap not initialized!").lock();
+        
         let order = order(frames * 4096);
         if order > MAX_ORDER { return 0 as *mut _ }
 
@@ -124,6 +132,15 @@ impl Heap {
 
     /// The `dealloc` counterpart to `alloc_specific`. This function does not free the backing
     /// physical memory.
+    /// 
+    /// # Panicking
+    ///
+    /// Panics if the heap is not initialized.
+    ///
+      /// # Unsafety
+    ///
+    /// Unsafe as it unmaps pages, which could cause memory unsafety if the heap is not set up
+    /// correctly.
     pub unsafe fn dealloc_specific(&self, ptr: *mut u8, frames: usize) {
         if ptr.is_null() || frames == 0 {
             return;
@@ -141,7 +158,7 @@ impl Heap {
         let global_ptr = ptr;
         let ptr = ptr as usize - HEAP_START;
 
-        self.tree.wait().unwrap().lock().deallocate(ptr as *mut _, order);
+        self.tree.wait().expect("Heap not initialized!").lock().deallocate(ptr as *mut _, order);
 
         // Unmap pages that have were used for this alloc
         // 6 is base order so `1 << (order + 6)`
@@ -155,11 +172,15 @@ impl Heap {
             );
         }
     }
+
+    pub const fn tree_size() -> usize {
+        mem::size_of::<[Block; BLOCKS_IN_TREE]>()
+    }
 }
 
 unsafe impl GlobalAlloc for Heap {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        let mut tree = self.tree.wait().unwrap().lock();
+        let mut tree = self.tree.wait().expect("Heap not initialized!").lock();
 
         let order = order(layout.size());
         if order > MAX_ORDER { return 0 as *mut _ }
@@ -208,7 +229,7 @@ unsafe impl GlobalAlloc for Heap {
         let global_ptr = ptr;
         let ptr = ptr as usize - HEAP_START;
 
-        self.tree.wait().unwrap().lock().deallocate(ptr as *mut _, order);
+        self.tree.wait().expect("Heap not initialized!").lock().deallocate(ptr as *mut _, order);
 
         // There will only be pages to unmap which totally contained this allocation if this
         // allocation was larger or equal to the size of a page

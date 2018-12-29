@@ -12,7 +12,6 @@
 #![feature(alloc, allocator_api, box_syntax)]
 #![feature(abi_x86_interrupt)]
 #![feature(compiler_builtins_lib)]
-#![feature(panic_implementation)]
 #![feature(panic_info_message)]
 
 #[cfg(test)]
@@ -70,8 +69,7 @@ pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
     say_hello();
     log::init();
     interrupts::init();
-    let mb_info = unsafe { multiboot2::load(multiboot_info_addr) };
-    memory::init_memory(&mb_info, guard_page_addr);
+    memory::init_memory(multiboot_info_addr, guard_page_addr);
 
     let _acpi = acpi_impl::acpi_init();
 

@@ -1,5 +1,17 @@
 //! All things to do with memory
 
+//! # Flower memory map
+//!
+//! `.` denotes current memory location. Addresses at `.` will always be plus the align of the
+//! structure.
+//!
+//! | Address range                             |  Usage                    |
+//! |-------------------------------------------|---------------------------|
+//! | `0xffffffff40000000` ~ . + 1GiB           | Kernel heap               |
+//! | `0xffffffff800b8000` ~ . + `0x1000`       | VGA frame buffer          |
+//! | `0xffffffff80100000` + 1MiB ~ kernel end  | Kernel elf                |
+//! | . ~ . + size of bootstrap heap            | Bootstrap heap            |
+//! | . ~ . + size of heap buddy allocator tree | Heap buddy allocator tree |
 #[macro_use]
 mod buddy_allocator;
 pub mod paging;
@@ -8,46 +20,65 @@ pub mod bootstrap_heap;
 pub mod physical_allocator;
 pub mod physical_mapping;
 
-use core::{mem, iter, ops::Range};
+use core::{mem, iter, ops::{Range, RangeInclusive}};
 use arrayvec::ArrayVec;
-use multiboot2::{BootInformation, MemoryMapTag};
+use multiboot2::{self, BootInformation, MemoryMapTag};
 use self::physical_allocator::{PHYSICAL_ALLOCATOR, BLOCKS_IN_TREE};
 use self::buddy_allocator::Block;
-use self::bootstrap_heap::BOOTSTRAP_HEAP;
-use self::paging::remap;
+use self::bootstrap_heap::{BootstrapHeap, BOOTSTRAP_HEAP};
+use self::paging::{Page, PageSize, PhysicalAddress, VirtualAddress, PAGE_TABLES, EntryFlags, PageRangeMapping, remap};
 use util;
 
 pub const KERNEL_MAPPING_BEGIN: usize = 0xffffffff80000000;
 
-pub fn init_memory(mb_info: &BootInformation, guard_page_addr: usize) {
+pub fn init_memory(mb_info_addr: usize, guard_page_addr: usize) {
+    // TODO struct to represent physical to virtual mapping of range of pages/frames that are
+    // TODO continuous
     info!("mem: initialising");
+
+    let mb_info = unsafe { multiboot2::load(mb_info_addr) };
+    let kernel_area = kernel_area(&mb_info);
+
+    let mb_info_phys = mb_info.start_address()..=mb_info.end_address();
     let memory_map = mb_info.memory_map_tag()
         .expect("Expected a multiboot2 memory map tag, but it is not present!");
 
     print_memory_info(memory_map);
 
     debug!("mem: initialising bootstrap heap");
-    setup_bootstrap_heap(mb_info);
+    let (bootstrap_heap_phys, bootstrap_heap_virtual) = unsafe {
+        let physical_start = PhysicalAddress(mb_info_phys.end() + 1); // TODO what if really high and no more space ?
+        let virtual_start = VirtualAddress(kernel_area.end() + 1);
+
+         setup_bootstrap_heap(virtual_start, physical_start)
+    };
 
     debug!("mem: initialising pmm (1/2)");
-    let (gibbibytes, usable) = setup_physical_allocator_prelim(mb_info);
+    let (gibbibytes, usable) = unsafe {
+        setup_physical_allocator_prelim(
+            &mb_info,
+            mb_info_phys,
+            bootstrap_heap_phys.clone(),
+            kernel_area
+        )
+    };
 
     // ** IMPORTANT! **
     // The heap must NOT BE USED except in one specific place -- all heap objects will be corrupted
     // after the remap.
     debug!("mem: setting up kernel heap");
-    ::HEAP.init();
+    unsafe { ::HEAP.init(bootstrap_heap_virtual.end() + 1) };
 
     debug!("mem: initialising pmm (2/2)");
-    setup_physical_allocator_rest(gibbibytes, usable.iter());
+    unsafe { setup_physical_allocator_rest(gibbibytes, usable.iter()) };
 
     debug!("mem: remapping kernel");
-    remap::remap_kernel(mb_info);
+    remap::remap_kernel(&mb_info, *bootstrap_heap_phys.start()); // TODO
 
     trace!("mem: setting up guard page");
-    setup_guard_page(guard_page_addr);
+    unsafe { setup_guard_page(guard_page_addr) };
 
-    info!("mem: initialised")
+    info!("mem: initialised");
 }
 
 fn print_memory_info(memory_map: &MemoryMapTag) {
@@ -69,28 +100,58 @@ fn print_memory_info(memory_map: &MemoryMapTag) {
     info!("{:.3} GiB of RAM available", gibbibytes_available);
 }
 
-fn setup_bootstrap_heap(mb_info: &BootInformation) {
-    use core::cmp;
+/// Sets up the bootstrap heap and returns its physical address range and its virtual address range
+/// (physical in the tuple first).
+///
+/// # Arguments
+///
+/// The addresses given are the smallest possible starting addresses.
+unsafe fn setup_bootstrap_heap(
+    virtual_start: VirtualAddress,
+    physical_start: PhysicalAddress,
+) -> (RangeInclusive<usize>, RangeInclusive<usize>) {
+    let start_ptr = virtual_start.0 as *const u8;
+    let heap_start = start_ptr.offset(
+        start_ptr.align_offset(mem::align_of::<[Block; BLOCKS_IN_TREE]>()) as isize,
+    ) as usize;
 
-    // MB info struct could be higher than kernel, so take max
-    // All of these addresses are relative to 0gib and not -2gib, so we make them relative by adding
-    // KERNEL_MAPPING_BEGIN later on just before the end
-    let kernel_end = kernel_area(mb_info).end;
-    let mb_info_end = mb_info.end_address();
-    let end_address = cmp::max(kernel_end, mb_info_end) as *const u8;
+    let start_page = Page::containing_address(heap_start, PageSize::Kib4) + 1;
+    let start_frame = (physical_start.0 / 4096) + 1;
 
-    let end_address = unsafe {
-        end_address.offset(
-            end_address.align_offset(mem::align_of::<[Block; BLOCKS_IN_TREE]>()) as isize,
-        )
-    };
+    let mapping = PageRangeMapping::new(
+        start_page,
+        start_frame,
+        BootstrapHeap::space_taken() / 4096,
+    );
 
-    let heap_start = end_address as usize + KERNEL_MAPPING_BEGIN;
-    unsafe { BOOTSTRAP_HEAP.init_unchecked(heap_start); }
+    PAGE_TABLES.lock().map_page_range(
+        mapping,
+        false,
+        EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE
+    );
+
+    BOOTSTRAP_HEAP.init_unchecked(heap_start);
+
+    let physical_start = start_frame * 4096;
+    let virtual_start = start_page.number() * 4096;
+    let physical = physical_start..=physical_start + BootstrapHeap::space_taken();
+    let virtual_range = virtual_start..=virtual_start + BootstrapHeap::space_taken();
+    trace!("at 0x{:x}..=0x{:x}", physical.start(), physical.end());
+
+    trace!("{:?}", physical_start as *const u8);
+    let m = PAGE_TABLES.lock().walk_page_table(
+        Page::containing_address(virtual_start, PageSize::Kib4)
+    );
+    trace!("{:?}", m.unwrap().0.physical_address().unwrap().0 as *const u8);
+
+    (physical, virtual_range)
 }
 
-fn setup_physical_allocator_prelim(
-    mb_info: &BootInformation
+unsafe fn setup_physical_allocator_prelim(
+    mb_info: &BootInformation,
+    mb_info_phys: RangeInclusive<usize>,
+    bootstrap_heap_phys: RangeInclusive<usize>,
+    kernel_area: RangeInclusive<usize>,
 ) -> (u8, ArrayVec<[Range<usize>; 256]>) {
     let memory_map = mb_info.memory_map_tag()
         .expect("Expected a multiboot2 memory map tag, but it is not present!");
@@ -104,33 +165,43 @@ fn setup_physical_allocator_prelim(
     let trees = util::round_up_divide(highest_address as u64, 1 << 30) as u8;
     trace!("Allocating {} trees", trees);
 
-    let kernel_area = kernel_area(mb_info).start..(BOOTSTRAP_HEAP.end() - KERNEL_MAPPING_BEGIN + 1);
-
     // Calculate the usable memory areas by using the MB2 memory map but excluding kernel areas
     let usable_areas = memory_map
         .memory_areas()
         .map(|area| (area.start_address() as usize, area.end_address() as usize))
-        .map(|(start, end)| start..end)
-        .flat_map(move |area| { // Remove kernel areas
-            // HACK: arrays iterate with moving weirdly
-            // Also, filter map to remove `None`s
-            let [first, second] = range_sub(&area, &kernel_area);
-            iter::once(first).chain(iter::once(second)).filter_map(|i| i)
-        })
-        .flat_map(move |area| { // Remove areas below 1mib
-            // HACK: arrays iterate with moving weirdly
-            // Also, filter map to remove `None`s
-            let [first, second] = range_sub(&area, &(0..1024 * 1024));
-            iter::once(first).chain(iter::once(second)).filter_map(|i| i)
-        })
-        .collect::<ArrayVec<[_; 256]>>(); // Collect here into a large ArrayVec for performance
+        .map(|(start, end)| start..end);
+
+    // Remove already used physical mem areas
+    let kernel_area_phys = 0..=kernel_area.end() - KERNEL_MAPPING_BEGIN;
+
+    trace!("kernel_area_phys = 0x{:x}..=\n0x{:x}", kernel_area_phys.start(), kernel_area_phys.end());
+
+    let usable_areas = constant_unroll! { // Use this macro to make types work
+        for used_area in [kernel_area_phys, mb_info_phys, bootstrap_heap_phys] {
+            usable_areas = usable_areas.flat_map(move |free_area| {
+                // Convert to Range from  RangeInclusive
+                let range = *used_area.start()..*used_area.end() + 1;
+
+                // HACK: arrays iterate with moving weirdly
+                // Also, filter map to remove `None`s
+                let [first, second] = range_sub(&free_area, &range);
+                iter::once(first).chain(iter::once(second)).filter_map(|i| i)
+            });
+        }
+    };
+
+    // Collect into a large ArrayVec for performance
+    let usable_areas = usable_areas.collect::<ArrayVec<[_; 256]>>();
 
     PHYSICAL_ALLOCATOR.init_prelim(usable_areas.iter());
+
+    let mut page = PHYSICAL_ALLOCATOR.allocate(0);
+    page.map(|addr| PHYSICAL_ALLOCATOR.deallocate(addr, 0));
 
     (trees, usable_areas)
 }
 
-fn setup_physical_allocator_rest<'a, I>(gibbibytes: u8, usable_areas: I)
+unsafe fn setup_physical_allocator_rest<'a, I>(gibbibytes: u8, usable_areas: I)
     where I: Iterator<Item=&'a Range<usize>> + Clone + 'a
 {
     PHYSICAL_ALLOCATOR.init_rest(
@@ -139,7 +210,7 @@ fn setup_physical_allocator_rest<'a, I>(gibbibytes: u8, usable_areas: I)
     );
 }
 
-fn setup_guard_page(addr: usize) {
+unsafe fn setup_guard_page(addr: usize) {
     use self::paging::*;
 
     let page = Page::containing_address(addr, PageSize::Kib4);
@@ -148,13 +219,10 @@ fn setup_guard_page(addr: usize) {
     let size = PAGE_TABLES.lock().walk_page_table(page).expect("Guard page must be mapped!").1;
     assert_eq!(size, PageSize::Kib4, "Guard page must be on a 4kib page!");
 
-    unsafe {
-        PAGE_TABLES.lock().unmap(page, false, true);
-    }
+    PAGE_TABLES.lock().unmap(page, false, true);
 }
 
-
-fn kernel_area(mb_info: &BootInformation) -> Range<usize> {
+fn kernel_area(mb_info: &BootInformation) -> RangeInclusive<usize> {
     use multiboot2::ElfSectionFlags;
 
     let elf_sections = mb_info.elf_sections_tag()
@@ -165,58 +233,82 @@ fn kernel_area(mb_info: &BootInformation) -> Range<usize> {
         .map(|section| section.start_address()..section.end_address() + 1);
 
     let begin = used_areas.clone().map(
-        |range| range.start - KERNEL_MAPPING_BEGIN as u64
+        |range| range.start
     ).min().unwrap() as usize;
     let end = used_areas.map(
-        |range| range.end - KERNEL_MAPPING_BEGIN as u64
+        |range| range.end
     ).max().unwrap() as usize;
 
-    begin..end
+    begin..=end
 }
 
-/// Subtracts a range from another one
+///// Subtracts a range from another one
+//fn range_sub<T>(
+//    main: &Range<T>,
+//    sub: &Range<T>,
+//) -> [Option<Range<T>>; 2]
+//    where T: Ord + Copy,
+//{
+//    let hole_start = if sub.start >= main.start && sub.start < main.end {
+//        Some(sub.start)
+//    } else if sub.end >= main.start && sub.end <= main.start {
+//        Some(main.start)
+//    } else {
+//        None
+//    };
+//
+//    let hole_end = if main.end > sub.end && hole_start.is_some() {
+//        Some(sub.end)
+//    } else if hole_start.is_some() {
+//        Some(main.end)
+//    } else {
+//        None
+//    };
+//
+//    let hole = match (hole_start, hole_end) {
+//        (Some(start), Some(end)) => Some(start..end),
+//        _ => None,
+//    };
+//
+//    if let Some(hole) = hole {
+//        let lower_half = if main.start != hole.start {
+//            Some(main.start..hole.start)
+//        } else {
+//            None
+//        };
+//
+//        let higher_half = if main.end != hole.end {
+//            Some(hole.end..main.end)
+//        } else {
+//            None
+//        };
+//
+//        [lower_half, higher_half]
+//    } else {
+//        [Some(main.clone()), None]
+//    }
+//}
+
+/// Subtracts one range from another, provided that start <= end in all cases
 fn range_sub<T>(
     main: &Range<T>,
     sub: &Range<T>,
 ) -> [Option<Range<T>>; 2]
     where T: Ord + Copy,
 {
-    let hole_start = if sub.start >= main.start && sub.start < main.end {
-        Some(sub.start)
-    } else if sub.end >= main.start && sub.end <= main.start {
-        Some(main.start)
-    } else {
-        None
-    };
-
-    let hole_end = if main.end > sub.end && hole_start.is_some() {
-        Some(sub.end)
-    } else if hole_start.is_some() {
-        Some(main.end)
-    } else {
-        None
-    };
-
-    let hole = match (hole_start, hole_end) {
-        (Some(start), Some(end)) => Some(start..end),
-        _ => None,
-    };
-
-    if let Some(hole) = hole {
-        let lower_half = if main.start != hole.start {
-            Some(main.start..hole.start)
-        } else {
-            None
-        };
-
-        let higher_half = if main.end != hole.end {
-            Some(hole.end..main.end)
-        } else {
-            None
-        };
-
-        [lower_half, higher_half]
-    } else {
-        [Some(main.clone()), None]
+    if sub.start <= main.start { // Hole starts before range
+        if sub.end < main.end { // Hole covers entire bottom section of range  -- only top section
+            [None, Some(sub.end..main.end)]
+        } else { // Hole covers entire range -- no range
+            [None, None]
+        }
+    } else if sub.start < main.end { // Hole starts inside range
+        if sub.end >= main.end { // Hole covers entire end section of range -- only bottom section
+            [Some(main.start..sub.start), None]
+        } else { // Hole divides range into two sections
+            [Some(main.start..sub.start), Some(sub.end..main.end)]
+        }
+    } else { // Hole starts outside of range -- full range
+        [Some(main.start..main.end), None]
     }
 }

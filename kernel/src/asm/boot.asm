@@ -240,8 +240,8 @@ p3_table_higher:
     resb 4096
 p2_table_higher:
     resb 4096
-p1_table_higher: ; Used for guard page area
-    resb 4096
+p1_tables_higher:
+    resb 4096 * 512
 
 section .guard_page
 align 4096
@@ -316,15 +316,30 @@ setup_higher_half:
     mov rcx, 0
     .map_p2_table_loop:
 
-        mov rax, 0x200000 ; 2mib (page size)
+        mov rax, 0x1000 ; size of p1 table
         mul rcx ; multiply by counter
-        or rax, 0b10000011 ; first 1 is huge page bit
+        add rax, p1_tables_higher - KERNEL_MAPPING_BEGIN
+        or rax, 0b11 ; present + writable
         mov rbx, p2_table_higher - KERNEL_MAPPING_BEGIN
         mov [rbx + rcx * 8], rax
 
         inc rcx
         cmp rcx, 512
         jne .map_p2_table_loop
+
+    ; Map p1 tables
+    mov rcx, 0
+    .map_p1_tables_loop:
+
+        mov rax, 0x1000 ; size of page
+        mul rcx ; multiply by counter
+        or rax, 0b11 ; present + writable
+        mov rbx, p1_tables_higher - KERNEL_MAPPING_BEGIN
+        mov [rbx + rcx * 8], rax
+
+        inc rcx
+        cmp rcx, 512 * 512 ; # entries in all p1 tables
+        jne .map_p1_tables_loop
 
     ; Reset cr3
     mov rax, cr3
