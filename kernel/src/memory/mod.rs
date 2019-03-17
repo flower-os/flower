@@ -93,7 +93,7 @@ fn print_memory_info(memory_map: &MemoryMapTag) {
 
     // Calculate how many GiBs are available
     let bytes_available: usize = memory_map.memory_areas()
-        .map(|area| area.end_address() - area.start_address())
+        .map(|area| (area.end_address() - area.start_address()) as usize)
         .sum();
 
     let gibbibytes_available = bytes_available as f64 / (1 << 30) as f64;
@@ -241,53 +241,6 @@ fn kernel_area(mb_info: &BootInformation) -> RangeInclusive<usize> {
 
     begin..=end
 }
-
-///// Subtracts a range from another one
-//fn range_sub<T>(
-//    main: &Range<T>,
-//    sub: &Range<T>,
-//) -> [Option<Range<T>>; 2]
-//    where T: Ord + Copy,
-//{
-//    let hole_start = if sub.start >= main.start && sub.start < main.end {
-//        Some(sub.start)
-//    } else if sub.end >= main.start && sub.end <= main.start {
-//        Some(main.start)
-//    } else {
-//        None
-//    };
-//
-//    let hole_end = if main.end > sub.end && hole_start.is_some() {
-//        Some(sub.end)
-//    } else if hole_start.is_some() {
-//        Some(main.end)
-//    } else {
-//        None
-//    };
-//
-//    let hole = match (hole_start, hole_end) {
-//        (Some(start), Some(end)) => Some(start..end),
-//        _ => None,
-//    };
-//
-//    if let Some(hole) = hole {
-//        let lower_half = if main.start != hole.start {
-//            Some(main.start..hole.start)
-//        } else {
-//            None
-//        };
-//
-//        let higher_half = if main.end != hole.end {
-//            Some(hole.end..main.end)
-//        } else {
-//            None
-//        };
-//
-//        [lower_half, higher_half]
-//    } else {
-//        [Some(main.clone()), None]
-//    }
-//}
 
 /// Subtracts one range from another, provided that start <= end in all cases
 fn range_sub<T>(

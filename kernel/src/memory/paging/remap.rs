@@ -25,11 +25,14 @@ pub fn remap_kernel(boot_info: &BootInformation, heap_tree_start: usize) {
     // This code *is* correct -- we want to avoid mapping arbitrary pages as temporary, so we keep it in
     unsafe {
         paging::PAGE_TABLES.lock().unmap(heap_page, false, true);
+        trace!("Unmapped page {:?}", heap_page);
     }
 
     let mut temporary_page = TemporaryPage::new(
         Page::containing_address(heap_page_addr as usize, PageSize::Kib4)
     );
+
+    trace!("Creating new page tables");
 
     let mut active_table = unsafe { paging::ActivePageMap::new() };
     let mut new_table = {
@@ -38,6 +41,8 @@ pub fn remap_kernel(boot_info: &BootInformation, heap_tree_start: usize) {
         );
         paging::InactivePageMap::new(frame, &mut active_table, &mut temporary_page)
     };
+
+    trace!("Mapping new page tables");
 
     active_table.with_inactive_p4(&mut new_table, &mut temporary_page, |mapper| {
         let elf_sections_tag = boot_info.elf_sections_tag()
@@ -95,6 +100,8 @@ pub fn remap_kernel(boot_info: &BootInformation, heap_tree_start: usize) {
         }
     });
 
+    trace!("Done mapping new pages");
+
     // Map heap pages
     let heap_tree_end = heap_tree_start + Heap::tree_size();
     for page_no in (heap_tree_start / 4096)..=(heap_tree_end / 4096) {
@@ -123,6 +130,7 @@ pub fn remap_kernel(boot_info: &BootInformation, heap_tree_start: usize) {
         );
     }
 
+    trace!("Deallocating heap page");
     unsafe { ::HEAP.dealloc(heap_page_addr, heap_layout) };
 
     trace!("mem: switching page tables");
