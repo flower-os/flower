@@ -214,8 +214,8 @@ unsafe impl GlobalAlloc for Heap {
         let ptr = (ptr.unwrap() as usize + HEAP_START) as *mut u8;
 
         // Map pages that have yet to be mapped
-        // 6 is base order so `1 << (order + 6)`
-        for page in 0..util::round_up_divide(1u64 << (order + 6), 4096) as usize {
+        // 6 is base order so `1 << (order + 6 - 1)`
+        for page in 0..util::round_up_divide(1u64 << (order + 5), 4096) as usize {
             let mut page_tables = PAGE_TABLES.lock();
 
             let page_addr = ptr as usize + (page * 4096);

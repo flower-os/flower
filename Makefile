@@ -35,7 +35,7 @@ rust_crate_dir := kernel
 rust_kernel := $(out_dir)/libflower_kernel.a
 target := x86_64-unknown-flower-none
 asm_source_files := $(wildcard $(asm_dir)/*.asm)
-asm_obj_files = $(patsubst $(asm_dir)/%.asm,  $(out_dir)/%.o, $(asm_source_files))
+asm_obj_files = $(patsubst $(asm_dir)/%.asm, $(out_dir)/%.o, $(asm_source_files))
 
 kernel = $(out_dir)/kernel.elf
 grub_iso = $(out_dir)/flower.iso

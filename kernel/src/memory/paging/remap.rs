@@ -17,7 +17,6 @@ pub fn remap_kernel(
     use multiboot2::ElfSectionFlags;
     use x86_64::registers::control_regs::{cr0, cr0_write, Cr0};
 
-
     // Allocate some heap memory for us to put the temporary page on
     let heap_layout = Layout::from_size_align(0x1000, 0x1000).unwrap();
     let heap_page_addr = unsafe {
@@ -38,6 +37,8 @@ pub fn remap_kernel(
 
     let mut temporary_page = TemporaryPage::new(heap_page);
 
+    trace!("Creating new page tables");
+
     let mut active_table = unsafe { paging::ActivePageMap::new() };
 
     let frame = PhysicalAddress(
@@ -46,6 +47,8 @@ pub fn remap_kernel(
 
     let paddr = heap_frame_addr.physical_address().unwrap().0 as *const u8;
     let mut new_table = paging::InactivePageMap::new(frame, &mut active_table, &mut temporary_page);
+
+    trace!("Mapping new page tables");
 
     active_table.with_inactive_p4(&mut new_table, &mut temporary_page, |mapper| {
         let elf_sections_tag = boot_info.elf_sections_tag()
@@ -164,4 +167,3 @@ pub fn remap_kernel(
     trace!("mem: enabling write protection");
     unsafe { cr0_write(cr0() | Cr0::WRITE_PROTECT) };
 }
-

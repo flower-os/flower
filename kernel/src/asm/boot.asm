@@ -268,6 +268,16 @@ gdt64:
     dw $ - gdt64 - 1 ; length
     dq gdt64 - KERNEL_MAPPING_BEGIN ; address of table
 
+gdt64_higher_half:
+    dq 0
+.code: equ $ - gdt64_higher_half ; offset from gdt
+    dq (1<<44) | (1<<47) | (1<<41) | (1<<43) | (1<<53)
+.data: equ $ - gdt64_higher_half ; offset from gdt
+    dq (1<<44) | (1<<47) | (1<<41)
+.pointer:
+    dw $ - gdt64_higher_half - 1 ; length
+    dq gdt64_higher_half ; address of table
+
 section .text.boot.64bit
 bits 64
 long_mode_start:
@@ -288,7 +298,7 @@ long_mode_start:
     mov rsp, stack_top
 
     ; Load higher half gdt
-    lgdt [gdt64.pointer]
+    lgdt [gdt64_higher_half.pointer]
 
     ; Clear top 32 bits of rdi
     mov rax, 0xffffffff

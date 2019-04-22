@@ -289,9 +289,10 @@ impl TemporaryPage {
     ) -> VirtualAddress {
         let page_addr = self.page.start_address().expect("Temporary page requires size");
         assert!(
-            active_table.walk_page_table(self.page).is_none(),
-            "Temporary page at 0x{:x} is already mapped",
-            page_addr
+            active_table.walk_page_table(self.page).is_some(),
+            "Temporary page {:?} at 0x{:x} is already mapped",
+            self.page,
+            page_addr,
         );
 
         active_table.map_to(self.page, frame, EntryFlags::WRITABLE, true);
@@ -450,7 +451,7 @@ impl InactivePageMap {
             // Set up recursive mapping for table
             table[510].set(
                 frame.clone(),
-                EntryFlags::PRESENT | EntryFlags::WRITABLE //| EntryFlags::NO_EXECUTE // TODO
+                EntryFlags::PRESENT | EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE
             );
         }
 

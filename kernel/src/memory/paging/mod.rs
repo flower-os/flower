@@ -62,7 +62,7 @@ impl PageSize {
 
 // TODO frame struct
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct Page {
     number: usize,
     /// Size of page. None when unknown.
@@ -289,8 +289,7 @@ impl<L: TableLevel> PageTable<L> {
                 self.entries[index].set(
                     frame,
                     self::EntryFlags::PRESENT |
-                        self::EntryFlags::WRITABLE /*| // TODO
-                        self::EntryFlags::NO_EXECUTE*/
+                        self::EntryFlags::WRITABLE
                 );
                 self.next_page_table_mut(index).expect("No next table!").zero();
             }
