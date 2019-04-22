@@ -6,6 +6,7 @@ pub unsafe fn map_physical_region<T>(
     size: usize,
     mutable: bool
 ) -> PhysicalMapping<T> {
+    debug!("size = 0x{:x}", size);
     let frames = util::round_up_divide(size as u64, 4096) as usize;
     let physical_begin_frame = physical_address / 4096;
 

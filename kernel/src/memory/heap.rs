@@ -228,7 +228,7 @@ unsafe impl GlobalAlloc for Heap {
             if !mapped {
                 page_tables.map(
                     Page::containing_address(page_addr, PageSize::Kib4),
-                    EntryFlags::from_bits_truncate(0),
+                    EntryFlags::WRITABLE,
                     false, // Do not invplg -- not an overwrite
                 );
             }

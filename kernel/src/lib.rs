@@ -4,7 +4,6 @@
 #![feature(lang_items)]
 #![feature(const_fn)]
 #![feature(nll)]
-#![feature(try_from)]
 #![feature(range_contains)]
 #![feature(type_ascription)]
 #![feature(ptr_internals, align_offset)]
@@ -41,6 +40,7 @@ use drivers::keyboard::{Keyboard, KeyEventType, Ps2Keyboard};
 use drivers::keyboard::keymap;
 use drivers::ps2;
 use terminal::TerminalOutput;
+use alloc::prelude::ToString;
 
 #[cfg(not(test))]
 mod lang;
@@ -72,7 +72,8 @@ pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
     memory::init_memory(multiboot_info_addr, guard_page_addr);
     trace!("interrupting");
     // TODO
-    unsafe { asm!("int 0x3" :::: "volatile", "intel"); }
+    //unsafe { asm!("int 0x3" :::: "volatile", "intel"); }
+    trace!("SIKE!");
 
     let _acpi = acpi_impl::acpi_init();
 

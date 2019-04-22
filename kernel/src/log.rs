@@ -1,5 +1,7 @@
 use log_facade::{self, Log, Record, Level, Metadata};
 
+static LOGGER: Logger = Logger;
+
 macro_rules! error {
     ($thing:expr, $($extra:tt)*) => {
         {
@@ -122,8 +124,6 @@ impl Log for Logger {
 }
 
 pub fn init() {
-    static LOGGER: Logger = Logger;
-
     log_facade::set_logger(&LOGGER)
         .map(|()| log_facade::set_max_level(log_level().to_level_filter()))
         .expect("Error setting logger!");
