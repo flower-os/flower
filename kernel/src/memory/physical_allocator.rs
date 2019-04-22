@@ -173,8 +173,6 @@ impl<'a> PhysicalAllocator<'a> {
     /// Deallocate the block of `order` at `ptr`. Panics if not initialized, if block is free, or if
     /// block is out of bounds of the # of GiB available.
     pub fn deallocate(&self, ptr: *const u8, order: u8) {
-        // TODO
-        trace!("ptr = {:?}", ptr);
         let tree = (ptr as usize) >> (LEVEL_COUNT - 1 + BASE_ORDER);
         let local_ptr = (ptr as usize % (1 << LEVEL_COUNT - 1 + BASE_ORDER)) as *const u8;
 
@@ -185,7 +183,6 @@ impl<'a> PhysicalAllocator<'a> {
         tree.deallocate(local_ptr, order);
     }
 
-    // TODO
     pub fn is_free(&self, ptr: *const u8, order: u8) {
         let tree = (ptr as usize) >> (LEVEL_COUNT - 1 + BASE_ORDER);
         let local_ptr = (ptr as usize % (1 << LEVEL_COUNT - 1 + BASE_ORDER)) as *const u8;

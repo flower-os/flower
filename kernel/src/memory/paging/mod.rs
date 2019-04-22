@@ -5,7 +5,7 @@ pub mod remap;
 mod page_map;
 pub use self::page_map::*;
 
-use core::{marker::PhantomData, convert::From, ptr::Unique};
+use core::{marker::PhantomData, ptr::Unique};
 use core::ops::{Add, Index, IndexMut};
 use spin::Mutex;
 use super::physical_allocator::PHYSICAL_ALLOCATOR;
@@ -19,27 +19,6 @@ pub struct PhysicalAddress(pub usize);
 
 #[derive(Debug, Eq, PartialEq, Copy, Clone, Ord, PartialOrd)]
 pub struct VirtualAddress(pub usize);
-
-// TODO tryfrom
-impl From<VirtualAddress> for PhysicalAddress {
-    fn from(vaddr: VirtualAddress) -> Self {
-        // Check that the address is valid. Since it's a logic error if it isn't valid, then panic.
-        assert!(
-            vaddr.0 < 0x0000_8000_0000_0000 || vaddr.0 >= 0xffff_8000_0000_0000,
-            "invalid address: 0x{:x}", vaddr.0,
-        );
-
-        let page = Page {
-            number: vaddr.0 / 4096, // Still valid for 2mib page
-            size: None, // ... but we don't know the size :(
-        };
-
-        let (start, size) = PAGE_TABLES.lock().walk_page_table(page)
-            .expect("Virtual address not mapped!");
-
-        PhysicalAddress(start.physical_address().unwrap().0 + (vaddr.0 % size.bytes()))
-    }
-}
 
 /// The size of a page. Distinct from `memory::PageSize` in that it only enumerates page sizes
 /// supported by the paging module at this time.

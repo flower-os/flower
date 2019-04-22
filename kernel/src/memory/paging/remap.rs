@@ -1,17 +1,14 @@
-use core::{mem, ptr, alloc::Layout};
+use core::alloc::Layout;
 use multiboot2::BootInformation;
 use memory::paging::{self, PAGE_TABLES, Page, PhysicalAddress, EntryFlags, page_map::TemporaryPage};
 use memory::{bootstrap_heap::BOOTSTRAP_HEAP, physical_allocator::PHYSICAL_ALLOCATOR};
-use memory::heap::{self, Heap};
+use memory::heap::Heap;
 use memory::paging::PageSize;
 use util;
-use memory::paging::page_map::PageRangeMapping;
-use alloc::vec::Vec;
 
 pub fn remap_kernel(
     boot_info: &BootInformation,
     heap_tree_start_virt: usize,
-//    heap_tree_start_phys: usize // Could be done better TODO
 ) {
     use core::alloc::GlobalAlloc;
     use multiboot2::ElfSectionFlags;
@@ -95,9 +92,6 @@ pub fn remap_kernel(
         }
     });
 
-    // TODO
-    debug!("bootstrap heap = 0x{:x}..0x{:x}", BOOTSTRAP_HEAP.start(), BOOTSTRAP_HEAP.end());
-
     // Map bootstrap heap
     let bootstrap_heap_start_page = BOOTSTRAP_HEAP.start() / 4096;
     let bootstrap_heap_end_page = util::round_up_divide(
@@ -106,16 +100,12 @@ pub fn remap_kernel(
     ) as usize;
     let bootstrap_heap_page_range = bootstrap_heap_start_page..=bootstrap_heap_end_page;
 
-    trace!("trace -1");
-
     active_table.remap_range(
         &mut new_table,
         &mut temporary_page,
         bootstrap_heap_page_range,
         paging::EntryFlags::NO_EXECUTE | paging::EntryFlags::WRITABLE
     );
-
-    trace!("trace 0");
 
     // Map heap
     let heap_tree_start_page = heap_tree_start_virt / 4096;
@@ -125,27 +115,19 @@ pub fn remap_kernel(
     ) as usize;
     let heap_tree_page_range = heap_tree_start_page..=heap_tree_end_page;
 
-    trace!("trace 1");
     active_table.remap_range(
         &mut new_table,
         &mut temporary_page,
         heap_tree_page_range,
         paging::EntryFlags::NO_EXECUTE | paging::EntryFlags::WRITABLE
     );
-    trace!("trace 2");
 
     PHYSICAL_ALLOCATOR.is_free(paddr, 0);
-    let addr = PAGE_TABLES.lock()
-        .walk_page_table(Page::containing_address(0xffffffff803c3781, PageSize::Kib4))
-        .unwrap().0.physical_address().unwrap().0;
-    debug!("backing addr = 0x{:x}", addr);
-    // TODO
 
     trace!("mem: switching page tables");
     active_table.switch(new_table);
 
     // Remap heap page so it can be deallocated correctly
-    trace!("{:?}", heap_frame_addr.physical_address().unwrap());
     unsafe {
         PAGE_TABLES.lock().map_to(
             heap_page,
@@ -154,15 +136,7 @@ pub fn remap_kernel(
             true, // Invplg
         );
     }
-
-    let addr = PAGE_TABLES.lock()
-        .walk_page_table(heap_page)
-        .unwrap().0.physical_address().unwrap().0;
-    debug!("virtual addr = 0x{:x}, backing addr = 0x{:x}", heap_page.start_address().unwrap(), addr);
-    debug!("heap page addr = {:?}", heap_page_addr);
     unsafe { ::HEAP.dealloc(heap_page_addr, heap_layout) };
-
-    trace!("dealloc'd heap page");
 
     trace!("mem: enabling write protection");
     unsafe { cr0_write(cr0() | Cr0::WRITE_PROTECT) };

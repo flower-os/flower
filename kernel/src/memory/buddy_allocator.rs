@@ -191,7 +191,6 @@ macro_rules! buddy_allocator_bitmap_tree {
 
                 assert!(index < BLOCKS_IN_TREE, "Block index {} out of bounds!", index);
 
-                // TODO
                 assert_eq!(
                     unsafe { self.block(index - 1).order_free },
                     0,

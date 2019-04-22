@@ -12,7 +12,7 @@
 //! | `0xffffffff80100000` + 1MiB ~ kernel end  | Kernel elf                |
 //! | . ~ . + size of bootstrap heap            | Bootstrap heap            |
 //! | . ~ . + size of heap buddy allocator tree | Heap buddy allocator tree |
-// TODO above not right -- i map to actual heap and not other things, sometimes im dumb, etc
+
 #[macro_use]
 mod buddy_allocator;
 pub mod paging;
@@ -33,16 +33,12 @@ use util;
 pub const KERNEL_MAPPING_BEGIN: usize = 0xffffffff80000000;
 
 pub fn init_memory(mb_info_addr: usize, guard_page_addr: usize) {
-    // TODO struct to represent physical to virtual mapping of range of pages/frames that are
-    // TODO continuous
     info!("mem: initialising");
 
     let mb_info = unsafe { multiboot2::load(mb_info_addr) };
     let kernel_area = kernel_area(&mb_info);
 
     let mb_info_phys = mb_info.start_address()..=mb_info.end_address();
-    trace!("mb info start = 0x{:x}", &mb_info_phys.start());
-    trace!("mb info start virt = 0x{:x}", mb_info_addr);
     let memory_map = mb_info.memory_map_tag()
         .expect("Expected a multiboot2 memory map tag, but it is not present!");
 
@@ -55,8 +51,6 @@ pub fn init_memory(mb_info_addr: usize, guard_page_addr: usize) {
 
          setup_bootstrap_heap(virtual_start, physical_start)
     };
-
-    trace!("mb info start = 0x{:x}", &mb_info_phys.start());
 
     debug!("mem: initialising pmm (1/2)");
     let (gibbibytes, usable) = unsafe {
@@ -83,7 +77,7 @@ pub fn init_memory(mb_info_addr: usize, guard_page_addr: usize) {
     unsafe { setup_physical_allocator_rest(gibbibytes, usable.iter()) };
 
     debug!("mem: remapping kernel");
-    remap::remap_kernel(&mb_info, heap_tree_start); // TODO
+    remap::remap_kernel(&mb_info, heap_tree_start);
 
     trace!("mem: setting up guard page");
     unsafe { setup_guard_page(guard_page_addr) };
@@ -183,7 +177,7 @@ unsafe fn setup_physical_allocator_prelim(
     trace!("kernel_area_phys = 0x{:x}..=\n0x{:x}", kernel_area_phys.start(), kernel_area_phys.end());
 
     let usable_areas = constant_unroll! { // Use this macro to make types work
-        for used_area in [kernel_area_phys, mb_info_phys.clone(), bootstrap_heap_phys] { // TODO no clone
+        for used_area in [kernel_area_phys, mb_info_phys.clone(), bootstrap_heap_phys] {
             usable_areas = usable_areas.flat_map(move |free_area| {
                 // Convert to Range from  RangeInclusive
                 let range = *used_area.start()..*used_area.end() + 1;
@@ -196,20 +190,10 @@ unsafe fn setup_physical_allocator_prelim(
         }
     };
 
-    // TODO
-    if usable_areas.clone().any(|area| area.contains(&mb_info_phys.start())) {
-        panic!("OOPSIE!!");
-    } else {
-        trace!("mb info start = 0x{:x}", &mb_info_phys.start())
-    }
-
     // Collect into a large ArrayVec for performance
     let usable_areas = usable_areas.collect::<ArrayVec<[_; 256]>>();
 
     PHYSICAL_ALLOCATOR.init_prelim(usable_areas.iter());
-
-    let mut page = PHYSICAL_ALLOCATOR.allocate(0); // TODO what
-    page.map(|addr| PHYSICAL_ALLOCATOR.deallocate(addr, 0));
 
     (trees, usable_areas)
 }

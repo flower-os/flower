@@ -169,8 +169,6 @@ impl Mapper {
 
             // TODO free p1/p2/p3 tables if they are empty
             if free_physical_memory {
-                // TODO
-                trace!("freeing physmem"); // TODO
                 PHYSICAL_ALLOCATOR.deallocate(frame.0 as *const _, 0);
             }
         } else {
@@ -345,7 +343,7 @@ impl ActivePageMap {
             // overwrite recursive mapping
             self.p4_mut()[510].set(
                 table.p4_frame.clone(),
-                EntryFlags::PRESENT | EntryFlags::WRITABLE //| EntryFlags::NO_EXECUTE // TODO
+                EntryFlags::PRESENT | EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE
             );
 
             tlb::flush_all();
@@ -356,7 +354,7 @@ impl ActivePageMap {
             // restore recursive mapping to original p4 table
             p4_table[510].set(
                 backup,
-              EntryFlags::PRESENT | EntryFlags::WRITABLE //| EntryFlags::NO_EXECUTE // TODO
+              EntryFlags::PRESENT | EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE
             );
 
             tlb::flush_all();

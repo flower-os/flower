@@ -7,7 +7,7 @@ use core::ptr::Unique;
 use core::ops::{Deref, DerefMut};
 use spin::{Once, Mutex};
 use super::paging::{PAGE_TABLES, Page, PageSize, EntryFlags};
-use memory::{paging::PhysicalAddress, KERNEL_MAPPING_BEGIN};
+use memory::paging::PhysicalAddress;
 use util;
 // use ...::Block // <-- this one comes from the macro invocation below
 
@@ -60,9 +60,6 @@ impl Heap {
             // Get the next page up from the given heap start
             let heap_tree_start = ((heap_tree_start / 4096) + 1) * 4096;
 
-            // TODO
-            trace!("heap tree start init = 0x{:x}", heap_tree_start);
-
             // Map pages for the tree to use for accounting info
             let pages_to_map = util::round_up_divide(
                 mem::size_of::<[Block; BLOCKS_IN_TREE]>() as u64,
@@ -73,7 +70,7 @@ impl Heap {
                 let mut table = PAGE_TABLES.lock();
                 table.map(
                     Page::containing_address(heap_tree_start + (page * 4096), PageSize::Kib4),
-                    EntryFlags::from_bits_truncate(0),
+                    EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE,
                     true,
                 );
             }
@@ -128,7 +125,7 @@ impl Heap {
             PAGE_TABLES.lock().map_to(
                 Page::containing_address(page_addr, PageSize::Kib4),
                 PhysicalAddress((physical_begin_frame + page) * 4096),
-                EntryFlags::from_bits_truncate(0),
+                EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE,
                 true, // Do invplg
             );
         }
@@ -183,7 +180,6 @@ impl Heap {
         mem::size_of::<[Block; BLOCKS_IN_TREE]>()
     }
 
-    // TODO
     pub fn is_free(&self, ptr: *const u8, layout: Layout) {
         let order = order(layout.size());
         let global_ptr = ptr;
@@ -228,7 +224,7 @@ unsafe impl GlobalAlloc for Heap {
             if !mapped {
                 page_tables.map(
                     Page::containing_address(page_addr, PageSize::Kib4),
-                    EntryFlags::WRITABLE,
+                    EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE,
                     false, // Do not invplg -- not an overwrite
                 );
             }
@@ -261,8 +257,6 @@ unsafe impl GlobalAlloc for Heap {
         if order < 12 - 6  { // log2(4096) - base order
             return;
         }
-
-       trace!("deallocated ptr; unmapping pages"); // TODO
 
         // Unmap pages that have were only used for this alloc
         // 6 is base order, but order is + 1 (used is 0) so `1 << (order + 5)`
