@@ -5,6 +5,9 @@ use x86_64::structures::idt::Idt;
 mod legacy_pic;
 mod exceptions;
 
+// TODO
+use x86_64::structures::idt::ExceptionStackFrame;
+
 lazy_static! {
     static ref IDT: Idt = {
         let mut idt = Idt::new();
@@ -26,8 +29,16 @@ lazy_static! {
         idt.simd_floating_point.set_handler_fn(exceptions::simd_floating_point);
         idt.virtualization.set_handler_fn(exceptions::virtualization);
         idt.security_exception.set_handler_fn(exceptions::security_exception);
+        // TODO
+//        idt.divide_by_zero.set_handler_fn(nothing as extern "x86-interrupt" fn(&mut ExceptionStackFrame));
         idt
     };
+}
+
+// TODO
+#[naked]
+unsafe fn nothing() {
+    unsafe { asm!("halt" :::: "volatile", "intel"); }
 }
 
 /// Implicitly invoke the lazy initializer of the IDT & load it, as well as disable PICs and set up

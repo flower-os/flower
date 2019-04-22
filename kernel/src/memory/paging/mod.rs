@@ -116,7 +116,7 @@ impl Add<usize> for Page {
 }
 
 /// An entry in a page table
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 #[repr(C)] // Just in case
 pub struct PageTableEntry(u64);
 
@@ -289,8 +289,8 @@ impl<L: TableLevel> PageTable<L> {
                 self.entries[index].set(
                     frame,
                     self::EntryFlags::PRESENT |
-                        self::EntryFlags::WRITABLE |
-                        self::EntryFlags::NO_EXECUTE
+                        self::EntryFlags::WRITABLE /*| // TODO
+                        self::EntryFlags::NO_EXECUTE*/
                 );
                 self.next_page_table_mut(index).expect("No next table!").zero();
             }

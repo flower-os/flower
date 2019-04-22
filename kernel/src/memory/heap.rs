@@ -1,5 +1,5 @@
 /// The base heap address.
-pub const HEAP_START: usize = 0xffffffff00000000;
+pub const HEAP_START: usize = 0xffffffff40000000;
 
 use core::alloc::{GlobalAlloc, Layout};
 use core::{iter, mem};
@@ -7,7 +7,7 @@ use core::ptr::Unique;
 use core::ops::{Deref, DerefMut};
 use spin::{Once, Mutex};
 use super::paging::{PAGE_TABLES, Page, PageSize, EntryFlags};
-use memory::paging::PhysicalAddress;
+use memory::{paging::PhysicalAddress, KERNEL_MAPPING_BEGIN};
 use util;
 // use ...::Block // <-- this one comes from the macro invocation below
 
@@ -55,10 +55,13 @@ impl Heap {
     ///
     /// Unsafe because `heap_tree_start` needs to be correct (unused) and well-aligned (currently
     /// non applicable as Block is a u8).
-    pub unsafe fn init(&self, heap_tree_start: usize) {
+    pub unsafe fn init(&self, heap_tree_start: usize) -> usize {
         self.tree.call_once(|| {
             // Get the next page up from the given heap start
             let heap_tree_start = ((heap_tree_start / 4096) + 1) * 4096;
+
+            // TODO
+            trace!("heap tree start init = 0x{:x}", heap_tree_start);
 
             // Map pages for the tree to use for accounting info
             let pages_to_map = util::round_up_divide(
@@ -71,9 +74,10 @@ impl Heap {
                 table.map(
                     Page::containing_address(heap_tree_start + (page * 4096), PageSize::Kib4),
                     EntryFlags::from_bits_truncate(0),
-                    false, // Don't invplg -- this is not an overwrite
+                    true,
                 );
             }
+
             let tree = Tree::new(
                 iter::once(0..(1 << 30 + 1)),
                 DerefPtr::new(Unique::new_unchecked(heap_tree_start as *mut _)),
@@ -81,6 +85,8 @@ impl Heap {
 
             Mutex::new(tree)
         });
+
+        ((heap_tree_start / 4096) + 1) * 4096
     }
 
     /// Allocate a block of minimum size of 4096 bytes (rounded to this if smaller) with specific
@@ -176,6 +182,24 @@ impl Heap {
     pub const fn tree_size() -> usize {
         mem::size_of::<[Block; BLOCKS_IN_TREE]>()
     }
+
+    // TODO
+    pub fn is_free(&self, ptr: *const u8, layout: Layout) {
+        let order = order(layout.size());
+        let global_ptr = ptr;
+        let ptr = ptr as usize - HEAP_START;
+
+        let level = MAX_ORDER - order;
+        let level_offset = super::buddy_allocator::blocks_in_level(level);
+        let index = level_offset + ((ptr as usize) >> (order + 6));
+
+        debug!(
+            "Heap: Block @ ptr {:?} (index {:?}) = {:?}",
+            global_ptr,
+            index,
+            unsafe { self.tree.wait().unwrap().lock().block(index - 1).order_free }
+        );
+    }
 }
 
 unsafe impl GlobalAlloc for Heap {
@@ -238,9 +262,11 @@ unsafe impl GlobalAlloc for Heap {
             return;
         }
 
+       trace!("deallocated ptr; unmapping pages"); // TODO
+
         // Unmap pages that have were only used for this alloc
-        // 6 is base order so `1 << (order + 6)`
-        for page in 0..util::round_up_divide(1u64 << (order + 6), 4096) as usize {
+        // 6 is base order, but order is + 1 (used is 0) so `1 << (order + 5)`
+        for page in 0..util::round_up_divide(1u64 << (order + 5), 4096) as usize {
             let page_addr = global_ptr as usize + (page * 4096);
 
             PAGE_TABLES.lock().unmap(

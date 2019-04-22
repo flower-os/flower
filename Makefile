@@ -13,12 +13,12 @@ endif
 ifeq ($(debug), 1)
     nasm_flags := -f elf64 -F dwarf -g
     build_type := debug
-    qemu_flags := -s -m 256M -d int -no-reboot -monitor stdio
+    qemu_flags := -s -m 256M -d int -no-reboot -no-shutdown -monitor stdio
     cargo_flags := --features $(log_level)
 else
     nasm_flags := -f elf64
     cargo_flags := --release --features $(log_level)
- 	rustflags := "-C codemodel=kernel"
+ 	rustflags := "-C code-model=kernel"
     build_type := release
     qemu_flags := -m 256M
 endif
@@ -74,7 +74,7 @@ makedirs:
 # Compile rust
 $(rust_kernel): $(rust_crate_dir)/**/*
 	@cd $(rust_crate_dir) && \
-      RUST_TARGET_PATH=$(shell pwd)/$(rust_crate_dir) RUST_FLAGS=$(rustflags) cargo xbuild --target $(target) $(cargo_flags)
+      RUST_TARGET_PATH=$(shell pwd)/$(rust_crate_dir) RUSTFLAGS=$(rustflags) cargo xbuild --target $(target) $(cargo_flags)
 	@rm -f $(rust_kernel)
 	@mv $(rust_crate_dir)/target/$(target)/$(build_type)/libflower_kernel.a $(rust_kernel)
 

@@ -24,8 +24,8 @@ log = "^0.4.3"
 static_assertions = "^0.2.5"
 
 [dependencies.multiboot2]
-git = "https://github.com/Restioson/multiboot2-elf64"
-branch = "clone-tagsiter-moduleiter"
+git = "https://github.com/rust-osdev/multiboot2-elf64/"
+rev = "9ce9247eee220a0bc2ca480c23c7572132c5ae9c"
 
 [dependencies.acpi]
 git = "https://github.com/rust-osdev/acpi"

@@ -138,8 +138,8 @@ setup_paging:
     ; Set long mode and nxe bits
     mov ecx, 0xc0000080
     rdmsr
-    or eax, 1 << 8
-    or eax, 1 << 11
+    or eax, 1 << 8 ; long mode
+    or eax, 1 << 11 ; nxe bit
     wrmsr
 
     ; Enable paging
@@ -287,7 +287,10 @@ long_mode_start:
     xor rsp, rsp
     mov rsp, stack_top
 
-    ; Clear top 32 bits of edi
+    ; Load higher half gdt
+    lgdt [gdt64.pointer]
+
+    ; Clear top 32 bits of rdi
     mov rax, 0xffffffff
     and rdi, rax
 

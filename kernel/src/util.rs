@@ -76,6 +76,6 @@ macro_rules! constant_unroll {
 }
 
 /// Round up integer division
-pub fn round_up_divide(x: u64, y: u64) -> u64 {
+pub const fn round_up_divide(x: u64, y: u64) -> u64 {
     (x + y - 1) / y
 }

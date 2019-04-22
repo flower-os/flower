@@ -92,7 +92,6 @@ impl<T> BootstrapAllocator<T> {
                 let ptr = unsafe {
                     Unique::new_unchecked(self.start().offset((bit) as isize))
                 };
-
                 return Some(BootstrapHeapBox { ptr, allocator: self });
             }
         }

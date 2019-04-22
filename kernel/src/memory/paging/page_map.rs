@@ -4,6 +4,9 @@
 use super::*;
 use core::ops::{Deref, DerefMut};
 use core::ops::RangeInclusive;
+use util::round_up_divide;
+use core::ops::Range;
+use alloc::vec::Vec;
 
 pub struct Mapper {
     p4: Unique<PageTable<Level4>>,
@@ -48,7 +51,7 @@ impl Mapper {
 
                     // 2MiB page
                     if let Some(start_frame) = p2_entry.physical_address() {
-                        if p2_entry.flags().contains(EntryFlags::HUGE_PAGE) {
+                        if p2_entry.flags().contains(EntryFlags::PRESENT | EntryFlags::HUGE_PAGE) {
                             // Check that the address is 2MiB aligned
                             assert_eq!(
                                 (start_frame.0 >> 12) % PAGE_TABLE_ENTRIES,
@@ -68,7 +71,14 @@ impl Mapper {
 
         p3.and_then(|p3| p3.next_page_table(page.p3_index()))
             .and_then(|p2| p2.next_page_table(page.p2_index()))
-            .and_then(|p1| Some((p1[page.p1_index()], PageSize::Kib4)))
+            .and_then(|p1| {
+                let p1_entry = p1[page.p1_index()];
+                if p1_entry.flags().contains(EntryFlags::PRESENT) {
+                    Some((p1_entry, PageSize::Kib4))
+                } else {
+                    None
+                }
+            })
             .or_else(huge_page)
     }
 
@@ -104,7 +114,7 @@ impl Mapper {
             // 4kib page
             p1[page.p1_index()].set(
                 physical_address,
-                flags | EntryFlags::PRESENT | EntryFlags::WRITABLE,
+                flags | EntryFlags::PRESENT,
             );
 
             if invplg {
@@ -159,6 +169,8 @@ impl Mapper {
 
             // TODO free p1/p2/p3 tables if they are empty
             if free_physical_memory {
+                // TODO
+                trace!("freeing physmem"); // TODO
                 PHYSICAL_ALLOCATOR.deallocate(frame.0 as *const _, 0);
             }
         } else {
@@ -201,11 +213,12 @@ impl Mapper {
     /// them to their address minus `KERNEL_MAPPING_BEGIN`.
     pub unsafe fn higher_half_map_range(
         &mut self,
-        addresses: RangeInclusive<usize>,
+        addresses: Range<usize>,
         flags: EntryFlags,
         invplg: bool,
     ) {
-        for frame_no in (addresses.start() / 4096)..=((addresses.end()) / 4096) {
+        let frame_end = round_up_divide(addresses.end as u64, 4096) as usize;
+        for frame_no in (addresses.start / 4096)..=frame_end  {
             let address = frame_no * 4096;
 
             self.map_to(
@@ -240,10 +253,10 @@ impl Mapper {
 /// an offset
 pub struct PageRangeMapping {
     /// Range of page numbers
-    pages: RangeInclusive<usize>,
+    pub pages: RangeInclusive<usize>,
 
     /// The start frame number
-    start_frame: usize,
+    pub start_frame: usize,
 }
 
 impl PageRangeMapping {
@@ -272,8 +285,7 @@ impl TemporaryPage {
     pub unsafe fn map(
         &mut self,
         frame: PhysicalAddress,
-        active_table:
-        &mut ActivePageMap
+        active_table: &mut ActivePageMap
     ) -> VirtualAddress {
         let page_addr = self.page.start_address().expect("Temporary page requires size");
         assert!(
@@ -332,7 +344,7 @@ impl ActivePageMap {
             // overwrite recursive mapping
             self.p4_mut()[510].set(
                 table.p4_frame.clone(),
-                EntryFlags::PRESENT | EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE
+                EntryFlags::PRESENT | EntryFlags::WRITABLE //| EntryFlags::NO_EXECUTE // TODO
             );
 
             tlb::flush_all();
@@ -343,7 +355,7 @@ impl ActivePageMap {
             // restore recursive mapping to original p4 table
             p4_table[510].set(
                 backup,
-              EntryFlags::PRESENT | EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE
+              EntryFlags::PRESENT | EntryFlags::WRITABLE //| EntryFlags::NO_EXECUTE // TODO
             );
 
             tlb::flush_all();
@@ -356,6 +368,37 @@ impl ActivePageMap {
         }
 
         ret
+    }
+
+    pub fn remap_range(
+        &mut self,
+        new_table: &mut InactivePageMap,
+        temporary_page: &mut TemporaryPage,
+        pages: RangeInclusive<usize>,
+        flags: EntryFlags
+    ) {
+        let num_pages = pages.end() - pages.start();
+        let mut frames = Vec::with_capacity(num_pages);
+        for i in 0..=num_pages {
+            let page = Page::containing_address(
+                (i + pages.start()) * 4096,
+                PageSize::Kib4
+            );
+
+            let entry = PAGE_TABLES.lock().walk_page_table(page).unwrap().0;
+            frames.push(entry.physical_address().unwrap());
+        }
+
+        self.with_inactive_p4(new_table, temporary_page, |mapper| {
+            for page_no in pages.clone() {
+                let page = Page::containing_address(page_no * 4096, PageSize::Kib4);
+                let phys_addr = frames[page_no - pages.start()];
+
+                unsafe {
+                    mapper.map_to(page, phys_addr, flags, false);
+                }
+            }
+        });
     }
 
     pub fn switch(&mut self, new_table: InactivePageMap) -> InactivePageMap {
@@ -407,7 +450,7 @@ impl InactivePageMap {
             // Set up recursive mapping for table
             table[510].set(
                 frame.clone(),
-                EntryFlags::PRESENT | EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE
+                EntryFlags::PRESENT | EntryFlags::WRITABLE //| EntryFlags::NO_EXECUTE // TODO
             );
         }
 

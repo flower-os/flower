@@ -173,6 +173,8 @@ impl<'a> PhysicalAllocator<'a> {
     /// Deallocate the block of `order` at `ptr`. Panics if not initialized, if block is free, or if
     /// block is out of bounds of the # of GiB available.
     pub fn deallocate(&self, ptr: *const u8, order: u8) {
+        // TODO
+        trace!("ptr = {:?}", ptr);
         let tree = (ptr as usize) >> (LEVEL_COUNT - 1 + BASE_ORDER);
         let local_ptr = (ptr as usize % (1 << LEVEL_COUNT - 1 + BASE_ORDER)) as *const u8;
 
@@ -181,6 +183,26 @@ impl<'a> PhysicalAllocator<'a> {
         let mut tree = lock.as_mut().unwrap();
 
         tree.deallocate(local_ptr, order);
+    }
+
+    // TODO
+    pub fn is_free(&self, ptr: *const u8, order: u8) {
+        let tree = (ptr as usize) >> (LEVEL_COUNT - 1 + BASE_ORDER);
+        let local_ptr = (ptr as usize % (1 << LEVEL_COUNT - 1 + BASE_ORDER)) as *const u8;
+
+        let trees = self.trees.wait().unwrap();
+        let mut lock = trees[tree].lock();
+
+        let mut tree = lock.as_mut().unwrap();
+        let level = MAX_ORDER - order;
+        let level_offset = super::buddy_allocator::blocks_in_tree(level);
+        let index = level_offset + ((local_ptr as usize) >> (order + BASE_ORDER)) + 1;
+        info!(
+            "Block @ ptr {:?} = {:?} (real ptr = 0x{:x})",
+            ptr,
+            unsafe { tree.block(index - 1).order_free },
+            (&*tree.flat_blocks) as *const _ as usize + index - 1,
+        );
     }
 }
 

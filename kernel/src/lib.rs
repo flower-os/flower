@@ -3,16 +3,16 @@
 #![feature(asm)]
 #![feature(lang_items)]
 #![feature(const_fn)]
-#![feature(try_from)]
 #![feature(nll)]
+#![feature(try_from)]
 #![feature(range_contains)]
 #![feature(type_ascription)]
 #![feature(ptr_internals, align_offset)]
-#![feature(arbitrary_self_types)]
 #![feature(alloc, allocator_api, box_syntax)]
 #![feature(abi_x86_interrupt)]
 #![feature(compiler_builtins_lib)]
 #![feature(panic_info_message)]
+#![feature(naked_functions)] // TODO
 
 #[cfg(test)]
 #[cfg_attr(test, macro_use)]
@@ -70,6 +70,9 @@ pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
     log::init();
     interrupts::init();
     memory::init_memory(multiboot_info_addr, guard_page_addr);
+    trace!("interrupting");
+    // TODO
+    unsafe { asm!("int 0x3" :::: "volatile", "intel"); }
 
     let _acpi = acpi_impl::acpi_init();
 
@@ -140,11 +143,11 @@ fn keyboard_echo_loop(controller: &mut ps2::Controller) {
 fn halt() -> ! {
     unsafe {
         // Disable interrupts
-        asm!("cli");
+        asm!("cli" :::: "volatile");
 
         // Halt forever...
         loop {
-            asm!("hlt");
+            asm!("hlt" :::: "volatile");
         }
     }
 }

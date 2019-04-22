@@ -52,6 +52,7 @@ pub extern "x86-interrupt" fn general_protection_fault(stack_frame: &mut Excepti
 }
 
 pub extern "x86-interrupt" fn page_fault(stack_frame: &mut ExceptionStackFrame, code: PageFaultErrorCode) {
+    ::halt(); // TODO
     let cr2: u64;
     unsafe { asm!("mov %cr2, $0" : "=r" (cr2)); }
     panic!(
