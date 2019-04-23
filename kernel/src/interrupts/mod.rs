@@ -1,6 +1,7 @@
 //! Module for interrupt handling/IDT
 
-use x86_64::structures::idt::InterruptDescriptorTable;
+use x86_64::structures::idt::{InterruptDescriptorTable, ExceptionStackFrame, PageFaultErrorCode};
+use interrupts::exceptions::page_fault;
 use gdt;
 
 mod legacy_pic;
@@ -25,7 +26,15 @@ lazy_static! {
         idt.segment_not_present.set_handler_fn(exceptions::segment_not_present);
         idt.stack_segment_fault.set_handler_fn(exceptions::stack_segment_fault);
         idt.general_protection_fault.set_handler_fn(exceptions::general_protection_fault);
-        idt.page_fault.set_handler_fn(exceptions::page_fault);
+
+        let page_fault: extern "x86-interrupt" fn(&mut ExceptionStackFrame, u64) = page_fault;
+        let page_fault:  extern "x86-interrupt" fn(&mut ExceptionStackFrame, PageFaultErrorCode)
+            = unsafe{core::mem::transmute(page_fault)};
+
+        unsafe {
+            idt.page_fault.set_handler_fn(page_fault);
+        }
+
         idt.x87_floating_point.set_handler_fn(exceptions::x87_floating_point);
         idt.alignment_check.set_handler_fn(exceptions::alignment_check);
         idt.machine_check.set_handler_fn(exceptions::machine_check);
