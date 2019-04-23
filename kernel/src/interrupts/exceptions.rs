@@ -23,7 +23,7 @@ pub extern "x86-interrupt" fn invalid_opcode(stack_frame: &mut ExceptionStackFra
         "cpuex: invalid opcode \n{:#?}\n => note: qword at {:?} is 0x{:x}",
         stack_frame,
         stack_frame.instruction_pointer,
-        unsafe { *(stack_frame.instruction_pointer.0 as *const u64) },
+        unsafe { *(stack_frame.instruction_pointer.as_ptr::<u64>()) },
     );
 }
 

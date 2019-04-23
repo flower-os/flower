@@ -12,6 +12,7 @@
 //! | `0xffffffff80100000` + 1MiB ~ kernel end  | Kernel elf                |
 //! | . ~ . + size of bootstrap heap            | Bootstrap heap            |
 //! | . ~ . + size of heap buddy allocator tree | Heap buddy allocator tree |
+//! | . ~ . + 7 * size of stack                 | IST stacks                |
 
 #[macro_use]
 mod buddy_allocator;
@@ -20,17 +21,22 @@ pub mod heap;
 pub mod bootstrap_heap;
 pub mod physical_allocator;
 pub mod physical_mapping;
+mod stack_allocator;
 
 use core::{mem, iter, ops::{Range, RangeInclusive}};
+use x86_64::structures::tss::TaskStateSegment;
 use arrayvec::ArrayVec;
 use multiboot2::{self, BootInformation, MemoryMapTag};
 use self::physical_allocator::{PHYSICAL_ALLOCATOR, BLOCKS_IN_TREE};
 use self::buddy_allocator::Block;
+use self::stack_allocator::StackAllocator;
 use self::bootstrap_heap::{BootstrapHeap, BOOTSTRAP_HEAP};
 use self::paging::{Page, PageSize, PhysicalAddress, VirtualAddress, PAGE_TABLES, EntryFlags, PageRangeMapping, remap};
-use util;
+use util::round_up_divide;
+use gdt;
 
 pub const KERNEL_MAPPING_BEGIN: usize = 0xffffffff80000000;
+const IST_STACK_SIZE_PAGES: usize = 1;
 
 pub fn init_memory(mb_info_addr: usize, guard_page_addr: usize) {
     info!("mem: initialising");
@@ -70,6 +76,7 @@ pub fn init_memory(mb_info_addr: usize, guard_page_addr: usize) {
     debug!("mem: setting up kernel heap");
     let heap_tree_start = bootstrap_heap_virtual.end() + 1;
     let heap_tree_start = unsafe { ::HEAP.init(heap_tree_start) };
+    let heap_tree_end = heap_tree_start + heap::Heap::tree_size();
 
     trace!("mb info 0x{:x}..0x{:x}", mb_info.start_address(), mb_info.end_address());
 
@@ -81,6 +88,14 @@ pub fn init_memory(mb_info_addr: usize, guard_page_addr: usize) {
 
     trace!("mem: setting up guard page");
     unsafe { setup_guard_page(guard_page_addr) };
+
+    debug!("mem: setting up ist");
+    let page = Page::containing_address(
+        (round_up_divide(heap_tree_end as u64, 4096) * 4096) as usize,
+        PageSize::Kib4
+    );
+
+    unsafe { setup_ist( page) }
 
     info!("mem: initialised");
 }
@@ -102,6 +117,34 @@ fn print_memory_info(memory_map: &MemoryMapTag) {
 
     let gibbibytes_available = bytes_available as f64 / (1 << 30) as f64;
     info!("{:.3} GiB of RAM available", gibbibytes_available);
+}
+
+unsafe fn setup_ist(begin: Page) {
+    let mut allocator = StackAllocator::new(begin, 7, IST_STACK_SIZE_PAGES);
+
+    let pages = IST_STACK_SIZE_PAGES * 7;
+
+    for page in 0..pages {
+        debug!("map");
+        PAGE_TABLES.lock().map(
+            Page::containing_address(begin.start_address().unwrap() + (page * 4096), PageSize::Kib4),
+            EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE,
+            true,
+        );
+    }
+
+    gdt::TSS.call_once(|| {
+        let mut tss = TaskStateSegment::new();
+
+        for i in 0..7 { // Packed struct; cannot safely borrow fields
+            let stack_start = allocator.alloc().unwrap();
+            let stack_end = stack_start as u64 + IST_STACK_SIZE_PAGES as u64;
+
+            tss.interrupt_stack_table[i] = x86_64::VirtAddr::new(stack_end);
+        }
+
+        tss
+    });
 }
 
 /// Sets up the bootstrap heap and returns its physical address range and its virtual address range
@@ -162,7 +205,7 @@ unsafe fn setup_physical_allocator_prelim(
         .expect("No usable physical memory available!");
 
     // Do round-up division by 2^30 = 1GiB in bytes
-    let trees = util::round_up_divide(highest_address as u64, 1 << 30) as u8;
+    let trees = round_up_divide(highest_address as u64, 1 << 30) as u8;
     trace!("Allocating {} trees", trees);
 
     // Calculate the usable memory areas by using the MB2 memory map but excluding kernel areas

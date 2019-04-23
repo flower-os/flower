@@ -1,20 +1,26 @@
 //! Module for interrupt handling/IDT
 
-use x86_64::structures::idt::Idt;
+use x86_64::structures::idt::InterruptDescriptorTable;
+use gdt;
 
 mod legacy_pic;
 mod exceptions;
 
 lazy_static! {
-    static ref IDT: Idt = {
-        let mut idt = Idt::new();
+    static ref IDT: InterruptDescriptorTable = {
+        let mut idt = InterruptDescriptorTable::new();
         idt.divide_by_zero.set_handler_fn(exceptions::divide_by_zero);
         idt.breakpoint.set_handler_fn(exceptions::breakpoint);
         idt.overflow.set_handler_fn(exceptions::overflow);
         idt.bound_range_exceeded.set_handler_fn(exceptions::out_of_bounds);
         idt.invalid_opcode.set_handler_fn(exceptions::invalid_opcode);
         idt.device_not_available.set_handler_fn(exceptions::device_not_available);
-        idt.double_fault.set_handler_fn(exceptions::double_fault);
+
+        unsafe {
+            idt.double_fault.set_handler_fn(exceptions::double_fault)
+                .set_stack_index(gdt::DOUBLE_FAULT_IST_INDEX);
+        }
+
         idt.invalid_tss.set_handler_fn(exceptions::invalid_tss);
         idt.segment_not_present.set_handler_fn(exceptions::segment_not_present);
         idt.stack_segment_fault.set_handler_fn(exceptions::stack_segment_fault);

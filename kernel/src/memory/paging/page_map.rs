@@ -4,7 +4,7 @@
 use super::*;
 use core::ops::{Deref, DerefMut};
 use core::ops::RangeInclusive;
-use util::round_up_divide;
+use util::{self, round_up_divide};
 use core::ops::Range;
 use alloc::vec::Vec;
 
@@ -89,8 +89,6 @@ impl Mapper {
         flags: EntryFlags,
         invplg: bool
     ) {
-        use self::EntryFlags;
-
         let mut p2 = self.p4_mut()
             .next_table_create(page.p4_index()).expect("No next p3 table!")
             .next_table_create(page.p3_index()).expect("No next p2 table!");
@@ -118,7 +116,7 @@ impl Mapper {
             );
 
             if invplg {
-                tlb::flush(::x86_64::VirtualAddress(page.start_address().unwrap()));
+                tlb::flush(::x86_64::VirtAddr::new(page.start_address().unwrap() as u64));
             }
         } else {
             panic!("2mib pages are only partially supported!");
@@ -185,7 +183,7 @@ impl Mapper {
 
         if invplg {
             // Flush tlb
-            tlb::flush(::x86_64::VirtualAddress(page.start_address().unwrap()));
+            tlb::flush(::x86_64::VirtAddr::new(page.start_address().unwrap() as u64));
         }
     }
 
@@ -329,11 +327,8 @@ impl ActivePageMap {
         temporary_page: &mut TemporaryPage,
         f: F
     ) -> R {
-        use x86_64::instructions::tlb;
-        use x86_64::registers::control_regs;
-
         let ret = {
-            let backup = PhysicalAddress(control_regs::cr3().0 as usize);
+            let backup = PhysicalAddress(util::cr3() as usize);
 
             // map temporary_page to current p4 table
             let p4_table = unsafe {
@@ -401,14 +396,12 @@ impl ActivePageMap {
     }
 
     pub fn switch(&mut self, new_table: InactivePageMap) -> InactivePageMap {
-        use x86_64::registers::control_regs;
-
         let old_table = InactivePageMap {
-            p4_frame: PhysicalAddress(control_regs::cr3().0 as usize)
+            p4_frame: PhysicalAddress(util::cr3() as usize)
         };
 
         unsafe {
-            control_regs::cr3_write(x86_64::PhysicalAddress(new_table.p4_frame.0 as u64));
+            util::cr3_write(x86_64::PhysAddr::new(new_table.p4_frame.0 as u64));
         }
 
         old_table

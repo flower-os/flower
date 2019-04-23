@@ -108,13 +108,11 @@ impl Heap {
         let mut tree = self.tree.wait().expect("Heap not initialized!").lock();
         
         let order = order(frames * 4096);
-        if order > MAX_ORDER { return 0 as *mut _ }
+        if order > MAX_ORDER { return 0 as *mut _; }
 
         let ptr = tree.allocate(order);
 
-        if ptr.is_none() {
-            return 0 as *mut _;
-        }
+        if ptr.is_none() { return 0 as *mut _; }
 
         let ptr = (ptr.unwrap() as usize + HEAP_START) as *mut u8;
 

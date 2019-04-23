@@ -162,11 +162,11 @@ mod test {
         let ptr = setup_heap();
         let bitmap = BootstrapAllocator::<u8>::new_unchecked(ptr as usize);
 
-        let heap_box = unsafe { bitmap.allocate().unwrap() };
+        let heap_box = bitmap.allocate().unwrap();
         let old_ptr = heap_box.ptr;
         drop(heap_box);
         assert!(ptr::eq(
-            unsafe { bitmap.allocate().unwrap().ptr.as_ptr() },
+            bitmap.allocate().unwrap().ptr.as_ptr(),
             old_ptr.as_ptr()
         ));
 
@@ -181,7 +181,7 @@ mod test {
         let bitmap = BootstrapAllocator::<u8>::new_unchecked(ptr as usize);
 
         assert_eq!(
-            unsafe { bitmap.allocate().unwrap().ptr.as_ptr() },
+            bitmap.allocate().unwrap().ptr.as_ptr(),
             ptr as *mut _
         );
 
@@ -197,7 +197,7 @@ mod test {
         let mut v = Vec::with_capacity(8);
 
         for i in 0..8 {
-            let obj = unsafe { bitmap.allocate().unwrap() };
+            let obj = bitmap.allocate().unwrap();
             assert!(ptr::eq(obj.ptr.as_ptr(), (ptr as *mut u8).wrapping_offset(i as isize)));
             v.push(obj); // Stop it from being dropped
         }
@@ -215,11 +215,11 @@ mod test {
         let mut v = Vec::with_capacity(8);
 
         for _ in 0..8 {
-            let addr = unsafe { bitmap.allocate().unwrap() };
+            let addr = bitmap.allocate().unwrap();
             v.push(addr); // Stop it from being dropped
         }
 
-        assert!(unsafe { bitmap.allocate() } == None);
+        assert!(bitmap.allocate() == None);
 
         teardown_heap(ptr);
     }

@@ -17,7 +17,7 @@ opt-level = 3
 rlibc = "^1.0.0"
 volatile = "^0.2.3"
 spin = "^0.4.6"
-x86_64 = "^0.1.2"
+x86_64 = "0.2"
 bitflags = "^1.0.1"
 bit_field = "^0.9.0"
 log = "^0.4.3"
@@ -28,7 +28,7 @@ git = "https://github.com/rust-osdev/multiboot2-elf64/"
 rev = "9ce9247eee220a0bc2ca480c23c7572132c5ae9c"
 
 [dependencies.acpi]
-path = "../../acpi"
+version = "0.2"
 
 [dependencies.arrayvec]
 version = "^0.4.7"

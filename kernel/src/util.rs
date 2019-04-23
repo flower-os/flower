@@ -79,3 +79,18 @@ macro_rules! constant_unroll {
 pub const fn round_up_divide(x: u64, y: u64) -> u64 {
     (x + y - 1) / y
 }
+
+pub unsafe fn cr3_write(val: ::x86_64::PhysAddr) {
+    // Taken from https://docs.rs/x86_64/0.2.14/src/x86_64/registers/control.rs.html#116-120
+    asm!("mov $0, %cr3" :: "r" (val.as_u64()) : "memory")
+}
+
+// Taken from https://docs.rs/x86_64/0.2.14/src/x86_64/registers/control.rs.html#100
+pub fn cr3() -> u64 {
+    let value: u64;
+    unsafe {
+        asm!("mov %cr3, $0" : "=r" (value));
+    }
+
+    value
+}

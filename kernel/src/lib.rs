@@ -4,10 +4,9 @@
 #![feature(lang_items)]
 #![feature(const_fn)]
 #![feature(nll)]
-#![feature(range_contains)]
 #![feature(type_ascription)]
 #![feature(ptr_internals, align_offset)]
-#![feature(alloc, allocator_api, box_syntax)]
+#![feature(allocator_api, box_syntax)]
 #![feature(abi_x86_interrupt)]
 #![feature(compiler_builtins_lib)]
 #![feature(panic_info_message)]
@@ -55,6 +54,7 @@ mod interrupts;
 mod memory;
 mod drivers;
 mod acpi_impl;
+mod gdt;
 
 use memory::heap::Heap;
 
@@ -70,6 +70,10 @@ pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
     memory::init_memory(multiboot_info_addr, guard_page_addr);
 
     let _acpi = acpi_impl::acpi_init();
+
+    debug!("gdt: initialising rust gdt");
+    gdt::init();
+    debug!("gdt: initialised");
 
     // Initialize the PS/2 controller and run the keyboard echo loop
     let mut controller = ps2::CONTROLLER.lock();

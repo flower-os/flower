@@ -12,7 +12,7 @@ pub fn remap_kernel(
 ) {
     use core::alloc::GlobalAlloc;
     use multiboot2::ElfSectionFlags;
-    use x86_64::registers::control_regs::{cr0, cr0_write, Cr0};
+    use x86_64::registers::control::{Cr0, Cr0Flags};
 
     // Allocate some heap memory for us to put the temporary page on
     let heap_layout = Layout::from_size_align(0x1000, 0x1000).unwrap();
@@ -136,8 +136,9 @@ pub fn remap_kernel(
             true, // Invplg
         );
     }
+
     unsafe { ::HEAP.dealloc(heap_page_addr, heap_layout) };
 
     trace!("mem: enabling write protection");
-    unsafe { cr0_write(cr0() | Cr0::WRITE_PROTECT) };
+    unsafe { Cr0::write(Cr0::read() | Cr0Flags::WRITE_PROTECT) };
 }
