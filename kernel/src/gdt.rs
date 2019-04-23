@@ -2,6 +2,7 @@ use spin::Once;
 use x86_64::structures::tss::TaskStateSegment;
 
 pub const DOUBLE_FAULT_IST_INDEX: u16 = 0;
+pub const PANICKING_EXCEPTION_IST_INDEX: u16 = 1;
 
 pub static TSS: Once<TaskStateSegment> = Once::new();
 
