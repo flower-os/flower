@@ -1,4 +1,4 @@
-use memory::paging::Page;
+use crate::memory::paging::Page;
 
 /// A bump allocator for kernel stacks. There is no guard page.
 pub struct StackAllocator {
@@ -36,7 +36,7 @@ impl StackAllocator {
 #[cfg(test)]
 mod test {
     use super::*;
-    use memory::paging::PageSize;
+    use crate::memory::paging::PageSize;
 
     #[test]
     fn test_stack_alloc() {

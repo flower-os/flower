@@ -1,5 +1,5 @@
 use acpi::{self, AcpiHandler, Acpi, AcpiError};
-use memory::physical_mapping::{self, PhysicalMapping};
+use crate::memory::physical_mapping::{self, PhysicalMapping};
 
 pub fn acpi_init() -> Result<Acpi, AcpiError> {
     info!("acpi: initializing");
@@ -42,7 +42,7 @@ impl AcpiHandler for FlowerAcpiHandler {
         let page_begin = obj_addr & !0xFFF;
 
         unsafe {
-            ::HEAP.dealloc_specific(
+            crate::HEAP.dealloc_specific(
                 page_begin as *mut u8,
                 region.mapped_length / 4096,
             );

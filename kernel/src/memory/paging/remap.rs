@@ -1,10 +1,10 @@
 use core::alloc::Layout;
 use multiboot2::BootInformation;
-use memory::paging::{self, PAGE_TABLES, Page, PhysicalAddress, EntryFlags, page_map::TemporaryPage};
-use memory::{bootstrap_heap::BOOTSTRAP_HEAP, physical_allocator::PHYSICAL_ALLOCATOR};
-use memory::heap::Heap;
-use memory::paging::PageSize;
-use util;
+use crate::memory::paging::{self, PAGE_TABLES, Page, PhysicalAddress, EntryFlags, page_map::TemporaryPage};
+use crate::memory::{bootstrap_heap::BOOTSTRAP_HEAP, physical_allocator::PHYSICAL_ALLOCATOR};
+use crate::memory::heap::Heap;
+use crate::memory::paging::PageSize;
+use crate::util;
 
 pub fn remap_kernel(
     boot_info: &BootInformation,
@@ -17,7 +17,7 @@ pub fn remap_kernel(
     // Allocate some heap memory for us to put the temporary page on
     let heap_layout = Layout::from_size_align(0x1000, 0x1000).unwrap();
     let heap_page_addr = unsafe {
-        ::HEAP.alloc(heap_layout)
+        crate::HEAP.alloc(heap_layout)
     };
 
     let heap_page = Page::containing_address(
@@ -84,7 +84,7 @@ pub fn remap_kernel(
         unsafe {
             // Map VGA buffer
             mapper.map_to(
-                Page::containing_address(::drivers::vga::VIRTUAL_VGA_PTR, PageSize::Kib4),
+                Page::containing_address(crate::drivers::vga::VIRTUAL_VGA_PTR, PageSize::Kib4),
                 PhysicalAddress(0xb8000 as usize),
                 EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE,
                 false,
@@ -137,7 +137,7 @@ pub fn remap_kernel(
         );
     }
 
-    unsafe { ::HEAP.dealloc(heap_page_addr, heap_layout) };
+    unsafe { crate::HEAP.dealloc(heap_page_addr, heap_layout) };
 
     trace!("mem: enabling write protection");
     unsafe { Cr0::write(Cr0::read() | Cr0Flags::WRITE_PROTECT) };

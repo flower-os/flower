@@ -78,7 +78,7 @@ pub mod commands {
     }
 }
 
-use io::{Port, SynchronizedPort};
+use crate::io::{Port, SynchronizedPort};
 
 pub static DATA_PORT: SynchronizedPort<u8> = unsafe { SynchronizedPort::new(0x60) };
 pub static STATUS_PORT: SynchronizedPort<u8> = unsafe { SynchronizedPort::new(0x64) };

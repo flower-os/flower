@@ -23,9 +23,9 @@ pub mod keymap;
 
 use core::convert::From;
 
-use drivers::ps2::{self, Device, DeviceState};
-use drivers::ps2::io::Ps2Error;
-use drivers::ps2::io::commands::{DeviceCommand, DeviceDataCommand};
+use crate::drivers::ps2::{self, Device, DeviceState};
+use crate::drivers::ps2::io::Ps2Error;
+use crate::drivers::ps2::io::commands::{DeviceCommand, DeviceDataCommand};
 
 bitflags! {
     pub struct ModifierFlags: u8 {
@@ -199,7 +199,7 @@ impl<'a> Ps2Keyboard<'a> {
     /// }
     /// ```
     fn read_scancode(&self) -> Result<Option<Ps2Scancode>, Ps2KeyboardError> {
-        use ps2::io;
+        use crate::ps2::io;
 
         if self.device.state == DeviceState::Enabled {
             if io::can_read()? && io::can_read_keyboard()? {

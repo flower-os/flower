@@ -178,7 +178,7 @@ impl<'a> PhysicalAllocator<'a> {
 
         let trees = self.trees.wait().unwrap();
         let mut lock = trees[tree].lock();
-        let mut tree = lock.as_mut().unwrap();
+        let tree = lock.as_mut().unwrap();
 
         tree.deallocate(local_ptr, order);
     }

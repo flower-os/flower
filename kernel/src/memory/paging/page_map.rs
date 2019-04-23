@@ -4,7 +4,7 @@
 use super::*;
 use core::ops::{Deref, DerefMut};
 use core::ops::RangeInclusive;
-use util::{self, round_up_divide};
+use crate::util::{self, round_up_divide};
 use core::ops::Range;
 use alloc::vec::Vec;
 
@@ -219,7 +219,7 @@ impl Mapper {
 
             self.map_to(
                 Page::containing_address(address, PageSize::Kib4),
-                PhysicalAddress((address - ::memory::KERNEL_MAPPING_BEGIN) as usize),
+                PhysicalAddress((address - crate::memory::KERNEL_MAPPING_BEGIN) as usize),
                 flags,
                 invplg,
             );

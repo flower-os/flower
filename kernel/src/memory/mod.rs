@@ -32,8 +32,8 @@ use self::buddy_allocator::Block;
 use self::stack_allocator::StackAllocator;
 use self::bootstrap_heap::{BootstrapHeap, BOOTSTRAP_HEAP};
 use self::paging::{Page, PageSize, PhysicalAddress, VirtualAddress, PAGE_TABLES, EntryFlags, PageRangeMapping, remap};
-use util::round_up_divide;
-use gdt;
+use crate::util::round_up_divide;
+use crate::gdt;
 
 pub const KERNEL_MAPPING_BEGIN: usize = 0xffffffff80000000;
 const IST_STACK_SIZE_PAGES: usize = 1;
@@ -75,7 +75,7 @@ pub fn init_memory(mb_info_addr: usize, guard_page_addr: usize) {
     // after the remap.
     debug!("mem: setting up kernel heap");
     let heap_tree_start = bootstrap_heap_virtual.end() + 1;
-    let heap_tree_start = unsafe { ::HEAP.init(heap_tree_start) };
+    let heap_tree_start = unsafe { crate::HEAP.init(heap_tree_start) };
     let heap_tree_end = heap_tree_start + heap::Heap::tree_size();
 
     trace!("mb info 0x{:x}..0x{:x}", mb_info.start_address(), mb_info.end_address());
@@ -125,7 +125,6 @@ unsafe fn setup_ist(begin: Page) {
     let pages = IST_STACK_SIZE_PAGES * 7;
 
     for page in 0..pages {
-        debug!("map");
         PAGE_TABLES.lock().map(
             Page::containing_address(begin.start_address().unwrap() + (page * 4096), PageSize::Kib4),
             EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE,

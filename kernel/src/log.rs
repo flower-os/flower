@@ -1,12 +1,12 @@
-use log_facade::{self, Log, Record, Level, Metadata};
+use crate::log_facade::{self, Log, Record, Level, Metadata};
 
 static LOGGER: Logger = Logger;
 
 macro_rules! error {
     ($thing:expr, $($extra:tt)*) => {
         {
-            use terminal::TerminalOutput;
-            ::terminal::STDOUT.write().write_string_colored("[error] ", color!(Red on Black))
+            use crate::terminal::TerminalOutput;
+            crate::terminal::STDOUT.write().write_string_colored("[error] ", color!(Red on Black))
                 .expect("Error logging");
             println!($thing, $($extra)*);
         }
@@ -21,8 +21,8 @@ macro_rules! error {
 macro_rules! warn {
     ($thing:expr, $($extra:tt)*) => {
         {
-            use terminal::TerminalOutput;
-            ::terminal::STDOUT.write().write_string_colored("[warn]  ", color!(LightRed on Black))
+            use crate::terminal::TerminalOutput;
+            crate::terminal::STDOUT.write().write_string_colored("[warn]  ", color!(LightRed on Black))
                 .expect("Error logging");
             println!($thing, $($extra)*);
         }
@@ -36,8 +36,8 @@ macro_rules! warn {
 macro_rules! info {
     ($thing:expr, $($extra:tt)*) => {
         {
-            use terminal::TerminalOutput;
-            ::terminal::STDOUT.write().write_string_colored("[info]  ", color!(LightBlue on Black))
+            use crate::terminal::TerminalOutput;
+            crate::terminal::STDOUT.write().write_string_colored("[info]  ", color!(LightBlue on Black))
                 .expect("Error logging");
             println!($thing, $($extra)*);
         }
@@ -52,8 +52,8 @@ macro_rules! debug {
     ($thing:expr, $($extra:tt)*) => {
         #[cfg(feature = "debug")]
         {
-            use terminal::TerminalOutput;
-            ::terminal::STDOUT.write().write_string_colored("[debug] ", color!(Cyan on Black))
+            use crate::terminal::TerminalOutput;
+            crate::terminal::STDOUT.write().write_string_colored("[debug] ", color!(Cyan on Black))
                 .expect("Error logging");
             println!($thing, $($extra)*);
         }
@@ -68,8 +68,8 @@ macro_rules! trace {
     ($thing:expr, $($extra:tt)*) => {
         #[cfg(feature = "trace")]
         {
-            use terminal::TerminalOutput;
-            ::terminal::STDOUT.write().write_string_colored("[trace] ", color!(White on Black))
+            use crate::terminal::TerminalOutput;
+            crate::terminal::STDOUT.write().write_string_colored("[trace] ", color!(White on Black))
                 .expect("Error logging");
             println!($thing, $($extra)*);
         }
@@ -100,7 +100,7 @@ impl Log for Logger {
     }
 
     fn log(&self, record: &Record) {
-        use terminal::{STDOUT, TerminalOutput};
+        use crate::terminal::{STDOUT, TerminalOutput};
 
         if self.enabled(record.metadata()) {
             let (label, color) = match record.level() {

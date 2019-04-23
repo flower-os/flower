@@ -5,10 +5,10 @@ use core::ptr::Unique;
 use core::result::Result;
 use spin::RwLock;
 
-use util::{self, FromDiscriminator};
-use color::{Color, ColorPair};
-use terminal::*;
-use memory::KERNEL_MAPPING_BEGIN;
+use crate::util::{self, FromDiscriminator};
+use crate::color::{Color, ColorPair};
+use crate::terminal::*;
+use crate::memory::KERNEL_MAPPING_BEGIN;
 
 pub static WRITER: RwLock<VgaWriter> = RwLock::new(VgaWriter::new());
 

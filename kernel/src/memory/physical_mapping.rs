@@ -1,16 +1,15 @@
 use core::{mem, ptr::NonNull, ops::Deref};
-use util;
+use crate::util;
 
 pub unsafe fn map_physical_region<T>(
     physical_address: usize,
     size: usize,
     mutable: bool
 ) -> PhysicalMapping<T> {
-    debug!("size = 0x{:x}", size);
     let frames = util::round_up_divide(size as u64, 4096) as usize;
     let physical_begin_frame = physical_address / 4096;
 
-    let alloc_ptr = ::HEAP.alloc_specific(physical_begin_frame, frames) as usize;
+    let alloc_ptr = crate::HEAP.alloc_specific(physical_begin_frame, frames) as usize;
 
     if alloc_ptr == 0 {
         panic!("Ran out of heap memory!");
@@ -59,7 +58,7 @@ impl<T> Drop for PhysicalMapping<T> {
         let page_begin = obj_addr & !0xFFF;
 
         unsafe {
-            ::HEAP.dealloc_specific(
+            crate::HEAP.dealloc_specific(
                 page_begin as *mut u8,
                 self.mapped_length / 4096,
             );
