@@ -54,7 +54,8 @@ impl Controller {
 
         COUNTER.store(0, Ordering::Relaxed);
 
-        interrupts::listen(interrupts::Irq::Pit, tick);
+        // TODO
+//        interrupts::listen(interrupts::Irq::Pit, tick);
 
         self.channel_0.set_reload_value(RELOAD_VALUE);
     }

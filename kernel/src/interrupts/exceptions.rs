@@ -48,7 +48,7 @@ pub extern "x86-interrupt" fn stack_segment_fault(stack_frame: &mut ExceptionSta
 }
 
 pub extern "x86-interrupt" fn general_protection_fault(stack_frame: &mut ExceptionStackFrame, code: u64) {
-    panic!("cpuex: general protection fault {}\n{:#?}", code, stack_frame);
+    panic!("cpuex: general protection fault 0x{:x}\n{:#?}", code, stack_frame);
 }
 
 pub extern "x86-interrupt" fn page_fault(stack_frame: &mut ExceptionStackFrame, error_code: u64) {

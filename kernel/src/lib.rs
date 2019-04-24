@@ -72,9 +72,7 @@ pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
     log::init();
     memory::init_memory(multiboot_info_addr, guard_page_addr);
 
-    interrupts::initialize();
-
-    interrupts::enable();
+    interrupts::init();
     info!("interrupts: ready");
 
     drivers::pit::CONTROLLER.lock().initialize();
@@ -92,7 +90,7 @@ pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
         Err(error) => error!("ps2c: {:?}", error),
     }
 
-    snake::snake(&mut controller);
+//    snake::snake(&mut controller);
     keyboard_echo_loop(&mut controller);
 
     halt()
