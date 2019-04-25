@@ -13,11 +13,12 @@ endif
 ifeq ($(debug), 1)
     nasm_flags := -f elf64 -F dwarf -g
     build_type := debug
-    qemu_flags := -s -m 256M -serial file:serial.log
+    qemu_flags := -s -m 256M -d int -no-reboot -no-shutdown -monitor stdio -serial file:serial.log
     cargo_flags := --features $(log_level)
 else
     nasm_flags := -f elf64
     cargo_flags := --release --features $(log_level)
+ 	rustflags := "-C code-model=kernel"
     build_type := release
     qemu_flags := -m 256M -serial file:serial.log
 endif
@@ -34,7 +35,7 @@ rust_crate_dir := kernel
 rust_kernel := $(out_dir)/libflower_kernel.a
 target := x86_64-unknown-flower-none
 asm_source_files := $(wildcard $(asm_dir)/*.asm)
-asm_obj_files = $(patsubst $(asm_dir)/%.asm,  $(out_dir)/%.o, $(asm_source_files))
+asm_obj_files = $(patsubst $(asm_dir)/%.asm, $(out_dir)/%.o, $(asm_source_files))
 
 kernel = $(out_dir)/kernel.elf
 grub_iso = $(out_dir)/flower.iso
@@ -73,7 +74,7 @@ makedirs:
 # Compile rust
 $(rust_kernel): $(rust_crate_dir)/**/*
 	@cd $(rust_crate_dir) && \
-      RUST_TARGET_PATH=$(shell pwd)/$(rust_crate_dir) cargo xbuild --target $(target) $(cargo_flags)
+      RUST_TARGET_PATH=$(shell pwd)/$(rust_crate_dir) RUSTFLAGS=$(rustflags) cargo xbuild --target $(target) $(cargo_flags)
 	@rm -f $(rust_kernel)
 	@mv $(rust_crate_dir)/target/$(target)/$(build_type)/libflower_kernel.a $(rust_kernel)
 

@@ -4,40 +4,36 @@
 %define RESOLUTION_X 80
 %define RESOLUTION_Y 25
 %define VGA_PTR 0xb8000
+%define KERNEL_MAPPING_BEGIN 0xffffffff80000000
 
 extern kmain
 global start
 
-section .text
+section .text.boot.32bit
 bits 32
 
 start:
     ; Disable interrupts
     cli
 
+    ; Set up stack for boot section
+    mov esp, stack_top - KERNEL_MAPPING_BEGIN
+
     ; Save multiboot2 information structure into edi to be passed into kmain
     mov edi, ebx
 
     ; Checks
     call check_multiboot ; Check if booted correctly
-    call check_cpuid  ; Check if cpuid supported
+    call check_cpuid ; Check if cpuid supported
     call check_long_mode ; Check if long mode supported
-    
+
     ; Transition to long mode
-    
-    call setup_paging ; Set up paging
-    
-    lgdt [gdt64.pointer] ; Load gdt
-        
-    ; Update selector registers
-    mov ax, gdt64.data ; load gdt data location into ax
-    mov ss, ax ; set stack segment register
-    mov ds, ax ; set data segment register
-    mov es, ax ; set extra segment register
-    
-    jmp gdt64.code:long_mode_start
-    
-    hlt ; should never happen
+
+    call setup_paging; Set up paging
+
+    lgdt [gdt64.pointer - KERNEL_MAPPING_BEGIN] ; Load gdt
+
+    jmp gdt64.code:long_mode_start - KERNEL_MAPPING_BEGIN
     
 ; Print out error message if boot failed
 ; Args: length (word), ascii character codes for hex error code (words)
@@ -82,13 +78,14 @@ error_print:
     mov word [VGA_PTR + 52], 0x0420 ;
     mov word [VGA_PTR + 54], 0x0430 ; 0
     mov word [VGA_PTR + 56], 0x0478 ; x
-    
+
+    pop ebx ; pop return addr
     pop ax ; pop (word) code
     or ax, 0x400 ; get vga code from character
 
+    hlt
     mov word [VGA_PTR + 58], ax ; print the given error character
 
-    cli
     .loop:
         hlt
         jmp .loop
@@ -97,84 +94,52 @@ error_print:
 ; Thanks to https://intermezzos.github.io/book/paging.html
 setup_paging:
 
+    ; Map p4 table
     ; Point entry #1 of page 4 to entry #1 of page 3
-    mov eax, p3_table + 0 ; set eax to 1st entry of p3 table
+    mov eax, p3_table - KERNEL_MAPPING_BEGIN ; set eax to 1st entry of p3 table
     or eax, 0b11
-    mov [p4_table + 0], eax ; set 1st entry of p4 table to 1st entry of p3 table
-    
+    mov [p4_table - KERNEL_MAPPING_BEGIN], eax ; set 1st entry of p4 table to 1st entry of p3 table
+
     ; Map p3 table
-    mov ecx, 0
-    .map_p3_table_loop:
-        ; set eax to nth p2 table
-        mov eax, ecx
-        mov ebx, 4096
-        mul ebx
-        mov ebx, p2_tables
-        add eax, ebx
+    ; Point entry #1 of page 3 to entry #1 of page 2
+    mov eax, p2_table - KERNEL_MAPPING_BEGIN ; set eax to 1st entry of p2 table
+    or eax, 0b11
+    mov [p3_table - KERNEL_MAPPING_BEGIN], eax ; set 1st entry of p3 table to 1st entry of p2 table
 
-        or eax, 0b11 ; present & writable
-        mov [p3_table + ecx * 8], eax ; set 1st entry of p4 table to 1st entry of p3 table
-        inc ecx
-        cmp ecx, 4
-        jne .map_p3_table_loop
-
-    ; Map p2 tables
+    ; Map p2 table
     mov ecx, 0
-    .map_p2_tables_loop:
+    .map_p2_table_loop:
 
         mov eax, 0x200000 ; 2mib (page size)
         mul ecx ; multiply by counter
         or eax, 0b10000011 ; first 1 is huge page bit
 
-        mov [p2_tables + ecx * 8], eax
-
-        inc ecx
-        cmp ecx, 512 * 4 ; map all 4 at once
-        jne .map_p2_tables_loop
-
-    ; Set the area with the guard page to use 4kib pages
-    mov eax, guard_page_begin
-    shr eax, 21 ; Get 2mib page base
-    mov edx, eax
-    mov ecx, eax
-
-    mov eax, p1_table
-    or eax, 0b11
-    mov [p2_tables + ecx * 8], eax
-
-    ; Map the guard page's page table
-    mov ecx, 0
-    .map_guard_table_loop:
-
-        mov eax, 0x1000 ; 4kib (page size)
-        mul ecx ; multiply by counter
-        add eax, edx
-        or eax, 0b11
-
-        mov [p1_table + ecx * 8], eax
+        mov ebx, p2_table - KERNEL_MAPPING_BEGIN
+        mov [ebx + ecx * 8], eax
 
         inc ecx
         cmp ecx, 512
-        jne .map_guard_table_loop
+        jne .map_p2_table_loop
 
     ; Recursively map P4 table
-    mov eax, p4_table
+    mov eax, p4_table - KERNEL_MAPPING_BEGIN
     or eax, 0b11 ; present & writable
-    mov [p4_table + 511 * 8], eax
+    mov [p4_table - KERNEL_MAPPING_BEGIN + 510 * 8], eax
 
     ; Set page table address to cr3
-    mov eax, p4_table ; cr3 must be mov'd to from another register
-    mov cr3, eax 
-    
+    mov eax, p4_table - KERNEL_MAPPING_BEGIN ; cr3 must be mov'd to from another register
+    mov cr3, eax
+
     ; Enable Physical Address Extension
     mov eax, cr4
     or eax, 1 << 5
     mov cr4, eax
-    
-    ; Set long mode bit
+
+    ; Set long mode and nxe bits
     mov ecx, 0xc0000080
     rdmsr
-    or eax, 1 << 8
+    or eax, 1 << 8 ; long mode
+    or eax, 1 << 11 ; nxe bit
     wrmsr
 
     ; Enable paging
@@ -268,13 +233,15 @@ p4_table:
     resb 4096
 p3_table:
     resb 4096
-p2_tables: ; 4 p2 tables
+p2_table:
     resb 4096
+
+p3_table_higher:
     resb 4096
+p2_table_higher:
     resb 4096
-    resb 4096
-p1_table: ; Used for guard page area
-    resb 4096
+p1_tables_higher:
+    resb 4096 * 512
 
 section .guard_page
 align 4096
@@ -299,30 +266,96 @@ gdt64:
     dq (1<<44) | (1<<47) | (1<<41)
 .pointer:
     dw $ - gdt64 - 1 ; length
-    dq gdt64 ; address of table
+    dq gdt64 - KERNEL_MAPPING_BEGIN ; address of table
 
-section .text
+gdt64_higher_half:
+    dq 0
+.code: equ $ - gdt64_higher_half ; offset from gdt
+    dq (1<<44) | (1<<47) | (1<<41) | (1<<43) | (1<<53)
+.data: equ $ - gdt64_higher_half ; offset from gdt
+    dq (1<<44) | (1<<47) | (1<<41)
+.pointer:
+    dw $ - gdt64_higher_half - 1 ; length
+    dq gdt64_higher_half ; address of table
+
+section .text.boot.64bit
 bits 64
 long_mode_start:
-    
-    ; Set all data segment registers to 0
-    mov ax, 0
+
+    ; Update selector registers
+    mov ax, gdt64.data ; load gdt data location into ax
     mov ss, ax
     mov ds, ax
     mov es, ax
     mov fs, ax
     mov gs, ax
 
-    ; Setup stack
-    mov esp, stack_top
+    ; Set up higher half
+    call setup_higher_half
 
-    ; Clear top 32 bits of edi
+    ; Set up stack
+    xor rsp, rsp
+    mov rsp, stack_top
+
+    ; Load higher half gdt
+    lgdt [gdt64_higher_half.pointer]
+
+    ; Clear top 32 bits of rdi
     mov rax, 0xffffffff
     and rdi, rax
 
     ; Pass guard page address to kmain through rsi
     mov rsi, guard_page_begin
 
-    call kmain
+    call kmain + KERNEL_MAPPING_BEGIN
 
-    hlt
+; Set up higher half by mapping the kernel to %KERNEL_MAPPING_BEGIN
+setup_higher_half:
+    ; Map p4 table
+    ; Point entry #511 of page 4 to entry #1 of page 3 to map at %KERNEL_MAPPING_BEGIN
+    mov rax, p3_table_higher - KERNEL_MAPPING_BEGIN ; set eax to 1st entry of p3 table
+    or rax, 0b11
+    mov rbx, p4_table - KERNEL_MAPPING_BEGIN
+    mov [rbx + 511 * 8], rax ; set 1st entry of p4 table to 1st entry of p3 table
+
+    ; Map p3 table
+    ; Point entry #510 of page 3 to entry #1 of page 2 to map at %KERNEL_MAPPING_BEGIN
+    mov rax, p2_table_higher - KERNEL_MAPPING_BEGIN ; set eax to 1st entry of p2 table
+    or rax, 0b11
+    mov rbx, p3_table_higher - KERNEL_MAPPING_BEGIN
+    mov [rbx + 510 * 8], rax ; set 1st entry of p3 table to 1st entry of p2 table
+
+    ; Map p2 table
+    mov rcx, 0
+    .map_p2_table_loop:
+
+        mov rax, 0x1000 ; size of p1 table
+        mul rcx ; multiply by counter
+        add rax, p1_tables_higher - KERNEL_MAPPING_BEGIN
+        or rax, 0b11 ; present + writable
+        mov rbx, p2_table_higher - KERNEL_MAPPING_BEGIN
+        mov [rbx + rcx * 8], rax
+
+        inc rcx
+        cmp rcx, 512
+        jne .map_p2_table_loop
+
+    ; Map p1 tables
+    mov rcx, 0
+    .map_p1_tables_loop:
+
+        mov rax, 0x1000 ; size of page
+        mul rcx ; multiply by counter
+        or rax, 0b11 ; present + writable
+        mov rbx, p1_tables_higher - KERNEL_MAPPING_BEGIN
+        mov [rbx + rcx * 8], rax
+
+        inc rcx
+        cmp rcx, 512 * 512 ; # entries in all p1 tables
+        jne .map_p1_tables_loop
+
+    ; Reset cr3
+    mov rax, cr3
+    mov cr3, rax
+
+    ret

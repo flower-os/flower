@@ -22,14 +22,27 @@ impl BootstrapHeap {
     }
 
     /// Initialises the bootstrap heap with a begin address.
+    ///
+    /// # Unsafety
+    ///
+    /// Unsafe if address is incorrect (not free memory)
     pub unsafe fn init_unchecked(&self, address: usize) {
         self.0.call_once(|| BootstrapAllocator::new_unchecked(address));
+    }
+
+    /// Get the start address of the bootstrap heap. Panics if uninitialized
+    pub fn start(&self) -> usize {
+        self.0.wait().unwrap().start() as usize
     }
 
     /// Get the end address of the bootstrap heap. Inclusive. Panics if uninitialized
     pub fn end(&self) -> usize {
         self.0.wait().unwrap().start() as usize +
             BootstrapAllocator::<[Block; BLOCKS_IN_TREE]>::space_taken()
+    }
+
+    pub const fn space_taken() -> usize {
+        BootstrapAllocator::<[Block; BLOCKS_IN_TREE]>::space_taken()
     }
 }
 
@@ -69,14 +82,16 @@ impl<T> BootstrapAllocator<T> {
     }
 
     /// Allocate an object and return the address if there is space
-    unsafe fn allocate<'a>(&'a self) -> Option<BootstrapHeapBox<'a, T>> {
+    fn allocate(&self) -> Option<BootstrapHeapBox<T>> {
         for bit in 0..8 {
             let mut byte = self.bitmap.lock();
 
             if !byte.get_bit(bit) {
                 byte.set_bit(bit, true);
 
-                let ptr = Unique::new_unchecked(self.start().offset((bit) as isize));
+                let ptr = unsafe {
+                    Unique::new_unchecked(self.start().offset((bit) as isize))
+                };
                 return Some(BootstrapHeapBox { ptr, allocator: self });
             }
         }
@@ -85,7 +100,7 @@ impl<T> BootstrapAllocator<T> {
     }
 
     /// Deallocate a heap box. Must be only called in the `Drop` impl of `BootstrapHeapBox`.
-    unsafe fn deallocate(&self, obj: &BootstrapHeapBox<T>) {
+    fn deallocate(&self, obj: &BootstrapHeapBox<T>) {
         let addr_in_heap = obj.ptr.as_ptr() as usize - self.start_addr;
         let index = addr_in_heap / mem::size_of::<T>();
 
@@ -122,7 +137,7 @@ impl<'a, T> DerefMut for BootstrapHeapBox<'a, T> {
 
 impl<'a, T> Drop for BootstrapHeapBox<'a, T> {
     fn drop(&mut self) {
-        unsafe { self.allocator.deallocate(self); }
+        self.allocator.deallocate(self);
     }
 }
 
@@ -147,11 +162,11 @@ mod test {
         let ptr = setup_heap();
         let bitmap = BootstrapAllocator::<u8>::new_unchecked(ptr as usize);
 
-        let heap_box = unsafe { bitmap.allocate().unwrap() };
+        let heap_box = bitmap.allocate().unwrap();
         let old_ptr = heap_box.ptr;
         drop(heap_box);
         assert!(ptr::eq(
-            unsafe { bitmap.allocate().unwrap().ptr.as_ptr() },
+            bitmap.allocate().unwrap().ptr.as_ptr(),
             old_ptr.as_ptr()
         ));
 
@@ -166,7 +181,7 @@ mod test {
         let bitmap = BootstrapAllocator::<u8>::new_unchecked(ptr as usize);
 
         assert_eq!(
-            unsafe { bitmap.allocate().unwrap().ptr.as_ptr() },
+            bitmap.allocate().unwrap().ptr.as_ptr(),
             ptr as *mut _
         );
 
@@ -182,7 +197,7 @@ mod test {
         let mut v = Vec::with_capacity(8);
 
         for i in 0..8 {
-            let obj = unsafe { bitmap.allocate().unwrap() };
+            let obj = bitmap.allocate().unwrap();
             assert!(ptr::eq(obj.ptr.as_ptr(), (ptr as *mut u8).wrapping_offset(i as isize)));
             v.push(obj); // Stop it from being dropped
         }
@@ -200,11 +215,11 @@ mod test {
         let mut v = Vec::with_capacity(8);
 
         for _ in 0..8 {
-            let addr = unsafe { bitmap.allocate().unwrap() };
+            let addr = bitmap.allocate().unwrap();
             v.push(addr); // Stop it from being dropped
         }
 
-        assert!(unsafe { bitmap.allocate() } == None);
+        assert!(bitmap.allocate() == None);
 
         teardown_heap(ptr);
     }

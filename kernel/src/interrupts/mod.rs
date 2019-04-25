@@ -1,6 +1,8 @@
 //! Module for interrupt handling/IDT
 
-use x86_64::structures::idt::{Idt, ExceptionStackFrame};
+use x86_64::structures::idt::{InterruptDescriptorTable, ExceptionStackFrame, PageFaultErrorCode};
+use crate::interrupts::exceptions::page_fault;
+use crate::gdt;
 
 use alloc::vec::Vec;
 use spin::RwLock;
@@ -10,8 +12,8 @@ mod pic;
 mod exceptions;
 
 lazy_static! {
-    static ref IDT: Idt = {
-        let mut idt = Idt::new();
+    static ref IDT: InterruptDescriptorTable = {
+        let mut idt = InterruptDescriptorTable::new();
         init_interrupt_handlers(&mut idt);
         idt
     };
@@ -47,7 +49,7 @@ impl Into<u8> for Irq {
 }
 
 /// Setup IDTs and initialize and remap PICs
-pub fn initialize() {
+pub fn init() {
     info!("interrupts: initializing");
 
     IDT.load();
@@ -55,6 +57,7 @@ pub fn initialize() {
 
     pic::CHAINED_PICS.lock().init_and_remap();
     debug!("interrupts: pic initialized and remapped");
+    info!("interupts: initialized");
 }
 
 pub fn enable() {
@@ -80,31 +83,59 @@ macro_rules! init_irq_handlers {
                 extern "x86-interrupt" fn handle_irq(_: &mut ExceptionStackFrame) {
                     pic::CHAINED_PICS.lock().handle_interrupt($irq, || dispatch_irq($irq));
                 }
-                $idt.interrupts[$irq].set_handler_fn(handle_irq);
+                $idt[$irq + 32].set_handler_fn(handle_irq);
             }
         )*
     };
 }
 
-fn init_interrupt_handlers(idt: &mut Idt) {
-    idt.divide_by_zero.set_handler_fn(exceptions::divide_by_zero);
-    idt.breakpoint.set_handler_fn(exceptions::breakpoint);
-    idt.overflow.set_handler_fn(exceptions::overflow);
-    idt.bound_range_exceeded.set_handler_fn(exceptions::out_of_bounds);
-    idt.invalid_opcode.set_handler_fn(exceptions::invalid_opcode);
-    idt.device_not_available.set_handler_fn(exceptions::device_not_available);
-    idt.double_fault.set_handler_fn(exceptions::double_fault);
-    idt.invalid_tss.set_handler_fn(exceptions::invalid_tss);
-    idt.segment_not_present.set_handler_fn(exceptions::segment_not_present);
-    idt.stack_segment_fault.set_handler_fn(exceptions::stack_segment_fault);
-    idt.general_protection_fault.set_handler_fn(exceptions::general_protection_fault);
-    idt.page_fault.set_handler_fn(exceptions::page_fault);
-    idt.x87_floating_point.set_handler_fn(exceptions::x87_floating_point);
-    idt.alignment_check.set_handler_fn(exceptions::alignment_check);
-    idt.machine_check.set_handler_fn(exceptions::machine_check);
-    idt.simd_floating_point.set_handler_fn(exceptions::simd_floating_point);
-    idt.virtualization.set_handler_fn(exceptions::virtualization);
-    idt.security_exception.set_handler_fn(exceptions::security_exception);
+fn init_interrupt_handlers(idt: &mut InterruptDescriptorTable) {
+    unsafe {
+        idt.divide_by_zero.set_handler_fn(exceptions::divide_by_zero)
+            .set_stack_index(gdt::PANICKING_EXCEPTION_IST_INDEX);
+        idt.debug.set_handler_fn(exceptions::debug)
+            .set_stack_index(gdt::PANICKING_EXCEPTION_IST_INDEX);
+        idt.non_maskable_interrupt.set_handler_fn(exceptions::nmi)
+            .set_stack_index(gdt::PANICKING_EXCEPTION_IST_INDEX);
+        idt.breakpoint.set_handler_fn(exceptions::breakpoint)
+            .set_stack_index(gdt::PANICKING_EXCEPTION_IST_INDEX);
+        idt.overflow.set_handler_fn(exceptions::overflow)
+            .set_stack_index(gdt::PANICKING_EXCEPTION_IST_INDEX);
+        idt.bound_range_exceeded.set_handler_fn(exceptions::out_of_bounds)
+            .set_stack_index(gdt::PANICKING_EXCEPTION_IST_INDEX);
+        idt.invalid_opcode.set_handler_fn(exceptions::invalid_opcode)
+            .set_stack_index(gdt::PANICKING_EXCEPTION_IST_INDEX);
+        idt.device_not_available.set_handler_fn(exceptions::device_not_available)
+            .set_stack_index(gdt::PANICKING_EXCEPTION_IST_INDEX);
+        idt.double_fault.set_handler_fn(exceptions::double_fault)
+            .set_stack_index(gdt::DOUBLE_FAULT_IST_INDEX);
+        idt.invalid_tss.set_handler_fn(exceptions::invalid_tss)
+            .set_stack_index(gdt::PANICKING_EXCEPTION_IST_INDEX);
+        idt.segment_not_present.set_handler_fn(exceptions::segment_not_present)
+            .set_stack_index(gdt::PANICKING_EXCEPTION_IST_INDEX);
+        idt.stack_segment_fault.set_handler_fn(exceptions::stack_segment_fault)
+            .set_stack_index(gdt::PANICKING_EXCEPTION_IST_INDEX);
+        idt.general_protection_fault.set_handler_fn(exceptions::general_protection_fault)
+            .set_stack_index(gdt::PANICKING_EXCEPTION_IST_INDEX);
+
+        let page_fault: extern "x86-interrupt" fn(&mut ExceptionStackFrame, u64) = page_fault;
+        let page_fault: extern "x86-interrupt" fn(&mut ExceptionStackFrame, PageFaultErrorCode)
+            = core::mem::transmute(page_fault);
+        idt.page_fault.set_handler_fn(page_fault);
+
+        idt.x87_floating_point.set_handler_fn(exceptions::x87_floating_point)
+            .set_stack_index(gdt::PANICKING_EXCEPTION_IST_INDEX);
+        idt.alignment_check.set_handler_fn(exceptions::alignment_check)
+            .set_stack_index(gdt::PANICKING_EXCEPTION_IST_INDEX);
+        idt.machine_check.set_handler_fn(exceptions::machine_check)
+            .set_stack_index(gdt::PANICKING_EXCEPTION_IST_INDEX);
+        idt.simd_floating_point.set_handler_fn(exceptions::simd_floating_point)
+            .set_stack_index(gdt::PANICKING_EXCEPTION_IST_INDEX);
+        idt.virtualization.set_handler_fn(exceptions::virtualization)
+            .set_stack_index(gdt::PANICKING_EXCEPTION_IST_INDEX);
+        idt.security_exception.set_handler_fn(exceptions::security_exception)
+            .set_stack_index(gdt::PANICKING_EXCEPTION_IST_INDEX);
+    }
 
     init_irq_handlers!(idt, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
 }

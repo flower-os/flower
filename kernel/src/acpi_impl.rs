@@ -1,11 +1,12 @@
 use acpi::{self, AcpiHandler, Acpi, AcpiError};
-use crate::memory::{self, PhysicalMapping};
+use crate::memory::physical_mapping::{self, PhysicalMapping};
 
 pub fn acpi_init() -> Result<Acpi, AcpiError> {
     info!("acpi: initializing");
     let mut handler = FlowerAcpiHandler;
     // We're BIOS. We'd have crashed by now if we weren't.
     let search_result = unsafe { acpi::search_for_rsdp_bios(&mut handler) };
+
     match search_result {
         Ok(acpi) => {
             info!("acpi: init successful");
@@ -28,7 +29,7 @@ impl AcpiHandler for FlowerAcpiHandler {
     ) -> acpi::PhysicalMapping<T> {
         // Map immutable region
         let region: PhysicalMapping<T> = unsafe {
-            memory::map_physical_region(physical_address, size, false)
+            physical_mapping::map_physical_region(physical_address, size, false)
         };
 
         region.into()

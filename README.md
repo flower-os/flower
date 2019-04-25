@@ -15,6 +15,8 @@ You will need:
  - GNU GRUB (grub-mkrescue);
  - GNU make;
 
+It will currently build on `rustc 1.36.0-nightly (e305df184 2019-04-24)`.
+
 ## Building
 
 You can make the iso with `make iso`, and launch qemu and run it with `make run`. To enable debug symbols,

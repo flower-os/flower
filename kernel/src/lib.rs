@@ -37,7 +37,6 @@ extern crate lazy_static;
 extern crate static_assertions;
 extern crate arrayvec;
 
-use core::fmt::Write;
 use crate::drivers::keyboard::{Keyboard, KeyEventType, Ps2Keyboard};
 use crate::drivers::keyboard::keymap;
 use crate::drivers::{ps2, serial};
@@ -58,6 +57,7 @@ mod interrupts;
 mod memory;
 mod drivers;
 mod acpi_impl;
+mod gdt;
 mod cpuid;
 mod snake;
 
@@ -73,11 +73,9 @@ pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
     say_hello();
     info!("serial: initialized port 1");
     log::init();
-
-    let mb_info = unsafe { multiboot2::load(multiboot_info_addr) };
-    memory::init_memory(&mb_info, guard_page_addr);
-
-    interrupts::initialize();
+    memory::init_memory(multiboot_info_addr, guard_page_addr);
+    gdt::init();
+    interrupts::init();
     interrupts::enable();
     info!("interrupts: ready");
 
@@ -93,7 +91,6 @@ pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
     }
 
     snake::snake(&mut controller);
-    keyboard_echo_loop(&mut controller);
 
     halt()
 }
@@ -161,11 +158,11 @@ fn keyboard_echo_loop(controller: &mut ps2::Controller) {
 fn halt() -> ! {
     unsafe {
         // Disable interrupts
-        asm!("cli");
+        asm!("cli" :::: "volatile");
 
         // Halt forever...
         loop {
-            asm!("hlt");
+            asm!("hlt" :::: "volatile");
         }
     }
 }

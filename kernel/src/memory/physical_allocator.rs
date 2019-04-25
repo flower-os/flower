@@ -58,7 +58,7 @@ impl<'a> PhysicalAllocator<'a> {
 
             // Set up all as Nones to avoid any UB from `panic`s
             for slot in trees.iter_mut() {
-                unsafe { ptr::write(slot as *mut _, Mutex::new(None)) };
+                unsafe { ptr::write(slot as *mut _, Mutex::new(None)); }
             }
 
             // Init the first 8 trees on the bootstrap heap
@@ -70,8 +70,7 @@ impl<'a> PhysicalAllocator<'a> {
                     usable,
                     TreeBox::Bootstrap(
                         unsafe {
-                            BOOTSTRAP_HEAP.allocate()
-                            .expect("Ran out of bootstrap heap memory!")
+                            BOOTSTRAP_HEAP.allocate().expect("Ran out of bootstrap heap memory!")
                         }
                     )
                 );
@@ -98,10 +97,8 @@ impl<'a> PhysicalAllocator<'a> {
         for i in 8..=gibbibytes {
             let usable = Self::localize(i as u8, usable.clone());
 
-            unsafe {
-                let tree = Tree::new(usable, TreeBox::Heap(box mem::uninitialized()));
-                *trees[i as usize].lock() = Some(tree);
-            }
+            let tree = Tree::new(usable, TreeBox::Heap(box unsafe { mem::uninitialized() }));
+            *trees[i as usize].lock() = Some(tree);
         }
     }
 

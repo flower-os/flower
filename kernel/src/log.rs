@@ -1,12 +1,17 @@
 use crate::log_facade::{self, Log, Record, Level, Metadata};
 
+static LOGGER: Logger = Logger;
+
 macro_rules! error {
     ($thing:expr, $($extra:tt)*) => {
         {
             use crate::terminal::TerminalOutput;
             crate::terminal::STDOUT.write().write_string_colored("[error] ", color!(Red on Black))
                 .expect("Error logging");
+
+            #[cfg(not(test))]
             serial_print!("[error] " );
+            #[cfg(not(test))]
             serial_println!($thing, $($extra)*);
             println!($thing, $($extra)*);
         }
@@ -24,7 +29,10 @@ macro_rules! warn {
             use crate::terminal::TerminalOutput;
             crate::terminal::STDOUT.write().write_string_colored("[warn]  ", color!(LightRed on Black))
                 .expect("Error logging");
+
+            #[cfg(not(test))]
             serial_print!("[warn]  " );
+            #[cfg(not(test))]
             serial_println!($thing, $($extra)*);
             println!($thing, $($extra)*);
         }
@@ -41,7 +49,10 @@ macro_rules! info {
             use crate::terminal::TerminalOutput;
             crate::terminal::STDOUT.write().write_string_colored("[info]  ", color!(LightBlue on Black))
                 .expect("Error logging");
+
+            #[cfg(not(test))]
             serial_print!("[info]  " );
+            #[cfg(not(test))]
             serial_println!($thing, $($extra)*);
             println!($thing, $($extra)*);
         }
@@ -59,7 +70,10 @@ macro_rules! debug {
             use crate::terminal::TerminalOutput;
             crate::terminal::STDOUT.write().write_string_colored("[debug] ", color!(Cyan on Black))
                 .expect("Error logging");
+
+            #[cfg(not(test))]
             serial_print!("[debug] " );
+            #[cfg(not(test))]
             serial_println!($thing, $($extra)*);
             println!($thing, $($extra)*);
         }
@@ -77,7 +91,10 @@ macro_rules! trace {
             use crate::terminal::TerminalOutput;
             crate::terminal::STDOUT.write().write_string_colored("[trace] ", color!(White on Black))
                 .expect("Error logging");
+
+            #[cfg(not(test))]
             serial_print!("[trace] " );
+            #[cfg(not(test))]
             serial_println!($thing, $($extra)*);
             println!($thing, $($extra)*);
         }
@@ -128,7 +145,9 @@ impl Log for Logger {
             STDOUT.write().write_string(&message)
                 .expect("Error logging");
 
+            #[cfg(not(test))]
             write!(serial::PORT_1.lock(), "{}", label).unwrap();
+            #[cfg(not(test))]
             write!(serial::PORT_1.lock(), "{}", message).unwrap();
         }
     }
@@ -137,8 +156,6 @@ impl Log for Logger {
 }
 
 pub fn init() {
-    static LOGGER: Logger = Logger;
-
     log_facade::set_logger(&LOGGER)
         .map(|()| log_facade::set_max_level(log_level().to_level_filter()))
         .expect("Error setting logger!");
