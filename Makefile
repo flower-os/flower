@@ -13,13 +13,13 @@ endif
 ifeq ($(debug), 1)
     nasm_flags := -f elf64 -F dwarf -g
     build_type := debug
-    qemu_flags := -s -m 256M
+    qemu_flags := -s -m 256M -serial file:serial.log
     cargo_flags := --features $(log_level)
 else
     nasm_flags := -f elf64
     cargo_flags := --release --features $(log_level)
     build_type := release
-    qemu_flags := -m 256M
+    qemu_flags := -m 256M -serial file:serial.log
 endif
 
 ifeq ($(wait_for_gdb), 1)
