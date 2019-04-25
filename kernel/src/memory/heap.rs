@@ -7,7 +7,7 @@ use core::ptr::Unique;
 use core::ops::{Deref, DerefMut};
 use spin::{Once, Mutex};
 use super::paging::{PAGE_TABLES, Page, PageSize, EntryFlags};
-use crate::memory::paging::PhysicalAddress;
+use crate::memory::{buddy_allocator, paging::PhysicalAddress};
 use crate::util;
 // use ...::Block // <-- this one comes from the macro invocation below
 
@@ -242,24 +242,42 @@ unsafe impl GlobalAlloc for Heap {
 
         self.tree.wait().expect("Heap not initialized!").lock().deallocate(ptr as *mut _, order);
 
-        // There will only be pages to unmap which totally contained this allocation if this
+        let page_order = 12 - 6; // log2(4096) - base order
+
+           // There will only be pages to unmap which totally contained this allocation if this
         // allocation was larger or equal to the size of a page
-        // TODO NO: if it happened to be on its own page we must unmap too
-        if order < 12 - 6  { // log2(4096) - base order
-            return;
-        }
+        if order < page_order  {
+            // Else, we must check if it happened to be on its own page
 
-        // Unmap pages that have were only used for this alloc
-        // 6 is base order, but order is + 1 (used is 0) so `1 << (order + 5)`
-        for page in 0..util::round_up_divide(1u64 << (order + 5), 4096) as usize {
-            let page_addr = global_ptr as usize + (page * 4096);
+            let page_base_ptr = ptr & !0xFFF;
 
-            PAGE_TABLES.lock().unmap(
-                Page::containing_address(page_addr, PageSize::Kib4),
-                true, // Free backing memory
-                true, // Do invplg
-            );
-        }
+            let level = MAX_ORDER - page_order;
+            let level_offset = buddy_allocator::blocks_in_tree(level);
+            let index = level_offset + (page_base_ptr >> (page_order + 6)) + 1;
+            let order_free = self.tree.wait().unwrap().lock().block(index - 1).order_free;
+
+            if order_free == page_order + 1 {
+                let global_ptr = page_base_ptr + HEAP_START;
+
+                PAGE_TABLES.lock().unmap(
+                    Page::containing_address(global_ptr, PageSize::Kib4),
+                    true, // Free backing memory
+                    true, // Do invplg
+                );
+            }
+        } else {
+           // Unmap pages that have were only used for this alloc
+           // 6 is base order, but order is + 1 (used is 0) so `1 << (order + 5)`
+           for page in 0..util::round_up_divide(1u64 << (order + 5), 4096) as usize {
+               let page_addr = global_ptr as usize + (page * 4096);
+
+               PAGE_TABLES.lock().unmap(
+                   Page::containing_address(page_addr, PageSize::Kib4),
+                   true, // Free backing memory
+                   true, // Do invplg
+               );
+           }
+       }
    }
 }
 
