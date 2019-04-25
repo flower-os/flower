@@ -71,7 +71,7 @@ pub static HEAP: Heap = Heap::new();
 /// Kernel main function
 #[no_mangle]
 pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
-    serial::PORT_1.lock().init(9600, false).expect("Error initializing serial port 1");
+    serial::PORT_1.lock().init(serial::MAX_BAUD, false).expect("Error initializing serial port 1");
     say_hello();
     info!("serial: initialized port 1");
     log::init();

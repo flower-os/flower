@@ -4,9 +4,9 @@ use core::fmt::{self, Write};
 use spin::Mutex;
 use crate::io::Port;
 
-const PORT_1_ADDR: u16 = 0x3f8;
-const PORT_2_ADDR: u16 = 0x2f8;
-const MAX_BAUD: u32 = 115200;
+pub const PORT_1_ADDR: u16 = 0x3f8;
+pub const PORT_2_ADDR: u16 = 0x2f8;
+pub const MAX_BAUD: u32 = 115200;
 
 pub static PORT_1: Mutex<SerialPort> = Mutex::new(unsafe { SerialPort::new(PORT_1_ADDR) });
 pub static PORT_2: Mutex<SerialPort> = Mutex::new(unsafe { SerialPort::new(PORT_2_ADDR) });
@@ -24,7 +24,7 @@ pub struct SerialPort {
 }
 
 impl SerialPort {
-    const unsafe fn new(port_base: u16) -> SerialPort {
+    pub const unsafe fn new(port_base: u16) -> SerialPort {
         SerialPort {
             initialized: false,
             data: Port::new(port_base),
