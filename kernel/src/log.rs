@@ -114,6 +114,7 @@ impl Log for Logger {
 
     fn log(&self, record: &Record) {
         use crate::terminal::{STDOUT, TerminalOutput};
+        use core::fmt::Write;
 
         if self.enabled(record.metadata()) {
             let (label, color) = match record.level() {
@@ -130,6 +131,9 @@ impl Log for Logger {
 
             STDOUT.write().write_string(&message)
                 .expect("Error logging");
+
+            write!(crate::drivers::serial::PORT_1.lock(), "{}", label).unwrap();
+            write!(crate::drivers::serial::PORT_1.lock(), "{}", message).unwrap();
         }
     }
 
