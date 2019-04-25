@@ -111,8 +111,8 @@ fn say_hello() {
     println!("Flower kernel boot!");
     println!("-------------------");
 
-    writeln!(serial::PORT_1.lock(), "Flower kernel boot!").unwrap();
-    writeln!(serial::PORT_1.lock(), "-------------------").unwrap();
+    serial_println!("Flower kernel boot!");
+    serial_println!("-------------------");
 
     // Reset colors
     terminal::STDOUT.write().set_color(color!(White on Black))
@@ -130,8 +130,8 @@ fn print_flower() -> Result<(), terminal::TerminalOutputError<()>> {
     stdout.write_string_colored(FLOWER_STEM, color!(Green on Black))?;
     stdout.set_cursor_pos(old)?;
 
-    write!(serial::PORT_1.lock(), "{}", FLOWER).unwrap();
-    writeln!(serial::PORT_1.lock(), "{}", FLOWER_STEM).unwrap();
+    serial_print!("{}", FLOWER);
+    serial_println!("{}", FLOWER_STEM);
 
     Ok(())
 }

@@ -4,11 +4,10 @@ macro_rules! error {
     ($thing:expr, $($extra:tt)*) => {
         {
             use crate::terminal::TerminalOutput;
-            use core::fmt::Write;
             crate::terminal::STDOUT.write().write_string_colored("[error] ", color!(Red on Black))
                 .expect("Error logging");
-            write!(crate::drivers::serial::PORT_1.lock(), "[error] " ).unwrap();
-            writeln!(crate::drivers::serial::PORT_1.lock(), $thing, $($extra)*).unwrap();
+            serial_print!("[error] " );
+            serial_println!($thing, $($extra)*);
             println!($thing, $($extra)*);
         }
     };
@@ -23,11 +22,10 @@ macro_rules! warn {
     ($thing:expr, $($extra:tt)*) => {
         {
             use crate::terminal::TerminalOutput;
-            use core::fmt::Write;
             crate::terminal::STDOUT.write().write_string_colored("[warn]  ", color!(LightRed on Black))
                 .expect("Error logging");
-            write!(crate::drivers::serial::PORT_1.lock(), "[warn]  " ).unwrap();
-            writeln!(crate::drivers::serial::PORT_1.lock(), $thing, $($extra)*).unwrap();
+            serial_print!("[warn]  " );
+            serial_println!($thing, $($extra)*);
             println!($thing, $($extra)*);
         }
     };
@@ -41,11 +39,10 @@ macro_rules! info {
     ($thing:expr, $($extra:tt)*) => {
         {
             use crate::terminal::TerminalOutput;
-            use core::fmt::Write;
             crate::terminal::STDOUT.write().write_string_colored("[info]  ", color!(LightBlue on Black))
                 .expect("Error logging");
-            write!(crate::drivers::serial::PORT_1.lock(), "[info]  " ).unwrap();
-            writeln!(crate::drivers::serial::PORT_1.lock(), $thing, $($extra)*).unwrap();
+            serial_print!("[info]  " );
+            serial_println!($thing, $($extra)*);
             println!($thing, $($extra)*);
         }
     };
@@ -60,11 +57,10 @@ macro_rules! debug {
         #[cfg(feature = "debug")]
         {
             use crate::terminal::TerminalOutput;
-            use core::fmt::Write;
             crate::terminal::STDOUT.write().write_string_colored("[debug] ", color!(Cyan on Black))
                 .expect("Error logging");
-            write!(crate::drivers::serial::PORT_1.lock(), "[debug] " ).unwrap();
-            writeln!(crate::drivers::serial::PORT_1.lock(), $thing, $($extra)*).unwrap();
+            serial_print!("[debug] " );
+            serial_println!($thing, $($extra)*);
             println!($thing, $($extra)*);
         }
     };
@@ -79,11 +75,10 @@ macro_rules! trace {
         #[cfg(feature = "trace")]
         {
             use crate::terminal::TerminalOutput;
-            use core::fmt::Write;
             crate::terminal::STDOUT.write().write_string_colored("[trace] ", color!(White on Black))
                 .expect("Error logging");
-            write!(crate::drivers::serial::PORT_1.lock(), "[trace] " ).unwrap();
-            writeln!(crate::drivers::serial::PORT_1.lock(), $thing, $($extra)*).unwrap();
+            serial_print!("[trace] " );
+            serial_println!($thing, $($extra)*);
             println!($thing, $($extra)*);
         }
     };
@@ -113,6 +108,7 @@ impl Log for Logger {
     }
 
     fn log(&self, record: &Record) {
+        use crate::drivers::serial;
         use crate::terminal::{STDOUT, TerminalOutput};
         use core::fmt::Write;
 
@@ -132,8 +128,8 @@ impl Log for Logger {
             STDOUT.write().write_string(&message)
                 .expect("Error logging");
 
-            write!(crate::drivers::serial::PORT_1.lock(), "{}", label).unwrap();
-            write!(crate::drivers::serial::PORT_1.lock(), "{}", message).unwrap();
+            write!(serial::PORT_1.lock(), "{}", label).unwrap();
+            write!(serial::PORT_1.lock(), "{}", message).unwrap();
         }
     }
 

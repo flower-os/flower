@@ -38,6 +38,25 @@ pub fn stdout_print(args: fmt::Arguments) {
     STDOUT.write().write_fmt(args).unwrap();
 }
 
+#[cfg(not(test))]
+macro_rules! serial_print {
+    ($($arg:tt)*) => ({
+        $crate::terminal::serial1_print(format_args!($($arg)*));
+    });
+}
+
+#[cfg(not(test))]
+macro_rules! serial_println {
+    ($fmt:expr) => (serial_print!(concat!($fmt, "\n")));
+    ($fmt:expr, $($arg:tt)*) => (serial_print!(concat!($fmt, "\n"), $($arg)*));
+}
+
+/// Writes formatted string to serial 1, for print macro use
+#[cfg(not(test))]
+pub fn serial1_print(args: fmt::Arguments) {
+    crate::drivers::serial::PORT_1.lock().write_fmt(args).unwrap();
+}
+
 /// A standard output terminal
 pub static STDOUT: RwLock<Stdout> = RwLock::new(Stdout(&vga::WRITER));
 
