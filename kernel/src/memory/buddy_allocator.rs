@@ -93,7 +93,7 @@ macro_rules! buddy_allocator_bitmap_tree {
                     block_begin += 1 << ($BASE_ORDER);
                 }
 
-                let mut start: usize = 1 << (MAX_ORDER - 1) ;
+                let mut start: usize = 1 << (MAX_ORDER - 1);
                 for order in 1..=MAX_ORDER {
                     for node_index in start..(start +  blocks_in_level(MAX_ORDER - order)) {
                         tree.update_block(node_index, order);

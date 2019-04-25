@@ -11,7 +11,9 @@ use crate::memory::{buddy_allocator, paging::PhysicalAddress};
 use crate::util;
 // use ...::Block // <-- this one comes from the macro invocation below
 
-buddy_allocator_bitmap_tree!(LEVEL_COUNT = 25, BASE_ORDER = 6);
+const BASE_ORDER: u8 = 6;
+
+buddy_allocator_bitmap_tree!(LEVEL_COUNT = 25, BASE_ORDER = BASE_ORDER);
 
 /// Wrapper that just impls deref for a Unique.
 ///
@@ -117,8 +119,7 @@ impl Heap {
         let ptr = (ptr.unwrap() as usize + HEAP_START) as *mut u8;
 
         // Map pages that must be mapped
-        // 6 is base order so `1 << (order + 6)`
-        for page in 0..util::round_up_divide(1u64 << (order + 6), 4096) as usize {
+        for page in 0..util::round_up_divide(1u64 << (order + BASE_ORDER), 4096) as usize {
             let page_addr = ptr as usize + (page * 4096);
             PAGE_TABLES.lock().map_to(
                 Page::containing_address(page_addr, PageSize::Kib4),
@@ -162,8 +163,7 @@ impl Heap {
         self.tree.wait().expect("Heap not initialized!").lock().deallocate(ptr as *mut _, order);
 
         // Unmap pages that have were used for this alloc
-        // 6 is base order so `1 << (order + 6)`
-        for page in 0..util::round_up_divide(1u64 << (order + 6), 4096) as usize {
+        for page in 0..util::round_up_divide(1u64 << (order + BASE_ORDER), 4096) as usize {
             let page_addr = global_ptr as usize + (page * 4096);
 
             PAGE_TABLES.lock().unmap(
@@ -185,7 +185,7 @@ impl Heap {
 
         let level = MAX_ORDER - order;
         let level_offset = super::buddy_allocator::blocks_in_level(level);
-        let index = level_offset + ((ptr as usize) >> (order + 6));
+        let index = level_offset + ((ptr as usize) >> (order + BASE_ORDER));
     }
 }
 
@@ -201,8 +201,7 @@ unsafe impl GlobalAlloc for Heap {
         let ptr = (ptr.unwrap() as usize + HEAP_START) as *mut u8;
 
         // Map pages that have yet to be mapped
-        // 6 is base order so `1 << (order + 6 - 1)`
-        for page in 0..util::round_up_divide(1u64 << (order + 5), 4096) as usize {
+        for page in 0..util::round_up_divide(1u64 << (order + BASE_ORDER - 1), 4096) as usize {
             let mut page_tables = PAGE_TABLES.lock();
 
             let page_addr = ptr as usize + (page * 4096);
@@ -242,7 +241,7 @@ unsafe impl GlobalAlloc for Heap {
 
         self.tree.wait().expect("Heap not initialized!").lock().deallocate(ptr as *mut _, order);
 
-        let page_order = 12 - 6; // log2(4096) - base order
+        let page_order = 12 - BASE_ORDER; // log2(4096) - base order
 
            // There will only be pages to unmap which totally contained this allocation if this
         // allocation was larger or equal to the size of a page
@@ -253,7 +252,7 @@ unsafe impl GlobalAlloc for Heap {
 
             let level = MAX_ORDER - page_order;
             let level_offset = buddy_allocator::blocks_in_tree(level);
-            let index = level_offset + (page_base_ptr >> (page_order + 6)) + 1;
+            let index = level_offset + (page_base_ptr >> (page_order + BASE_ORDER)) + 1;
             let order_free = self.tree.wait().unwrap().lock().block(index - 1).order_free;
 
             if order_free == page_order + 1 {
@@ -267,8 +266,7 @@ unsafe impl GlobalAlloc for Heap {
             }
         } else {
            // Unmap pages that have were only used for this alloc
-           // 6 is base order, but order is + 1 (used is 0) so `1 << (order + 5)`
-           for page in 0..util::round_up_divide(1u64 << (order + 5), 4096) as usize {
+           for page in 0..util::round_up_divide(1u64 << (order + BASE_ORDER - 1), 4096) as usize {
                let page_addr = global_ptr as usize + (page * 4096);
 
                PAGE_TABLES.lock().unmap(
@@ -298,8 +296,8 @@ fn order(val: usize) -> u8 {
 
     let log2 = log2;
 
-    if log2 > 6 {
-        log2 - 6
+    if log2 > BASE_ORDER {
+        log2 - BASE_ORDER
     } else {
         0
     }

@@ -33,7 +33,7 @@ impl fmt::Debug for VgaWriter {
 impl VgaWriter {
     pub const fn new() -> Self {
         VgaWriter {
-            buffer: unsafe { Unique::new_unchecked((VIRTUAL_VGA_PTR) as *mut _) },
+            buffer: unsafe { Unique::new_unchecked(VIRTUAL_VGA_PTR as *mut _) },
             cursor: Point::new(0, RESOLUTION.y - 1),
             color: color!(White on Black),
         }
