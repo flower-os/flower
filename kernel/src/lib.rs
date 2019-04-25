@@ -39,9 +39,10 @@ extern crate lazy_static;
 extern crate static_assertions;
 extern crate arrayvec;
 
+use core::fmt::Write;
 use crate::drivers::keyboard::{Keyboard, KeyEventType, Ps2Keyboard};
 use crate::drivers::keyboard::keymap;
-use crate::drivers::ps2;
+use crate::drivers::{ps2, serial};
 use crate::terminal::TerminalOutput;
 
 #[cfg(not(test))]
@@ -70,14 +71,15 @@ pub static HEAP: Heap = Heap::new();
 /// Kernel main function
 #[no_mangle]
 pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
+    serial::PORT_1.lock().init(9600, false).expect("Error initializing serial port 1");
     say_hello();
+    info!("serial: initialized port 1");
     log::init();
 
     let mb_info = unsafe { multiboot2::load(multiboot_info_addr) };
     memory::init_memory(&mb_info, guard_page_addr);
 
     interrupts::initialize();
-
     interrupts::enable();
     info!("interrupts: ready");
 
@@ -111,6 +113,9 @@ fn say_hello() {
     println!("Flower kernel boot!");
     println!("-------------------");
 
+    writeln!(serial::PORT_1.lock(), "Flower kernel boot!").unwrap();
+    writeln!(serial::PORT_1.lock(), "-------------------").unwrap();
+
     // Reset colors
     terminal::STDOUT.write().set_color(color!(White on Black))
         .expect("Color should be supported");
@@ -125,7 +130,12 @@ fn print_flower() -> Result<(), terminal::TerminalOutputError<()>> {
 
     stdout.write_string_colored(FLOWER, color!(LightBlue on Black))?;
     stdout.write_string_colored(FLOWER_STEM, color!(Green on Black))?;
-    stdout.set_cursor_pos(old)
+    stdout.set_cursor_pos(old)?;
+
+    write!(serial::PORT_1.lock(), "{}", FLOWER).unwrap();
+    writeln!(serial::PORT_1.lock(), "{}", FLOWER_STEM).unwrap();
+
+    Ok(())
 }
 
 fn keyboard_echo_loop(controller: &mut ps2::Controller) {
