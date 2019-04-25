@@ -1,6 +1,7 @@
 use core::alloc::Layout;
 use multiboot2::BootInformation;
-use crate::memory::paging::{self, PAGE_TABLES, Page, PhysicalAddress, EntryFlags, page_map::TemporaryPage};
+use crate::memory::paging::{self, PAGE_TABLES, Page, PhysicalAddress, EntryFlags,
+                            page_map::TemporaryPage, InvalidateTlb, FreeMemory};
 use crate::memory::{bootstrap_heap::BOOTSTRAP_HEAP, physical_allocator::PHYSICAL_ALLOCATOR};
 use crate::memory::heap::Heap;
 use crate::memory::paging::PageSize;
@@ -29,7 +30,7 @@ pub fn remap_kernel(
     // Unmap the heap page temporarily to avoid confusing the temporary page code
     // This code *is* correct -- we want to avoid mapping arbitrary pages as temporary, so we keep it in
     unsafe {
-        PAGE_TABLES.lock().unmap(heap_page, false, true);
+        PAGE_TABLES.lock().unmap(heap_page, FreeMemory::NoFree, InvalidateTlb::Invalidate);
     }
 
     let mut temporary_page = TemporaryPage::new(heap_page);
@@ -76,7 +77,7 @@ pub fn remap_kernel(
                 mapper.higher_half_map_range(
                     section.start_address() as usize..section.end_address() as usize,
                     flags,
-                    false
+                    InvalidateTlb::NoInvalidate,
                 );
             }
         }
@@ -87,7 +88,7 @@ pub fn remap_kernel(
                 Page::containing_address(crate::drivers::vga::VIRTUAL_VGA_PTR, PageSize::Kib4),
                 PhysicalAddress(0xb8000 as usize),
                 EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE,
-                false,
+                InvalidateTlb::NoInvalidate,
             );
         }
     });
@@ -133,7 +134,7 @@ pub fn remap_kernel(
             heap_page,
             heap_frame_addr.physical_address().unwrap(),
             paging::EntryFlags::from_bits_truncate(0),
-            true, // Invplg
+            InvalidateTlb::Invalidate,
         );
     }
 

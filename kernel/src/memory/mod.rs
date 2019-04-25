@@ -31,7 +31,8 @@ use self::physical_allocator::{PHYSICAL_ALLOCATOR, BLOCKS_IN_TREE};
 use self::buddy_allocator::Block;
 use self::stack_allocator::StackAllocator;
 use self::bootstrap_heap::{BootstrapHeap, BOOTSTRAP_HEAP};
-use self::paging::{Page, PageSize, PhysicalAddress, VirtualAddress, PAGE_TABLES, EntryFlags, PageRangeMapping, remap};
+use self::paging::{Page, PageSize, PhysicalAddress, VirtualAddress, PAGE_TABLES, EntryFlags,
+                   PageRangeMapping, remap, InvalidateTlb};
 use crate::util::round_up_divide;
 use crate::gdt;
 
@@ -129,7 +130,7 @@ unsafe fn setup_ist(begin: Page) {
             PAGE_TABLES.lock().map(
                 Page::containing_address(begin.start_address().unwrap() + (page * 4096), PageSize::Kib4),
                 EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE,
-                true,
+                InvalidateTlb::Invalidate,
             );
         }
     }
@@ -174,8 +175,8 @@ unsafe fn setup_bootstrap_heap(
 
     PAGE_TABLES.lock().map_page_range(
         mapping,
-        false,
-        EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE
+        InvalidateTlb::NoInvalidate,
+        EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE,
     );
 
     let virtual_start = start_page.number() * 4096;
@@ -257,7 +258,7 @@ unsafe fn setup_guard_page(addr: usize) {
     let size = PAGE_TABLES.lock().walk_page_table(page).expect("Guard page must be mapped!").1;
     assert_eq!(size, PageSize::Kib4, "Guard page must be on a 4kib page!");
 
-    PAGE_TABLES.lock().unmap(page, false, true);
+    PAGE_TABLES.lock().unmap(page, FreeMemory::NoFree, InvalidateTlb::Invalidate);
 }
 
 fn kernel_area(mb_info: &BootInformation) -> RangeInclusive<usize> {

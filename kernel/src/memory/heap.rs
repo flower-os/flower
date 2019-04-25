@@ -6,7 +6,7 @@ use core::{iter, mem};
 use core::ptr::Unique;
 use core::ops::{Deref, DerefMut};
 use spin::{Once, Mutex};
-use super::paging::{PAGE_TABLES, Page, PageSize, EntryFlags};
+use super::paging::{PAGE_TABLES, Page, PageSize, EntryFlags, FreeMemory, InvalidateTlb};
 use crate::memory::{buddy_allocator, paging::PhysicalAddress};
 use crate::util;
 // use ...::Block // <-- this one comes from the macro invocation below
@@ -73,7 +73,7 @@ impl Heap {
                 table.map(
                     Page::containing_address(heap_tree_start + (page * 4096), PageSize::Kib4),
                     EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE,
-                    true,
+                    InvalidateTlb::Invalidate,
                 );
             }
 
@@ -125,7 +125,7 @@ impl Heap {
                 Page::containing_address(page_addr, PageSize::Kib4),
                 PhysicalAddress((physical_begin_frame + page) * 4096),
                 EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE,
-                true, // Do invplg
+                InvalidateTlb::Invalidate,
             );
         }
 
@@ -168,8 +168,8 @@ impl Heap {
 
             PAGE_TABLES.lock().unmap(
                 Page::containing_address(page_addr, PageSize::Kib4),
-                false, // Do not free backing memory
-                true, // Do invplg
+                FreeMemory::Free,
+                InvalidateTlb::NoInvalidate,
             );
         }
     }
@@ -215,7 +215,7 @@ unsafe impl GlobalAlloc for Heap {
                 page_tables.map(
                     Page::containing_address(page_addr, PageSize::Kib4),
                     EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE,
-                    false, // Do not invplg -- not an overwrite
+                    InvalidateTlb::NoInvalidate,
                 );
             }
         }
@@ -260,8 +260,8 @@ unsafe impl GlobalAlloc for Heap {
 
                 PAGE_TABLES.lock().unmap(
                     Page::containing_address(global_ptr, PageSize::Kib4),
-                    true, // Free backing memory
-                    true, // Do invplg
+                    FreeMemory::Free,
+                    InvalidateTlb::Invalidate,
                 );
             }
         } else {
@@ -271,8 +271,8 @@ unsafe impl GlobalAlloc for Heap {
 
                PAGE_TABLES.lock().unmap(
                    Page::containing_address(page_addr, PageSize::Kib4),
-                   true, // Free backing memory
-                   true, // Do invplg
+                   FreeMemory::Free,
+                   InvalidateTlb::Invalidate,
                );
            }
        }

@@ -37,7 +37,6 @@ extern crate lazy_static;
 extern crate static_assertions;
 extern crate arrayvec;
 
-use core::fmt::Write;
 use crate::drivers::keyboard::{Keyboard, KeyEventType, Ps2Keyboard};
 use crate::drivers::keyboard::keymap;
 use crate::drivers::{ps2, serial};

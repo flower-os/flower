@@ -8,6 +8,18 @@ use crate::util::{self, round_up_divide};
 use core::ops::Range;
 use alloc::vec::Vec;
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum FreeMemory {
+    Free,
+    NoFree,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum InvalidateTlb {
+    Invalidate,
+    NoInvalidate,
+}
+
 pub struct Mapper {
     p4: Unique<PageTable<Level4>>,
 }
@@ -87,7 +99,7 @@ impl Mapper {
         page: Page,
         physical_address: PhysicalAddress,
         flags: EntryFlags,
-        invplg: bool
+        invplg: InvalidateTlb,
     ) {
         let mut p2 = self.p4_mut()
             .next_table_create(page.p4_index()).expect("No next p3 table!")
@@ -115,7 +127,7 @@ impl Mapper {
                 flags | EntryFlags::PRESENT,
             );
 
-            if invplg {
+            if invplg == InvalidateTlb::Invalidate {
                 tlb::flush(::x86_64::VirtAddr::new(page.start_address().unwrap() as u64));
             }
         } else {
@@ -123,7 +135,7 @@ impl Mapper {
         }
     }
 
-    pub unsafe fn map(&mut self, page: Page, flags: EntryFlags, invplg: bool) {
+    pub unsafe fn map(&mut self, page: Page, flags: EntryFlags, invplg: InvalidateTlb) {
         use core::ptr;
 
         assert!(page.size.is_some(), "Page needs size!");
@@ -145,7 +157,7 @@ impl Mapper {
         );
     }
 
-    pub unsafe fn unmap(&mut self, page: Page, free_physical_memory: bool, invplg: bool) {
+    pub unsafe fn unmap(&mut self, page: Page, free_physmem: FreeMemory, invplg: InvalidateTlb) {
         assert!(page.start_address().is_some(), "Page to map requires size!");
         assert!(
             self.walk_page_table(page).is_some(),
@@ -166,7 +178,7 @@ impl Mapper {
             p1[page.p1_index()].set_unused();
 
             // TODO free p1/p2/p3 tables if they are empty
-            if free_physical_memory {
+            if free_physmem == FreeMemory::Free {
                 PHYSICAL_ALLOCATOR.deallocate(frame.0 as *const _, 0);
             }
         } else {
@@ -176,12 +188,12 @@ impl Mapper {
             p2[page.p2_index()].set_unused();
 
             // TODO free p2/p3 tables if they are empty
-            if free_physical_memory {
+            if free_physmem == FreeMemory::Free {
                 PHYSICAL_ALLOCATOR.deallocate(frame.0 as *const _, 9);
             }
         }
 
-        if invplg {
+        if invplg == InvalidateTlb::Invalidate {
             // Flush tlb
             tlb::flush(::x86_64::VirtAddr::new(page.start_address().unwrap() as u64));
         }
@@ -192,7 +204,7 @@ impl Mapper {
         &mut self,
         addresses: RangeInclusive<usize>,
         flags: EntryFlags,
-        invplg: bool
+        invplg: InvalidateTlb,
     ) {
         for frame_no in (addresses.start() / 4096)..=(addresses.end() / 4096) {
             let addr = (frame_no * 4096) as usize;
@@ -211,7 +223,7 @@ impl Mapper {
         &mut self,
         addresses: Range<usize>,
         flags: EntryFlags,
-        invplg: bool,
+        invplg: InvalidateTlb,
     ) {
         let frame_end = round_up_divide(addresses.end as u64, 4096) as usize;
         for frame_no in (addresses.start / 4096)..=frame_end  {
@@ -226,7 +238,12 @@ impl Mapper {
         }
     }
 
-    pub unsafe fn map_page_range(&mut self, mapping: PageRangeMapping, invplg: bool, flags: EntryFlags) {
+    pub unsafe fn map_page_range(
+        &mut self,
+        mapping: PageRangeMapping,
+        invplg: InvalidateTlb,
+        flags: EntryFlags
+    ) {
         let frames = mapping.start_frame..=mapping.start_frame + mapping.pages.size_hint().1.unwrap();
 
         for (frame_no, page_no) in frames.zip(mapping.pages) {
@@ -291,14 +308,13 @@ impl TemporaryPage {
             page_addr,
         );
 
-        active_table.map_to(self.page, frame, EntryFlags::WRITABLE, true);
+        active_table.map_to(self.page, frame, EntryFlags::WRITABLE, InvalidateTlb::Invalidate);
         VirtualAddress(self.page.start_address().expect("Page in TemporaryPage requires size"))
     }
 
     /// Unmaps the temporary page in the active table.
     pub unsafe fn unmap(&mut self, active_table: &mut ActivePageMap) {
-        // Unmap and invplg but do not free backing mem
-        active_table.unmap(self.page, false, true);
+        active_table.unmap(self.page, FreeMemory::NoFree, InvalidateTlb::NoInvalidate,);
     }
 
     pub unsafe fn map_table_frame(
@@ -389,7 +405,7 @@ impl ActivePageMap {
                 let phys_addr = frames[page_no - pages.start()];
 
                 unsafe {
-                    mapper.map_to(page, phys_addr, flags, false);
+                    mapper.map_to(page, phys_addr, flags, InvalidateTlb::NoInvalidate);
                 }
             }
         });
