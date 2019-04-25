@@ -177,16 +177,6 @@ impl Heap {
     pub const fn tree_size() -> usize {
         mem::size_of::<[Block; BLOCKS_IN_TREE]>()
     }
-
-    pub fn is_free(&self, ptr: *const u8, layout: Layout) {
-        let order = order(layout.size());
-        let global_ptr = ptr;
-        let ptr = ptr as usize - HEAP_START;
-
-        let level = MAX_ORDER - order;
-        let level_offset = super::buddy_allocator::blocks_in_level(level);
-        let index = level_offset + ((ptr as usize) >> (order + BASE_ORDER));
-    }
 }
 
 unsafe impl GlobalAlloc for Heap {

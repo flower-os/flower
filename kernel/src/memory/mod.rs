@@ -69,8 +69,6 @@ pub fn init_memory(mb_info_addr: usize, guard_page_addr: usize) {
         )
     };
 
-    PHYSICAL_ALLOCATOR.is_free(mb_info.start_address() as *const u8, 0);
-
     // ** IMPORTANT! **
     // The heap must NOT BE USED except in one specific place -- all heap objects will be corrupted
     // after the remap.

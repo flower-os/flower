@@ -182,19 +182,6 @@ impl<'a> PhysicalAllocator<'a> {
 
         tree.deallocate(local_ptr, order);
     }
-
-    pub fn is_free(&self, ptr: *const u8, order: u8) {
-        let tree = (ptr as usize) >> (LEVEL_COUNT - 1 + BASE_ORDER);
-        let local_ptr = (ptr as usize % (1 << LEVEL_COUNT - 1 + BASE_ORDER)) as *const u8;
-
-        let trees = self.trees.wait().unwrap();
-        let mut lock = trees[tree].lock();
-
-        let mut tree = lock.as_mut().unwrap();
-        let level = MAX_ORDER - order;
-        let level_offset = super::buddy_allocator::blocks_in_tree(level);
-        let index = level_offset + ((local_ptr as usize) >> (order + BASE_ORDER)) + 1;
-    }
 }
 
 enum TreeBox<'a> {

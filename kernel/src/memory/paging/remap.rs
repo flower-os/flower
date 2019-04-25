@@ -123,8 +123,6 @@ pub fn remap_kernel(
         paging::EntryFlags::NO_EXECUTE | paging::EntryFlags::WRITABLE
     );
 
-    PHYSICAL_ALLOCATOR.is_free(paddr, 0);
-
     trace!("mem: switching page tables");
     active_table.switch(new_table);
 
