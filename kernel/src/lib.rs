@@ -126,7 +126,7 @@ fn print_flower() -> Result<(), terminal::TerminalOutputError<()>> {
     const FLOWER_STEM: &'static str = include_str!("resources/art/flower_stem.txt");
 
     let mut stdout = terminal::STDOUT.write();
-    let old = stdout.cursor_pos();
+    let old = stdout.cursor_pos().expect("Terminal must support cursor");
 
     stdout.write_string_colored(FLOWER, color!(LightBlue on Black))?;
     stdout.write_string_colored(FLOWER_STEM, color!(Green on Black))?;

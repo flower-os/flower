@@ -43,20 +43,20 @@ impl VgaWriter {
 
 impl TerminalOutput<()> for VgaWriter {
 
-    fn resolution(&self) -> Resolution {
-        RESOLUTION
+    fn resolution(&self) -> Result<Resolution, TerminalOutputError<()>> {
+        Ok(RESOLUTION)
     }
 
     fn color_supported(&self, _color: Color) -> bool {
         true // For now, the color scheme is the vga color scheme
     }
 
-    fn cursor_pos(&self) -> Point {
-        self.cursor
+    fn cursor_pos(&self) -> Result<Point, TerminalOutputError<()>> {
+        Ok(self.cursor)
     }
 
     fn set_cursor_pos(&mut self, cursor: Point) -> Result<(), TerminalOutputError<()>> {
-        if self.in_bounds(cursor) {
+        if self.in_bounds(cursor).unwrap() {
             self.cursor = cursor;
             Ok(())
         } else {
@@ -64,16 +64,16 @@ impl TerminalOutput<()> for VgaWriter {
         }
     }
 
-    fn color(&self) -> ColorPair {
-        self.color
+    fn color(&self) -> Result<ColorPair, TerminalOutputError<()>> {
+        Ok(self.color)
     }
 
     fn set_color(&mut self, color: ColorPair) -> Result<(), TerminalOutputError<()>> {
         if !self.color_supported(color.foreground) {
-            return Err(TerminalOutputError::ColorUnsupported(color.foreground));
+            return Err(TerminalOutputError::SpecificColorUnsupported(color.foreground));
         }
         if !self.color_supported(color.background) {
-            return Err(TerminalOutputError::ColorUnsupported(color.background));
+            return Err(TerminalOutputError::SpecificColorUnsupported(color.background));
         }
 
         self.color = color;
@@ -85,7 +85,7 @@ impl TerminalOutput<()> for VgaWriter {
         match character {
             '\n' => self.new_line(),
             _ => {
-                let mut pos = self.cursor_pos();
+                let mut pos = self.cursor_pos().unwrap();
                 self.set_char(TerminalCharacter::new(character, color), pos)?;
 
                 pos.x += 1;
@@ -106,13 +106,13 @@ impl TerminalOutput<()> for VgaWriter {
         let point = Point::new(point.x, RESOLUTION.y - 1 - point.y);
 
         if !self.color_supported(char.color.foreground) {
-            return Err(TerminalOutputError::ColorUnsupported(char.color.foreground));
+            return Err(TerminalOutputError::SpecificColorUnsupported(char.color.foreground));
         }
         if !self.color_supported(char.color.background) {
-            return Err(TerminalOutputError::ColorUnsupported(char.color.background));
+            return Err(TerminalOutputError::SpecificColorUnsupported(char.color.background));
         }
 
-        if !self.in_bounds(point) {
+        if !self.in_bounds(point).unwrap() {
             return Err(TerminalOutputError::OutOfBounds(point));
         }
 
@@ -128,7 +128,7 @@ impl TerminalOutput<()> for VgaWriter {
     }
 
     fn clear_line(&mut self, y: usize) -> Result<(), TerminalOutputError<()>> {
-        if self.in_bounds(Point::new(0, y)) {
+        if self.in_bounds(Point::new(0, y)).unwrap() {
             let background = self.color.background;
             self.buffer().clear_row(y, background);
             Ok(())
@@ -138,7 +138,7 @@ impl TerminalOutput<()> for VgaWriter {
     }
 
     fn clear(&mut self) -> Result<(), TerminalOutputError<()>> {
-        for line in 0..self.resolution().y {
+        for line in 0..self.resolution().unwrap().y {
             self.clear_line(line)?;
         }
 

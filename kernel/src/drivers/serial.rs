@@ -3,6 +3,8 @@
 use core::fmt::{self, Write};
 use spin::Mutex;
 use crate::io::Port;
+use crate::terminal::{TerminalOutput, TerminalOutputError, Resolution, Point, TerminalCharacter};
+use crate::color::{Color, ColorPair};
 
 pub const PORT_1_ADDR: u16 = 0x3f8;
 pub const PORT_2_ADDR: u16 = 0x2f8;
@@ -101,6 +103,117 @@ impl SerialPort {
         } else {
             false
         }
+    }
+}
+
+impl TerminalOutput<()> for SerialPort {
+    /// Check if a color is supported by this terminal
+    fn color_supported(&self, color: Color) -> bool {
+        false
+    }
+
+    /// The resolution of the [TerminalWriter].
+    fn resolution(&self) -> Result<Resolution, TerminalOutputError<()>> {
+        Err(TerminalOutputError::StreamWithoutResolution)
+    }
+
+    /// Checks if a point is in bounds of the text area
+    fn in_bounds(&self, p: Point) -> Result<bool, TerminalOutputError<()>> {
+        Err(TerminalOutputError::StreamWithoutResolution)
+    }
+
+    /// Gets position of this terminal's cursor
+    fn cursor_pos(&self) -> Result<Point, TerminalOutputError<()>> {
+        Err(TerminalOutputError::CursorUnsupported)
+    }
+
+    /// Sets the position of this terminal's cursor
+    ///
+    /// # Implementation Note
+    ///
+    /// This should check whether the point is in bounds
+    fn set_cursor_pos(&mut self, point: Point) -> Result<(), TerminalOutputError<()>> {
+        Err(TerminalOutputError::CursorUnsupported)
+    }
+
+    /// Gets the color this terminal is using
+    fn color(&self) -> Result<ColorPair, TerminalOutputError<()>> {
+        Err(TerminalOutputError::ColorUnsupported)
+    }
+
+    /// Sets the color for this terminal to use
+    ///
+    /// # Implementation Note
+    ///
+    /// This should check whether the color is supported by this terminal
+    fn set_color(&mut self, color: ColorPair) -> Result<(), TerminalOutputError<()>> {
+        Err(TerminalOutputError::ColorUnsupported)
+    }
+
+    /// Sets the character at a position
+    ///
+    /// # Implementation Note
+    ///
+    /// This should check whether the point is in bounds
+    fn set_char(&mut self, char: TerminalCharacter, point: Point) -> Result<(), TerminalOutputError<()>> {
+        Err(TerminalOutputError::SetCharacterUnsupported)
+    }
+
+    /// Writes a colored character to this terminal
+    fn write_colored(&mut self, character: char, color: ColorPair) -> Result<(), TerminalOutputError<()>> {
+        Err(TerminalOutputError::ColorUnsupported)
+    }
+
+    /// Writes a character to this terminal with the current set color
+    fn write(&mut self, character: char) -> Result<(), TerminalOutputError<()>> {
+        let mut buf = [0u8; 4];
+        for byte in character.encode_utf8(&mut buf).bytes() {
+            while !self.try_write(byte) {}
+        }
+        
+        Ok(())
+    }
+
+    /// Writes a string to this terminal with the current set color
+    fn write_string(&mut self, str: &str) -> Result<(), TerminalOutputError<()>> {
+        for byte in str.bytes() {
+            while !self.try_write(byte) {}
+        }
+
+        Ok(())
+    }
+
+    /// Writes a colored string to this terminal
+    fn write_string_colored(&mut self, str: &str, color: ColorPair) -> Result<(), TerminalOutputError<()>> {
+        Err(TerminalOutputError::ColorUnsupported)
+    }
+
+    fn clear_line(&mut self, y: usize) -> Result<(), TerminalOutputError<()>> {
+        Err(TerminalOutputError::ClearUnsupported)
+    }
+
+    /// Clears the screen with the current background color
+    fn clear(&mut self) -> Result<(), TerminalOutputError<()>> {
+        Err(TerminalOutputError::ClearUnsupported)
+    }
+    
+    /// Scrolls the terminal down
+    fn scroll_down(&mut self, lines: usize) -> Result<(), TerminalOutputError<()>> {
+        for _ in 0..lines {
+            self.new_line()?;
+        }
+
+        Ok(())
+    }
+
+    /// Writes a newline to this terminal, resetting cursor position
+    fn new_line(&mut self) -> Result<(), TerminalOutputError<()>> {
+        self.write('\n')
+    }
+
+    /// Backspaces one character
+    fn backspace(&mut self) -> Result<(), TerminalOutputError<()>> {
+        Err(TerminalOutputError::BackspaceUnsupported)
     }
 }
 
