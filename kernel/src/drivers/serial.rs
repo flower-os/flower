@@ -21,8 +21,8 @@ pub struct SerialPort {
     line_control: Port<u8>,
     modem_control: Port<u8>,
     line_status: Port<u8>,
-    modem_status: Port<u8>,
-    scratch: Port<u8>,
+    _modem_status: Port<u8>,
+    _scratch: Port<u8>,
 }
 
 impl SerialPort {
@@ -35,8 +35,8 @@ impl SerialPort {
             line_control: Port::new(port_base + 3),
             modem_control: Port::new(port_base + 4),
             line_status: Port::new(port_base + 5),
-            modem_status: Port::new(port_base + 6),
-            scratch: Port::new(port_base + 7),
+            _modem_status: Port::new(port_base + 6),
+            _scratch: Port::new(port_base + 7),
         }
     }
 
@@ -80,7 +80,7 @@ impl SerialPort {
     /// Returns the line status. Panics if not initialized.
     pub fn status(&mut self) -> LineStatus {
         if self.initialized {
-            LineStatus::from_bits_truncate(self.modem_status.read())
+            LineStatus::from_bits_truncate(self.line_status.read())
         } else {
             panic!("Serial port not initialized");
         }
@@ -108,7 +108,7 @@ impl SerialPort {
 
 impl TerminalOutput<()> for SerialPort {
     /// Check if a color is supported by this terminal
-    fn color_supported(&self, color: Color) -> bool {
+    fn color_supported(&self, _color: Color) -> bool {
         false
     }
 
@@ -118,7 +118,7 @@ impl TerminalOutput<()> for SerialPort {
     }
 
     /// Checks if a point is in bounds of the text area
-    fn in_bounds(&self, p: Point) -> Result<bool, TerminalOutputError<()>> {
+    fn in_bounds(&self, _p: Point) -> Result<bool, TerminalOutputError<()>> {
         Err(TerminalOutputError::StreamWithoutResolution)
     }
 
@@ -132,7 +132,7 @@ impl TerminalOutput<()> for SerialPort {
     /// # Implementation Note
     ///
     /// This should check whether the point is in bounds
-    fn set_cursor_pos(&mut self, point: Point) -> Result<(), TerminalOutputError<()>> {
+    fn set_cursor_pos(&mut self, _point: Point) -> Result<(), TerminalOutputError<()>> {
         Err(TerminalOutputError::CursorUnsupported)
     }
 
@@ -146,7 +146,7 @@ impl TerminalOutput<()> for SerialPort {
     /// # Implementation Note
     ///
     /// This should check whether the color is supported by this terminal
-    fn set_color(&mut self, color: ColorPair) -> Result<(), TerminalOutputError<()>> {
+    fn set_color(&mut self, _color: ColorPair) -> Result<(), TerminalOutputError<()>> {
         Err(TerminalOutputError::ColorUnsupported)
     }
 
@@ -155,12 +155,12 @@ impl TerminalOutput<()> for SerialPort {
     /// # Implementation Note
     ///
     /// This should check whether the point is in bounds
-    fn set_char(&mut self, char: TerminalCharacter, point: Point) -> Result<(), TerminalOutputError<()>> {
+    fn set_char(&mut self, _char: TerminalCharacter, _point: Point) -> Result<(), TerminalOutputError<()>> {
         Err(TerminalOutputError::SetCharacterUnsupported)
     }
 
     /// Writes a colored character to this terminal
-    fn write_colored(&mut self, character: char, color: ColorPair) -> Result<(), TerminalOutputError<()>> {
+    fn write_colored(&mut self, _character: char, _color: ColorPair) -> Result<(), TerminalOutputError<()>> {
         Err(TerminalOutputError::ColorUnsupported)
     }
 
@@ -184,11 +184,11 @@ impl TerminalOutput<()> for SerialPort {
     }
 
     /// Writes a colored string to this terminal
-    fn write_string_colored(&mut self, str: &str, color: ColorPair) -> Result<(), TerminalOutputError<()>> {
+    fn write_string_colored(&mut self, _str: &str, _color: ColorPair) -> Result<(), TerminalOutputError<()>> {
         Err(TerminalOutputError::ColorUnsupported)
     }
 
-    fn clear_line(&mut self, y: usize) -> Result<(), TerminalOutputError<()>> {
+    fn clear_line(&mut self, _y: usize) -> Result<(), TerminalOutputError<()>> {
         Err(TerminalOutputError::ClearUnsupported)
     }
 
