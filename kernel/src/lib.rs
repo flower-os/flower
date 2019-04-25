@@ -6,6 +6,7 @@
 #![feature(nll)]
 #![feature(type_ascription)]
 #![feature(ptr_internals, align_offset)]
+#![feature(arbitrary_self_types)]
 #![feature(allocator_api, box_syntax)]
 #![feature(abi_x86_interrupt)]
 #![feature(compiler_builtins_lib)]
@@ -36,9 +37,10 @@ extern crate lazy_static;
 extern crate static_assertions;
 extern crate arrayvec;
 
+use core::fmt::Write;
 use crate::drivers::keyboard::{Keyboard, KeyEventType, Ps2Keyboard};
 use crate::drivers::keyboard::keymap;
-use crate::drivers::ps2;
+use crate::drivers::{ps2, serial};
 use crate::terminal::TerminalOutput;
 
 #[cfg(not(test))]
@@ -68,7 +70,9 @@ pub static HEAP: Heap = Heap::new();
 /// Kernel main function
 #[no_mangle]
 pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
+    serial::PORT_1.lock().init(serial::MAX_BAUD, false).expect("Error initializing serial port 1");
     say_hello();
+    info!("serial: initialized port 1");
     log::init();
     memory::init_memory(multiboot_info_addr, guard_page_addr);
     gdt::init();
@@ -105,6 +109,9 @@ fn say_hello() {
     println!("Flower kernel boot!");
     println!("-------------------");
 
+    serial_println!("Flower kernel boot!");
+    serial_println!("-------------------");
+
     // Reset colors
     terminal::STDOUT.write().set_color(color!(White on Black))
         .expect("Color should be supported");
@@ -115,11 +122,16 @@ fn print_flower() -> Result<(), terminal::TerminalOutputError<()>> {
     const FLOWER_STEM: &'static str = include_str!("resources/art/flower_stem.txt");
 
     let mut stdout = terminal::STDOUT.write();
-    let old = stdout.cursor_pos();
+    let old = stdout.cursor_pos().expect("Terminal must support cursor");
 
     stdout.write_string_colored(FLOWER, color!(LightBlue on Black))?;
     stdout.write_string_colored(FLOWER_STEM, color!(Green on Black))?;
-    stdout.set_cursor_pos(old)
+    stdout.set_cursor_pos(old)?;
+
+    serial_print!("{}", FLOWER);
+    serial_println!("{}", FLOWER_STEM);
+
+    Ok(())
 }
 
 fn keyboard_echo_loop(controller: &mut ps2::Controller) {

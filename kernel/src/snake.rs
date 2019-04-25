@@ -22,7 +22,7 @@ struct Game<'a> {
 
 impl<'a> Game<'a> {
     fn new(keyboard: &'a mut Ps2Keyboard<'a>) -> Game<'a> {
-        let res = STDOUT.read().resolution();
+        let res = STDOUT.read().resolution().expect("Terminal must have resolution");
 
         Game {
             grid: Grid::empty(res.x as usize, res.y as usize),
@@ -108,9 +108,9 @@ impl<'a> Game<'a> {
     }
 
     fn notification(&mut self, message: &str) {
-        let old_color = STDOUT.read().color();
+        let old_color = STDOUT.read().color().expect("Terminal must support colors");
         STDOUT.write().set_color(color!(White on Black)).expect("Error setting color!");
-        let center = STDOUT.read().resolution().center();
+        let center = STDOUT.read().resolution().expect("Terminal must have resolution").center();
 
         centered_text(message, center.x, center.y);
         centered_text("Press any key to continue...", center.x, center.y - 1);
@@ -212,7 +212,7 @@ struct Snake {
 impl Snake {
     fn new() -> Snake {
         Snake {
-            head: STDOUT.read().resolution().center(),
+            head: STDOUT.read().resolution().expect("Terminal must have resolution").center(),
             direction: Direction::Right,
             blocks: Vec::with_capacity(128),
             len: BASE_LENGTH,
@@ -383,7 +383,7 @@ fn centered_text(message: &str, x_center: usize, y: usize) {
     let mut stdout = STDOUT.write();
 
     let cursor = Point::new(x_center - message.len() / 2, y);
-    let old_cursor = stdout.cursor_pos();
+    let old_cursor = stdout.cursor_pos().expect("Terminal must support cursor");
 
     stdout.set_cursor_pos(cursor).expect("Error setting cursor pos!");
     stdout.write_string(message).expect("Error writing string!");

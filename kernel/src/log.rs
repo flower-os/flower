@@ -8,6 +8,8 @@ macro_rules! error {
             use crate::terminal::TerminalOutput;
             crate::terminal::STDOUT.write().write_string_colored("[error] ", color!(Red on Black))
                 .expect("Error logging");
+            serial_print!("[error] " );
+            serial_println!($thing, $($extra)*);
             println!($thing, $($extra)*);
         }
     };
@@ -24,6 +26,8 @@ macro_rules! warn {
             use crate::terminal::TerminalOutput;
             crate::terminal::STDOUT.write().write_string_colored("[warn]  ", color!(LightRed on Black))
                 .expect("Error logging");
+            serial_print!("[warn]  " );
+            serial_println!($thing, $($extra)*);
             println!($thing, $($extra)*);
         }
     };
@@ -39,6 +43,8 @@ macro_rules! info {
             use crate::terminal::TerminalOutput;
             crate::terminal::STDOUT.write().write_string_colored("[info]  ", color!(LightBlue on Black))
                 .expect("Error logging");
+            serial_print!("[info]  " );
+            serial_println!($thing, $($extra)*);
             println!($thing, $($extra)*);
         }
     };
@@ -55,6 +61,8 @@ macro_rules! debug {
             use crate::terminal::TerminalOutput;
             crate::terminal::STDOUT.write().write_string_colored("[debug] ", color!(Cyan on Black))
                 .expect("Error logging");
+            serial_print!("[debug] " );
+            serial_println!($thing, $($extra)*);
             println!($thing, $($extra)*);
         }
     };
@@ -71,6 +79,8 @@ macro_rules! trace {
             use crate::terminal::TerminalOutput;
             crate::terminal::STDOUT.write().write_string_colored("[trace] ", color!(White on Black))
                 .expect("Error logging");
+            serial_print!("[trace] " );
+            serial_println!($thing, $($extra)*);
             println!($thing, $($extra)*);
         }
     };
@@ -100,7 +110,9 @@ impl Log for Logger {
     }
 
     fn log(&self, record: &Record) {
+        use crate::drivers::serial;
         use crate::terminal::{STDOUT, TerminalOutput};
+        use core::fmt::Write;
 
         if self.enabled(record.metadata()) {
             let (label, color) = match record.level() {
@@ -117,6 +129,9 @@ impl Log for Logger {
 
             STDOUT.write().write_string(&message)
                 .expect("Error logging");
+
+            write!(serial::PORT_1.lock(), "{}", label).unwrap();
+            write!(serial::PORT_1.lock(), "{}", message).unwrap();
         }
     }
 

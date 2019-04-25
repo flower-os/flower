@@ -38,6 +38,25 @@ pub fn stdout_print(args: fmt::Arguments) {
     STDOUT.write().write_fmt(args).unwrap();
 }
 
+#[cfg(not(test))]
+macro_rules! serial_print {
+    ($($arg:tt)*) => ({
+        $crate::terminal::serial1_print(format_args!($($arg)*));
+    });
+}
+
+#[cfg(not(test))]
+macro_rules! serial_println {
+    ($fmt:expr) => (serial_print!(concat!($fmt, "\n")));
+    ($fmt:expr, $($arg:tt)*) => (serial_print!(concat!($fmt, "\n"), $($arg)*));
+}
+
+/// Writes formatted string to serial 1, for print macro use
+#[cfg(not(test))]
+pub fn serial1_print(args: fmt::Arguments) {
+    crate::drivers::serial::PORT_1.lock().write_fmt(args).unwrap();
+}
+
 /// A standard output terminal
 pub static STDOUT: RwLock<Stdout> = RwLock::new(Stdout(&vga::WRITER));
 
@@ -51,11 +70,11 @@ impl<'a> TerminalOutput<()> for Stdout<'a> {
         self.0.read().color_supported(color)
     }
 
-    fn resolution(&self) -> Resolution {
+    fn resolution(&self) -> Result<Resolution, TerminalOutputError<()>> {
         self.0.read().resolution()
     }
 
-    fn cursor_pos(&self) -> Point {
+    fn cursor_pos(&self) -> Result<Point, TerminalOutputError<()>> {
         self.0.read().cursor_pos()
     }
 
@@ -63,7 +82,7 @@ impl<'a> TerminalOutput<()> for Stdout<'a> {
         self.0.write().set_cursor_pos(point)
     }
 
-    fn color(&self) -> ColorPair {
+    fn color(&self) -> Result<ColorPair, TerminalOutputError<()>> {
         self.0.read().color()
     }
 
@@ -106,11 +125,20 @@ pub enum TerminalOutputError<E: Debug> {
     BackspaceUnsupported,
     /// Backspacing is unavailable
     BackspaceUnavailable(BackspaceUnavailableCause),
+    /// Setting characters at position is unsupported
+    SetCharacterUnsupported,
+    /// Cursor is unsupported
+    CursorUnsupported,
     /// The given point was attempted to be accessed but is out of bounds
     OutOfBounds(Point),
-    Debug(Point, Point, Point),
     /// The given color is not supported by the terminal
-    ColorUnsupported(Color),
+    SpecificColorUnsupported(Color),
+    /// The terminal does not support any color, i.e does not support coloring at all (e.g serial)
+    ColorUnsupported,
+    /// Clearing the whole/a line in the terminal is not supported
+    ClearUnsupported,
+    /// Terminal is a stream (and has no resolution)
+    StreamWithoutResolution,
     /// An error with no other representation
     Other(E),
 }
@@ -190,15 +218,15 @@ pub trait TerminalOutput<E: Debug> {
     fn color_supported(&self, color: Color) -> bool;
 
     /// The resolution of the [TerminalWriter].
-    fn resolution(&self) -> Resolution;
+    fn resolution(&self) -> Result<Resolution, TerminalOutputError<E>>;
 
     /// Checks if a point is in bounds of the text area
-    fn in_bounds(&self, p: Point) -> bool {
-        p.x < self.resolution().x && p.y < self.resolution().y
+    fn in_bounds(&self, p: Point) -> Result<bool, TerminalOutputError<E>> {
+        Ok(p.x < self.resolution()?.x && p.y < self.resolution()?.y)
     }
 
     /// Gets position of this terminal's cursor
-    fn cursor_pos(&self) -> Point;
+    fn cursor_pos(&self) -> Result<Point, TerminalOutputError<E>>;
 
     /// Sets the position of this terminal's cursor
     ///
@@ -208,7 +236,7 @@ pub trait TerminalOutput<E: Debug> {
     fn set_cursor_pos(&mut self, point: Point) -> Result<(), TerminalOutputError<E>>;
 
     /// Gets the color this terminal is using
-    fn color(&self) -> ColorPair;
+    fn color(&self) -> Result<ColorPair, TerminalOutputError<E>>;
 
     /// Sets the color for this terminal to use
     ///
@@ -229,12 +257,12 @@ pub trait TerminalOutput<E: Debug> {
 
     /// Writes a character to this terminal with the current set color
     fn write(&mut self, character: char) -> Result<(), TerminalOutputError<E>> {
-        self.write_colored(character, self.color())
+        self.write_colored(character, self.color()?)
     }
 
     /// Writes a string to this terminal with the current set color
     fn write_string(&mut self, str: &str) -> Result<(), TerminalOutputError<E>> {
-        self.write_string_colored(str, self.color())
+        self.write_string_colored(str, self.color()?)
     }
 
     /// Writes a colored string to this terminal
@@ -261,7 +289,7 @@ pub trait TerminalOutput<E: Debug> {
 
     /// Writes a newline to this terminal, resetting cursor position
     fn new_line(&mut self) -> Result<(), TerminalOutputError<E>> {
-        let mut pos = self.cursor_pos();
+        let mut pos = self.cursor_pos()?;
         pos.x = 0;
 
         if pos.y > 0 {
@@ -275,30 +303,30 @@ pub trait TerminalOutput<E: Debug> {
 
     /// Backspaces one character
     fn backspace(&mut self) -> Result<(), TerminalOutputError<E>> {
-        if self.cursor_pos() == Point::new(0, 0) {
+        if self.cursor_pos()? == Point::new(0, 0) {
             return Err(TerminalOutputError::BackspaceUnavailable(
                 BackspaceUnavailableCause::TopOfTerminal)
             );
         }
 
-        if self.cursor_pos().x == 0 {
-            if self.cursor_pos().y != self.resolution().y {
+        if self.cursor_pos()?.x == 0 {
+            if self.cursor_pos()?.y != self.resolution()?.y {
                 self.set_cursor_pos(Point {
-                    x: self.resolution().x - 1,
-                    y: self.cursor_pos().y + 1,
+                    x: self.resolution()?.x - 1,
+                    y: self.cursor_pos()?.y + 1,
                 })?;
             }
         } else {
             self.set_cursor_pos(Point {
-                x: self.cursor_pos().x - 1,
-                ..self.cursor_pos()
+                x: self.cursor_pos()?.x - 1,
+                ..self.cursor_pos()?
             })?;
         }
 
         let blank = TerminalCharacter::new(' ', ColorPair::new(
-            self.color().background, self.color().background,
+            self.color()?.background, self.color()?.background,
         ));
 
-        self.set_char(blank, self.cursor_pos())
+        self.set_char(blank, self.cursor_pos()?)
     }
 }
