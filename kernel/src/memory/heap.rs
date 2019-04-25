@@ -168,7 +168,7 @@ impl Heap {
 
             PAGE_TABLES.lock().unmap(
                 Page::containing_address(page_addr, PageSize::Kib4),
-                FreeMemory::Free,
+                FreeMemory::NoFree,
                 InvalidateTlb::NoInvalidate,
             );
         }
