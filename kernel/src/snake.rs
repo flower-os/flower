@@ -253,15 +253,10 @@ impl Snake {
 
     fn try_move(&mut self, grid: &mut Grid) -> MoveResult {
 
-        // Special case: 0 - 1 would result in overflow and panic
-        if self.direction == Direction::Down && self.head.y == 0 {
-            return MoveResult::Lose;
-        }
-
-        let moved_head = self.direction.offset(self.head, 1);
-        if !grid.contains(moved_head) {
-            return MoveResult::Lose;
-        }
+        let moved_head = match self.direction.offset(self.head, 1) {
+            Some(head) if grid.contains(head) => head,
+            _ => return MoveResult::Lose,
+        };
 
         if self.len as usize == grid.width * grid.height {
             return MoveResult::Win;
@@ -286,12 +281,21 @@ impl Snake {
 }
 
 impl Direction {
-    fn offset(&self, point: Point, amount: usize) -> Point {
+    /// Returns none if it would overflow
+    fn offset(&self, point: Point, amount: usize) -> Option<Point> {
         match self {
-            Direction::Up => Point::new(point.x, point.y + amount),
-            Direction::Down => Point::new(point.x, point.y - amount),
-            Direction::Left => Point::new(point.x - amount, point.y),
-            Direction::Right => Point::new(point.x + amount, point.y),
+            Direction::Up => Some(Point::new(point.x, point.y + amount)),
+            Direction::Down => if point.y >= amount {
+                Some(Point::new(point.x, point.y - amount))
+            } else {
+                None
+            },
+            Direction::Left => if point.x >= amount {
+                Some(Point::new(point.x - amount, point.y))
+            } else {
+                None
+            },
+            Direction::Right => Some(Point::new(point.x + amount, point.y)),
         }
     }
 

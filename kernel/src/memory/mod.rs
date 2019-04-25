@@ -36,7 +36,7 @@ use crate::util::round_up_divide;
 use crate::gdt;
 
 pub const KERNEL_MAPPING_BEGIN: usize = 0xffffffff80000000;
-const IST_STACK_SIZE_PAGES: usize = 1;
+const IST_STACK_SIZE_PAGES: usize = 3;
 
 pub fn init_memory(mb_info_addr: usize, guard_page_addr: usize) {
     info!("mem: initialising");
@@ -123,11 +123,15 @@ unsafe fn setup_ist(begin: Page) {
     let pages = IST_STACK_SIZE_PAGES * 7;
 
     for page in 0..pages {
-        PAGE_TABLES.lock().map(
-            Page::containing_address(begin.start_address().unwrap() + (page * 4096), PageSize::Kib4),
-            EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE,
-            true,
-        );
+        if page % IST_STACK_SIZE_PAGES == 0 {
+            // Page is guard page: do not map
+        } else {
+            PAGE_TABLES.lock().map(
+                Page::containing_address(begin.start_address().unwrap() + (page * 4096), PageSize::Kib4),
+                EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE,
+                true,
+            );
+        }
     }
 
     gdt::TSS.call_once(|| {

@@ -13,7 +13,7 @@ lazy_static! {
     static ref GDT: Gdt = {
         let mut gdt = GlobalDescriptorTable::new();
         let code_selector = gdt.add_entry(Descriptor::kernel_code_segment());
-        let data_selector = gdt.add_entry(Descriptor::UserSegment((1<<44) | (1<<47) | (1<<41)));
+        let data_selector = gdt.add_entry(Descriptor::UserSegment((1<<44) | (1<<47) | (1<<41) | (1<<53)));
         let tss_selector = gdt.add_entry(Descriptor::tss_segment(TSS.wait().unwrap()));
         Gdt {
             table: gdt,

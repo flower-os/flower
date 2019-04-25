@@ -6,6 +6,14 @@ pub extern "x86-interrupt" fn divide_by_zero(stack_frame: &mut ExceptionStackFra
     panic!("cpuex: divide by zero\n{:#?}", stack_frame);
 }
 
+pub extern "x86-interrupt" fn debug(stack_frame: &mut ExceptionStackFrame) {
+    panic!("cpuex: debug\n{:#?}", stack_frame);
+}
+
+pub extern "x86-interrupt" fn nmi(stack_frame: &mut ExceptionStackFrame) {
+    panic!("cpuex: nmi\n{:#?}", stack_frame);
+}
+
 pub extern "x86-interrupt" fn breakpoint(stack_frame: &mut ExceptionStackFrame) {
     panic!("cpuex: breakpoint\n{:#?}", stack_frame);
 }
@@ -32,19 +40,19 @@ pub extern "x86-interrupt" fn device_not_available(stack_frame: &mut ExceptionSt
 }
 
 pub extern "x86-interrupt" fn double_fault(stack_frame: &mut ExceptionStackFrame, code: u64) {
-    panic!("cpuex: double fault {}\n{:#?}", code, stack_frame);
+    panic!("cpuex: double fault 0x{:x}\n{:#?}", code, stack_frame);
 }
 
 pub extern "x86-interrupt" fn invalid_tss(stack_frame: &mut ExceptionStackFrame, code: u64) {
-    panic!("cpuex: invalid tss {}\n{:#?}", code, stack_frame);
+    panic!("cpuex: invalid tss 0x{:x}\n{:#?}", code, stack_frame);
 }
 
 pub extern "x86-interrupt" fn segment_not_present(stack_frame: &mut ExceptionStackFrame, code: u64) {
-    panic!("cpuex: segment not present {}\n{:#?}", code, stack_frame);
+    panic!("cpuex: segment not present 0x{:x}\n{:#?}", code, stack_frame);
 }
 
 pub extern "x86-interrupt" fn stack_segment_fault(stack_frame: &mut ExceptionStackFrame, code: u64) {
-    panic!("cpuex: stack segment fault {}\n{:#?}", code, stack_frame);
+    panic!("cpuex: stack segment fault 0x{:x}\n{:#?}", code, stack_frame);
 }
 
 pub extern "x86-interrupt" fn general_protection_fault(stack_frame: &mut ExceptionStackFrame, code: u64) {
@@ -81,7 +89,7 @@ pub extern "x86-interrupt" fn x87_floating_point(stack_frame: &mut ExceptionStac
 }
 
 pub extern "x86-interrupt" fn alignment_check(stack_frame: &mut ExceptionStackFrame, code: u64) {
-    panic!("cpuex: alignment check {}\n{:#?}", code, stack_frame);
+    panic!("cpuex: alignment check 0x{:x}\n{:#?}", code, stack_frame);
 }
 
 pub extern "x86-interrupt" fn machine_check(stack_frame: &mut ExceptionStackFrame) {
@@ -97,5 +105,5 @@ pub extern "x86-interrupt" fn virtualization(stack_frame: &mut ExceptionStackFra
 }
 
 pub extern "x86-interrupt" fn security_exception(stack_frame: &mut ExceptionStackFrame, code: u64) {
-    panic!("cpuex: security exception {}\n{:#?}", code, stack_frame);
+    panic!("cpuex: security exception 0x{:x}\n{:#?}", code, stack_frame);
 }

@@ -93,6 +93,10 @@ fn init_interrupt_handlers(idt: &mut InterruptDescriptorTable) {
     unsafe {
         idt.divide_by_zero.set_handler_fn(exceptions::divide_by_zero)
             .set_stack_index(gdt::PANICKING_EXCEPTION_IST_INDEX);
+        idt.debug.set_handler_fn(exceptions::debug)
+            .set_stack_index(gdt::PANICKING_EXCEPTION_IST_INDEX);
+        idt.non_maskable_interrupt.set_handler_fn(exceptions::nmi)
+            .set_stack_index(gdt::PANICKING_EXCEPTION_IST_INDEX);
         idt.breakpoint.set_handler_fn(exceptions::breakpoint)
             .set_stack_index(gdt::PANICKING_EXCEPTION_IST_INDEX);
         idt.overflow.set_handler_fn(exceptions::overflow)
