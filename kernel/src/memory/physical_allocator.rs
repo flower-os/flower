@@ -194,12 +194,6 @@ impl<'a> PhysicalAllocator<'a> {
         let level = MAX_ORDER - order;
         let level_offset = super::buddy_allocator::blocks_in_tree(level);
         let index = level_offset + ((local_ptr as usize) >> (order + BASE_ORDER)) + 1;
-        info!(
-            "Block @ ptr {:?} = {:?} (real ptr = 0x{:x})",
-            ptr,
-            unsafe { tree.block(index - 1).order_free },
-            (&*tree.flat_blocks) as *const _ as usize + index - 1,
-        );
     }
 }
 

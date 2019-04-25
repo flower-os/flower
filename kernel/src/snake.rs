@@ -252,6 +252,12 @@ impl Snake {
     }
 
     fn try_move(&mut self, grid: &mut Grid) -> MoveResult {
+
+        // Special case: 0 - 1 would result in overflow and panic
+        if self.direction == Direction::Down && self.head.y == 0 {
+            return MoveResult::Lose;
+        }
+
         let moved_head = self.direction.offset(self.head, 1);
         if !grid.contains(moved_head) {
             return MoveResult::Lose;
@@ -331,7 +337,7 @@ impl Random {
 
         let mut seed = self.seed.load(Ordering::SeqCst);
         loop {
-            let next = (A * seed + C) % M;
+            let next = (A.wrapping_mul(seed) + C) % M;
             let cas_result = self.seed.compare_and_swap(seed, next, Ordering::SeqCst);
 
             if cas_result == seed {

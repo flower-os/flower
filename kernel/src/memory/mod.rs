@@ -78,8 +78,6 @@ pub fn init_memory(mb_info_addr: usize, guard_page_addr: usize) {
     let heap_tree_start = unsafe { crate::HEAP.init(heap_tree_start) };
     let heap_tree_end = heap_tree_start + heap::Heap::tree_size();
 
-    trace!("mb info 0x{:x}..0x{:x}", mb_info.start_address(), mb_info.end_address());
-
     debug!("mem: initialising pmm (2/2)");
     unsafe { setup_physical_allocator_rest(gibbibytes, usable.iter()) };
 
@@ -137,7 +135,7 @@ unsafe fn setup_ist(begin: Page) {
 
         for i in 0..7 { // Packed struct; cannot safely borrow fields
             let stack_start = allocator.alloc().unwrap();
-            let stack_end = stack_start as u64 + IST_STACK_SIZE_PAGES as u64;
+            let stack_end = stack_start as u64 + (IST_STACK_SIZE_PAGES * 4096) as u64;
 
             tss.interrupt_stack_table[i] = x86_64::VirtAddr::new(stack_end);
         }
@@ -184,7 +182,6 @@ unsafe fn setup_bootstrap_heap(
     let virtual_start = start_page.number() * 4096;
     let physical = physical_start..=physical_start + BootstrapHeap::space_taken();
     let virtual_range = virtual_start..=virtual_start + BootstrapHeap::space_taken();
-    debug!("bootstrap heap start = 0x{:x}", virtual_start);
 
     (physical, virtual_range)
 }
@@ -215,8 +212,6 @@ unsafe fn setup_physical_allocator_prelim(
 
     // Remove already used physical mem areas
     let kernel_area_phys = 0..=kernel_area.end() - KERNEL_MAPPING_BEGIN;
-
-    trace!("kernel_area_phys = 0x{:x}..=\n0x{:x}", kernel_area_phys.start(), kernel_area_phys.end());
 
     let usable_areas = constant_unroll! { // Use this macro to make types work
         for used_area in [kernel_area_phys, mb_info_phys.clone(), bootstrap_heap_phys] {

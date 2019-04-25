@@ -39,8 +39,6 @@ impl PageSize {
     }
 }
 
-// TODO frame struct
-
 #[derive(Debug, Copy, Clone)]
 pub struct Page {
     number: usize,
@@ -73,7 +71,6 @@ impl Page {
         self.size.map(|size| self.number * size.bytes())
     }
 
-    // TODO use this when required
     pub fn page_size(&self) -> Option<PageSize> {
         self.size
     }

@@ -71,17 +71,14 @@ pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
     say_hello();
     log::init();
     memory::init_memory(multiboot_info_addr, guard_page_addr);
-
+    gdt::init();
     interrupts::init();
+    interrupts::enable();
     info!("interrupts: ready");
 
     drivers::pit::CONTROLLER.lock().initialize();
 
     let _acpi = acpi_impl::acpi_init();
-
-    debug!("gdt: initialising rust gdt");
-    gdt::init();
-    debug!("gdt: initialised");
 
     // Initialize the PS/2 controller and run the keyboard echo loop
     let mut controller = ps2::CONTROLLER.lock();
@@ -90,8 +87,7 @@ pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
         Err(error) => error!("ps2c: {:?}", error),
     }
 
-//    snake::snake(&mut controller);
-    keyboard_echo_loop(&mut controller);
+    snake::snake(&mut controller);
 
     halt()
 }

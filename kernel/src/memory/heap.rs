@@ -186,13 +186,6 @@ impl Heap {
         let level = MAX_ORDER - order;
         let level_offset = super::buddy_allocator::blocks_in_level(level);
         let index = level_offset + ((ptr as usize) >> (order + 6));
-
-        debug!(
-            "Heap: Block @ ptr {:?} (index {:?}) = {:?}",
-            global_ptr,
-            index,
-            unsafe { self.tree.wait().unwrap().lock().block(index - 1).order_free }
-        );
     }
 }
 
