@@ -35,7 +35,7 @@ use self::bootstrap_heap::{BootstrapHeap, BOOTSTRAP_HEAP};
 use self::paging::{Page, PageSize, PhysicalAddress, VirtualAddress, PAGE_TABLES, EntryFlags,
                    PageRangeMapping, remap, InvalidateTlb};
 use crate::util::round_up_divide;
-use crate::gdt;
+use crate::gdt::{TSS, Tss};
 
 pub const KERNEL_MAPPING_BEGIN: usize = 0xffffffff80000000;
 const IST_STACK_SIZE_PAGES: usize = 3;
@@ -134,7 +134,7 @@ unsafe fn setup_ist(begin: Page) {
         }
     }
 
-    gdt::TSS.call_once(|| {
+    TSS.call_once(|| {
         let mut tss = TaskStateSegment::new();
 
         for i in 0..7 { // Packed struct; cannot safely borrow fields
@@ -144,7 +144,7 @@ unsafe fn setup_ist(begin: Page) {
             tss.interrupt_stack_table[i] = x86_64::VirtAddr::new(stack_end);
         }
 
-        Mutex::new(RefCell::new(tss))
+        Mutex::new(Tss::new(tss))
     });
 }
 

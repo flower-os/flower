@@ -20,7 +20,7 @@ pub unsafe fn jump_usermode() -> ! {
     let rsp: u64;
     asm!("mov %rsp, $0" : "=r"(rsp));
 
-    crate::gdt::TSS.wait().unwrap().lock().get_mut().privilege_stack_table[0] = VirtAddr::new(rsp);
+    crate::gdt::TSS.wait().unwrap().lock().tss.get_mut().privilege_stack_table[0] = VirtAddr::new(rsp);
 
     asm!("
     push 0x2b

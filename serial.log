@@ -48,6 +48,7 @@ Flower kernel boot!
 [trace] kernel ds = 0x10
 [trace] user cs = 0x2b
 [trace] user ds = 0x33
+[trace] port enabled: false
 [debug] gdt: initialised
 [info]  interrupts: initializing
 [debug] interrupts: initialized idt
@@ -56,9 +57,9 @@ Flower kernel boot!
 [info]  interrupts: ready
 Panicked at "cpuex: general protection fault 0x0
 InterruptStackFrame {
-    instruction_pointer: VirtAddr(0xffffffff8010e31a),
+    instruction_pointer: VirtAddr(0xffffffff8010156a),
     code_segment: 43,
     cpu_flags: 0x202,
-    stack_pointer: VirtAddr(0xffffffff80374e38),
+    stack_pointer: VirtAddr(0xffffffff8036fe68),
     stack_segment: 51,
 }", src/interrupts/exceptions.rs:73
