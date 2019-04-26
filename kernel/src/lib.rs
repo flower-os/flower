@@ -139,7 +139,7 @@ pub extern fn usermode() -> ! {
         Err(error) => { error!("ps2c: {:?}", error); loop {}},
     };
 
-    keyboard_echo_loop(&mut controller);
+    snake::snake(&mut controller);
     loop {}
 }
 

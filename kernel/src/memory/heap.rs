@@ -251,7 +251,7 @@ unsafe impl GlobalAlloc for Heap {
                 PAGE_TABLES.lock().unmap(
                     Page::containing_address(global_ptr, PageSize::Kib4),
                     FreeMemory::Free,
-                    InvalidateTlb::Invalidate,
+                    InvalidateTlb::NoInvalidate, // TODO invalidate
                 );
             }
         } else {
@@ -262,7 +262,7 @@ unsafe impl GlobalAlloc for Heap {
                PAGE_TABLES.lock().unmap(
                    Page::containing_address(page_addr, PageSize::Kib4),
                    FreeMemory::Free,
-                   InvalidateTlb::Invalidate,
+                   InvalidateTlb::NoInvalidate, // TODO invalidate
                );
            }
        }
