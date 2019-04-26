@@ -73,28 +73,21 @@ pub static HEAP: Heap = Heap::new();
 pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
     serial::PORT_1.lock().init(serial::MAX_BAUD, false).expect("Error initializing serial port 1");
     say_hello();
-    info!("serial: initialized port 1");
+
     log::init();
     memory::init_memory(multiboot_info_addr, guard_page_addr);
     gdt::init();
+    drivers::pit::CONTROLLER.lock().initialize();
     interrupts::init();
     interrupts::enable();
+
     info!("interrupts: ready");
-
-    unsafe { crate::userspace::jump_usermode() };
-
-    drivers::pit::CONTROLLER.lock().initialize();
 
     let _acpi = acpi_impl::acpi_init();
 
-    // Initialize the PS/2 controller and run the keyboard echo loop
-    let mut controller = ps2::CONTROLLER.lock();
-    match controller.initialize() {
-        Ok(_) => info!("ps2c: init successful"),
-        Err(error) => error!("ps2c: {:?}", error),
-    }
+    unsafe { crate::userspace::jump_usermode() };
 
-    snake::snake(&mut controller);
+//    snake::snake(&mut controller);
 
     halt()
 }
@@ -138,7 +131,15 @@ fn print_flower() -> Result<(), terminal::TerminalOutputError<()>> {
 }
 
 pub extern fn usermode() -> ! {
-    trace!("userspace!");
+    info!("Jumped into userspace successfully!");
+    // Initialize the PS/2 controller
+    let mut controller = ps2::CONTROLLER.lock();
+    match controller.initialize() {
+        Ok(_) => info!("ps2c: init successful"),
+        Err(error) => { error!("ps2c: {:?}", error); loop {}},
+    };
+
+    keyboard_echo_loop(&mut controller);
     loop {}
 }
 

@@ -24,7 +24,6 @@
                                              \ /   |  |  \/
 Flower kernel boot!
 -------------------
-[info]  serial: initialized port 1
 [info]  mem: initialising
 [trace] mem: Usable memory areas: 
 [trace]  0x0 to 0x9fc00
@@ -43,23 +42,36 @@ Flower kernel boot!
 [trace] mem: setting up guard page
 [debug] mem: setting up ist
 [info]  mem: initialised
+[trace] guard page = 0xffffffff8033a000
 [debug] gdt: initialising rust gdt
 [trace] kernel cs = 0x8
 [trace] kernel ds = 0x10
 [trace] user cs = 0x2b
 [trace] user ds = 0x33
-[trace] port enabled: false
 [debug] gdt: initialised
+[info]  pit: initializing
 [info]  interrupts: initializing
 [debug] interrupts: initialized idt
 [debug] interrupts: pic initialized and remapped
 [info]  interupts: initialized
 [info]  interrupts: ready
-Panicked at "cpuex: general protection fault 0x0
-InterruptStackFrame {
-    instruction_pointer: VirtAddr(0xffffffff8010156a),
-    code_segment: 43,
-    cpu_flags: 0x202,
-    stack_pointer: VirtAddr(0xffffffff8036fe68),
-    stack_segment: 51,
-}", src/interrupts/exceptions.rs:73
+[info]  acpi: initializing
+[trace] acpi::sdt: Found ACPI table with signature "FACP" and length 116
+[trace] acpi::sdt: Found ACPI table with signature "APIC" and length 120
+[trace] acpi::sdt: Found ACPI table with signature "HPET" and length 56
+[info]  acpi::hpet: HPET address: GenericAddress {
+    address_space: 0,
+    bit_width: 0,
+    bit_offset: 0,
+    access_size: 0,
+    address: 4275044352,
+}
+[info]  acpi: init successful
+[trace] userspace!
+[info]  ps2c: initialising
+[debug] ps2c: disabled devices
+[debug] ps2c: initialized config
+[debug] ps2c: testing devices
+[debug] ps2c: prepared devices
+[info]  ps2c: init successful
+[info]  kbd: successfully enabled

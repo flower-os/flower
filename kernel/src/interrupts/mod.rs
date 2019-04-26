@@ -83,7 +83,11 @@ macro_rules! init_irq_handlers {
                 extern "x86-interrupt" fn handle_irq(_: &mut InterruptStackFrame) {
                     pic::CHAINED_PICS.lock().handle_interrupt($irq, || dispatch_irq($irq));
                 }
-                $idt[$irq + 32].set_handler_fn(handle_irq);
+
+                unsafe {
+                    $idt[$irq + 32].set_handler_fn(handle_irq)
+                        .set_stack_index(gdt::ISR_IST_INDEX);
+                }
             }
         )*
     };

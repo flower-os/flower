@@ -1,18 +1,17 @@
 use core::{ops::Range, cell::RefCell};
 use spin::{Once, Mutex};
-use x86_64::structures::tss::TaskStateSegment;
+use x86_64::{registers::rflags, structures::tss::TaskStateSegment};
 use bit_field::BitField;
 use crate::serial::PORT_1_ADDR;
 
 pub const DOUBLE_FAULT_IST_INDEX: u16 = 0;
 pub const PANICKING_EXCEPTION_IST_INDEX: u16 = 1;
-pub const IRQ_IST_INDEX: u16 = 2;
+pub const ISR_IST_INDEX: u16 = 2;
 
 pub static TSS: Once<Mutex<Tss>> = Once::new();
 
 use x86_64::structures::gdt::{GlobalDescriptorTable, Descriptor, DescriptorFlags as Flags,
                               SegmentSelector};
-
 
 lazy_static! {
     static ref GDT: Gdt = {
@@ -77,7 +76,7 @@ impl Tss {
         tss
     }
 
-    pub fn set_ports_usable(&mut self, ports: Range<u16>, usable: bool) {
+    pub fn set_port_range_usable(&mut self, ports: Range<u16>, usable: bool) {
         assert!(ports.end / 8 < 8192, "Port 0x{:x} out of bounds", ports.end);
 
         // TODO could be optimised
@@ -86,6 +85,21 @@ impl Tss {
             let bit = port % 8;
             // For some reason 1 = disabled
             self.iomap[byte_idx as usize].set_bit(bit as usize, !usable);
+        }
+    }
+
+    pub fn set_port_usable(&mut self, port: u16, usable: bool) {
+        assert!(port / 8 < 8192, "Port 0x{:x} out of bounds", port);
+
+        let byte_idx = port / 8;
+        let bit = port % 8;
+        // For some reason 1 = disabled
+        self.iomap[byte_idx as usize].set_bit(bit as usize, !usable);
+    }
+
+    pub fn set_ports_usable(&mut self, ports: &[u16], usable: bool) {
+        for port in ports {
+            self.set_port_usable(*port, usable);
         }
     }
 
@@ -125,8 +139,16 @@ pub fn init() {
     trace!("user cs = 0x{:x}", GDT.selectors.user_cs.0);
     trace!("user ds = 0x{:x}", GDT.selectors.user_ds.0);
 
+    let mut tss = TSS.wait().unwrap().lock();
+    tss.set_port_range_usable(PORT_1_ADDR..PORT_1_ADDR + 8, true); // Serial1 ports
+    tss.set_port_range_usable(0x60..0x69, true);
+//    tss.set_ports_usable(
+//        &[
+//            0x60, // PS2 data port
+//            0x64, // PS2 status/command port
+//        ],
+//        true,
+//    );
 
-    TSS.wait().unwrap().lock().set_ports_usable(PORT_1_ADDR..PORT_1_ADDR + 8, true);
-    trace!("port enabled: {:?}", TSS.wait().unwrap().lock().is_port_usable(PORT_1_ADDR));
     debug!("gdt: initialised");
 }
