@@ -26,7 +26,8 @@ fn tick() {
 pub fn sleep(ms: usize) {
     let wake_time = COUNTER.load(Ordering::SeqCst) + ms;
     while COUNTER.load(Ordering::SeqCst) < wake_time {
-        unsafe { asm!("hlt"); }
+        // TODO spin for now -- userspace cannot hlt
+//        unsafe { asm!("hlt"); }
     }
 }
 

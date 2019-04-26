@@ -72,7 +72,7 @@ impl Heap {
                 let mut table = PAGE_TABLES.lock();
                 table.map(
                     Page::containing_address(heap_tree_start + (page * 4096), PageSize::Kib4),
-                    EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE,
+                    EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE | EntryFlags::USER_ACCESSIBLE, // TODO
                     InvalidateTlb::Invalidate,
                 );
             }
@@ -124,7 +124,7 @@ impl Heap {
             PAGE_TABLES.lock().map_to(
                 Page::containing_address(page_addr, PageSize::Kib4),
                 PhysicalAddress((physical_begin_frame + page) * 4096),
-                EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE,
+                EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE | EntryFlags::USER_ACCESSIBLE, // TODO
                 InvalidateTlb::Invalidate,
             );
         }
@@ -204,7 +204,7 @@ unsafe impl GlobalAlloc for Heap {
             if !mapped {
                 page_tables.map(
                     Page::containing_address(page_addr, PageSize::Kib4),
-                    EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE,
+                    EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE | EntryFlags::USER_ACCESSIBLE, // TODO
                     InvalidateTlb::NoInvalidate,
                 );
             }
@@ -233,7 +233,7 @@ unsafe impl GlobalAlloc for Heap {
 
         let page_order = 12 - BASE_ORDER; // log2(4096) - base order
 
-           // There will only be pages to unmap which totally contained this allocation if this
+        // There will only be pages to unmap which totally contained this allocation if this
         // allocation was larger or equal to the size of a page
         if order < page_order  {
             // Else, we must check if it happened to be on its own page

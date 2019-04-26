@@ -354,7 +354,7 @@ impl ActivePageMap {
             // overwrite recursive mapping
             self.p4_mut()[510].set(
                 table.p4_frame.clone(),
-                EntryFlags::PRESENT | EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE
+                EntryFlags::PRESENT | EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE | EntryFlags::USER_ACCESSIBLE // TODO
             );
 
             tlb::flush_all();
@@ -365,7 +365,7 @@ impl ActivePageMap {
             // restore recursive mapping to original p4 table
             p4_table[510].set(
                 backup,
-              EntryFlags::PRESENT | EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE
+              EntryFlags::PRESENT | EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE | EntryFlags::USER_ACCESSIBLE // TODO
             );
 
             tlb::flush_all();
@@ -458,7 +458,7 @@ impl InactivePageMap {
             // Set up recursive mapping for table
             table[510].set(
                 frame.clone(),
-                EntryFlags::PRESENT | EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE
+                EntryFlags::PRESENT | EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE | EntryFlags::USER_ACCESSIBLE // TODO
             );
         }
 

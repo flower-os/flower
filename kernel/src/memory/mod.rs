@@ -128,7 +128,7 @@ unsafe fn setup_ist(begin: Page) {
         } else {
             PAGE_TABLES.lock().map(
                 Page::containing_address(begin.start_address().unwrap() + (page * 4096), PageSize::Kib4),
-                EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE,
+                EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE | EntryFlags::USER_ACCESSIBLE, // TODO
                 InvalidateTlb::Invalidate,
             );
         }

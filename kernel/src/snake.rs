@@ -361,7 +361,9 @@ pub fn snake(controller: &mut ps2::Controller) {
         info!("kbd: successfully enabled");
     } else {
         error!("kbd: enable unsuccessful");
-        halt();
+        // TODO -- cannot halt, so just spin
+        loop {}
+//        halt();
     }
 
     let mut game = Game::new(&mut keyboard);

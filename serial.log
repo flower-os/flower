@@ -42,7 +42,6 @@ Flower kernel boot!
 [trace] mem: setting up guard page
 [debug] mem: setting up ist
 [info]  mem: initialised
-[trace] guard page = 0xffffffff8033a000
 [debug] gdt: initialising rust gdt
 [trace] kernel cs = 0x8
 [trace] kernel ds = 0x10
@@ -67,7 +66,7 @@ Flower kernel boot!
     address: 4275044352,
 }
 [info]  acpi: init successful
-[trace] userspace!
+[info]  Jumped into userspace successfully!
 [info]  ps2c: initialising
 [debug] ps2c: disabled devices
 [debug] ps2c: initialized config
