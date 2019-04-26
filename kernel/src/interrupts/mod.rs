@@ -1,6 +1,6 @@
 //! Module for interrupt handling/IDT
 
-use x86_64::structures::idt::{InterruptDescriptorTable, ExceptionStackFrame, PageFaultErrorCode};
+use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode};
 use crate::interrupts::exceptions::page_fault;
 use crate::gdt;
 
@@ -80,7 +80,7 @@ macro_rules! init_irq_handlers {
     ($idt:expr, $($irq:expr),*) => {
         $(
             {
-                extern "x86-interrupt" fn handle_irq(_: &mut ExceptionStackFrame) {
+                extern "x86-interrupt" fn handle_irq(_: &mut InterruptStackFrame) {
                     pic::CHAINED_PICS.lock().handle_interrupt($irq, || dispatch_irq($irq));
                 }
                 $idt[$irq + 32].set_handler_fn(handle_irq);
@@ -118,10 +118,11 @@ fn init_interrupt_handlers(idt: &mut InterruptDescriptorTable) {
         idt.general_protection_fault.set_handler_fn(exceptions::general_protection_fault)
             .set_stack_index(gdt::PANICKING_EXCEPTION_IST_INDEX);
 
-        let page_fault: extern "x86-interrupt" fn(&mut ExceptionStackFrame, u64) = page_fault;
-        let page_fault: extern "x86-interrupt" fn(&mut ExceptionStackFrame, PageFaultErrorCode)
+        let page_fault: extern "x86-interrupt" fn(&mut InterruptStackFrame, u64) = page_fault;
+        let page_fault: extern "x86-interrupt" fn(&mut InterruptStackFrame, PageFaultErrorCode)
             = core::mem::transmute(page_fault);
-        idt.page_fault.set_handler_fn(page_fault);
+        idt.page_fault.set_handler_fn(page_fault)
+            .set_stack_index(gdt::PANICKING_EXCEPTION_IST_INDEX);
 
         idt.x87_floating_point.set_handler_fn(exceptions::x87_floating_point)
             .set_stack_index(gdt::PANICKING_EXCEPTION_IST_INDEX);

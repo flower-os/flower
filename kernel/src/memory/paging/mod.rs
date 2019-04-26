@@ -151,7 +151,8 @@ bitflags! {
         /// Whether the page is writable or read only
         const WRITABLE = 1 << 1;
         /// Whether ring 3 processes can access this page -- in theory. As of meltdown, this bit is
-        /// essentially useless, except on possibly newer CPUs with fixes in place
+        /// essentially useless for preventing attacks, except on possibly newer CPUs with fixes
+        /// in place.
         const USER_ACCESSIBLE = 1 << 2;
         /// If this bit is set, writes to this page go directly to memory
         const WRITE_DIRECT = 1 << 3;
@@ -265,7 +266,8 @@ impl<L: TableLevel> PageTable<L> {
                 self.entries[index].set(
                     frame,
                     self::EntryFlags::PRESENT |
-                        self::EntryFlags::WRITABLE
+                        self::EntryFlags::WRITABLE |
+                        self::EntryFlags::USER_ACCESSIBLE
                 );
                 self.next_page_table_mut(index).expect("No next table!").zero();
             }

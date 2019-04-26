@@ -12,6 +12,8 @@
 #![feature(compiler_builtins_lib)]
 #![feature(panic_info_message)]
 #![feature(integer_atomics)]
+#![feature(naked_functions)]
+#![feature(core_intrinsics)]
 
 #[cfg(test)]
 #[cfg_attr(test, macro_use)]
@@ -41,6 +43,7 @@ use crate::drivers::keyboard::{Keyboard, KeyEventType, Ps2Keyboard};
 use crate::drivers::keyboard::keymap;
 use crate::drivers::{ps2, serial};
 use crate::terminal::TerminalOutput;
+use crate::memory::heap::Heap;
 
 #[cfg(not(test))]
 mod lang;
@@ -60,8 +63,7 @@ mod acpi_impl;
 mod gdt;
 mod cpuid;
 mod snake;
-
-use crate::memory::heap::Heap;
+mod userspace;
 
 #[cfg_attr(not(test), global_allocator)]
 pub static HEAP: Heap = Heap::new();
@@ -78,6 +80,8 @@ pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
     interrupts::init();
     interrupts::enable();
     info!("interrupts: ready");
+
+    unsafe { crate::userspace::jump_usermode() };
 
     drivers::pit::CONTROLLER.lock().initialize();
 
@@ -131,6 +135,11 @@ fn print_flower() -> Result<(), terminal::TerminalOutputError<()>> {
     serial_println!("{}", FLOWER_STEM);
 
     Ok(())
+}
+
+pub extern fn usermode() -> ! {
+    trace!("userspace!");
+    loop {}
 }
 
 fn keyboard_echo_loop(controller: &mut ps2::Controller) {

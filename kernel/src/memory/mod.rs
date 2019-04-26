@@ -23,7 +23,8 @@ pub mod physical_allocator;
 pub mod physical_mapping;
 mod stack_allocator;
 
-use core::{mem, iter, ops::{Range, RangeInclusive}};
+use core::{mem, iter, cell::RefCell, ops::{Range, RangeInclusive}};
+use spin::Mutex;
 use x86_64::structures::tss::TaskStateSegment;
 use arrayvec::ArrayVec;
 use multiboot2::{self, BootInformation, MemoryMapTag};
@@ -143,7 +144,7 @@ unsafe fn setup_ist(begin: Page) {
             tss.interrupt_stack_table[i] = x86_64::VirtAddr::new(stack_end);
         }
 
-        tss
+        Mutex::new(RefCell::new(tss))
     });
 }
 
@@ -266,7 +267,7 @@ fn kernel_area(mb_info: &BootInformation) -> RangeInclusive<usize> {
         .expect("Expected a multiboot2 elf sections tag, but it is not present!");
 
     let used_areas = elf_sections.sections()
-        .filter(|section| section.flags().contains(ElfSectionFlags::ALLOCATED)) // TODO this will overwrite debug info
+        .filter(|section| section.flags().contains(ElfSectionFlags::ALLOCATED))
         .map(|section| section.start_address()..section.end_address() + 1);
 
     let begin = used_areas.clone().map(

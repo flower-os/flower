@@ -63,14 +63,14 @@ pub fn remap_kernel(
                 section.name(),
             );
 
-            let mut flags = paging::EntryFlags::from_bits_truncate(0);
+            let mut flags = EntryFlags::from_bits_truncate(0) | EntryFlags::USER_ACCESSIBLE; // TODO
 
             if section.flags().contains(ElfSectionFlags::WRITABLE) {
-                flags = flags | paging::EntryFlags::WRITABLE;
+                flags = flags | EntryFlags::WRITABLE;
             }
 
             if !section.flags().contains(ElfSectionFlags::EXECUTABLE) {
-                flags = flags | paging::EntryFlags::NO_EXECUTE;
+                flags = flags | EntryFlags::NO_EXECUTE;
             }
 
             unsafe {
@@ -87,7 +87,7 @@ pub fn remap_kernel(
             mapper.map_to(
                 Page::containing_address(crate::drivers::vga::VIRTUAL_VGA_PTR, PageSize::Kib4),
                 PhysicalAddress(0xb8000 as usize),
-                EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE,
+                EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE | EntryFlags::USER_ACCESSIBLE, // TODO
                 InvalidateTlb::NoInvalidate,
             );
         }
@@ -105,7 +105,7 @@ pub fn remap_kernel(
         &mut new_table,
         &mut temporary_page,
         bootstrap_heap_page_range,
-        paging::EntryFlags::NO_EXECUTE | paging::EntryFlags::WRITABLE
+        EntryFlags::NO_EXECUTE | EntryFlags::WRITABLE | EntryFlags::USER_ACCESSIBLE // TODO
     );
 
     // Map heap
@@ -120,7 +120,7 @@ pub fn remap_kernel(
         &mut new_table,
         &mut temporary_page,
         heap_tree_page_range,
-        paging::EntryFlags::NO_EXECUTE | paging::EntryFlags::WRITABLE
+        EntryFlags::NO_EXECUTE | EntryFlags::WRITABLE | EntryFlags::USER_ACCESSIBLE // TODO
     );
 
     trace!("mem: switching page tables");

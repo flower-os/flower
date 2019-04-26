@@ -1,0 +1,64 @@
+                                               _____----___
+                                             _/     /-_    \ ____
+                                            /      / -/\-_  \    \    ___
+                                           /      /__     \__\    \__/   \
+                                          /      /   \__  /         /     \
+                                      __ /      /     __\/         /       \
+                                    /\    \_   /    _/            |         \
+                                   /  \      \/    /              |          \
+                                  /  | \      \_  /               |           \
+                                 |   |  \__     \/                |           /
+                                 |   |     \_     \_              |          /
+                                 |   |       \_     \_            \_________/
+                                 |   |         \______\    _____---  _____/ /
+                                  \  \            ____\___/   /\____/     _/
+                                   \_ \       ___/           /          _/
+                                     \ |   __/              /         _/
+                                      \ \ /              __/        _/
+                                        /            ___/        __/
+                                       /           _/         __/
+                                      ---\________/__________/
+                                            |      |  |     /
+                                            |      |  |    |
+                                            \   _ /|  |\_  |
+                                             \ /   |  |  \/
+Flower kernel boot!
+-------------------
+[info]  serial: initialized port 1
+[info]  mem: initialising
+[trace] mem: Usable memory areas: 
+[trace]  0x0 to 0x9fc00
+[trace]  0x100000 to 0x7fe0000
+[info]  0.125 GiB of RAM available
+[debug] mem: initialising bootstrap heap
+[debug] mem: initialising pmm (1/2)
+[trace] Allocating 1 trees
+[debug] mem: setting up kernel heap
+[debug] mem: initialising pmm (2/2)
+[debug] mem: remapping kernel
+[trace] Creating new page tables
+[trace] Mapping new page tables
+[trace] mem: switching page tables
+[trace] mem: enabling write protection
+[trace] mem: setting up guard page
+[debug] mem: setting up ist
+[info]  mem: initialised
+[debug] gdt: initialising rust gdt
+[trace] kernel cs = 0x8
+[trace] kernel ds = 0x10
+[trace] user cs = 0x2b
+[trace] user ds = 0x33
+[debug] gdt: initialised
+[info]  interrupts: initializing
+[debug] interrupts: initialized idt
+[debug] interrupts: pic initialized and remapped
+[info]  interupts: initialized
+[info]  interrupts: ready
+Panicked at "cpuex: general protection fault 0x0
+InterruptStackFrame {
+    instruction_pointer: VirtAddr(0xffffffff8010e31a),
+    code_segment: 43,
+    cpu_flags: 0x202,
+    stack_pointer: VirtAddr(0xffffffff80374e38),
+    stack_segment: 51,
+}", src/interrupts/exceptions.rs:73
