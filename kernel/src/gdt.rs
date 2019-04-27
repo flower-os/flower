@@ -1,6 +1,6 @@
 use core::{ops::Range, cell::RefCell};
 use spin::{Once, Mutex};
-use x86_64::{registers::rflags, structures::tss::TaskStateSegment};
+use x86_64::structures::tss::TaskStateSegment;
 use bit_field::BitField;
 use crate::serial::PORT_1_ADDR;
 

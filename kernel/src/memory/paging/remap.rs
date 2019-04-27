@@ -43,7 +43,6 @@ pub fn remap_kernel(
         PHYSICAL_ALLOCATOR.allocate(0).expect("no more frames") as usize
     );
 
-    let paddr = heap_frame_addr.physical_address().unwrap().0 as *const u8;
     let mut new_table = paging::InactivePageMap::new(frame, &mut active_table, &mut temporary_page);
 
     trace!("Mapping new page tables");

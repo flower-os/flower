@@ -1,4 +1,4 @@
-use crate::memory::paging::{PAGE_TABLES, PageSize, Page};
+use crate::{ps2, snake};
 use x86_64::VirtAddr;
 
 /// Jumps to usermode.
@@ -27,6 +27,19 @@ pub unsafe fn jump_usermode() -> ! {
     mov rax, rbx
     push rax
     iretq
-    ":: "{rbx}"(crate::usermode as u64) :: "intel", "volatile");
+    ":: "{rbx}"(usermode as u64) :: "intel", "volatile");
     core::intrinsics::unreachable()
+}
+
+pub extern fn usermode() -> ! {
+    info!("Jumped into userspace successfully!");
+    // Initialize the PS/2 controller
+    let mut controller = ps2::CONTROLLER.lock();
+    match controller.initialize() {
+        Ok(_) => info!("ps2c: init successful"),
+        Err(error) => { error!("ps2c: {:?}", error); loop {}},
+    };
+
+    snake::snake(&mut controller);
+    loop {}
 }

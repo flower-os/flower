@@ -23,7 +23,7 @@ pub mod physical_allocator;
 pub mod physical_mapping;
 mod stack_allocator;
 
-use core::{mem, iter, cell::RefCell, ops::{Range, RangeInclusive}};
+use core::{mem, iter, ops::{Range, RangeInclusive}};
 use spin::Mutex;
 use x86_64::structures::tss::TaskStateSegment;
 use arrayvec::ArrayVec;

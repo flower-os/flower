@@ -18,7 +18,6 @@ ifeq ($(debug), 1)
 else
     nasm_flags := -f elf64
     cargo_flags := --release --features $(log_level)
- 	rustflags := "-C code-model=kernel"
     build_type := release
     qemu_flags := -m 256M -serial file:serial.log
 endif
@@ -36,7 +35,7 @@ rust_kernel := $(out_dir)/libflower_kernel.a
 target := x86_64-unknown-flower-none
 asm_source_files := $(wildcard $(asm_dir)/*.asm)
 asm_obj_files = $(patsubst $(asm_dir)/%.asm, $(out_dir)/%.o, $(asm_source_files))
-
+rustflags := "-C code-model=kernel"
 kernel = $(out_dir)/kernel.elf
 grub_iso = $(out_dir)/flower.iso
 

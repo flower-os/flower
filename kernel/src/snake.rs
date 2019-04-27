@@ -3,7 +3,6 @@ use alloc::vec::Vec;
 use crate::terminal::{TerminalOutput, TerminalCharacter, Point, STDOUT};
 use crate::drivers::{pit, ps2};
 use crate::drivers::keyboard::{Ps2Keyboard, Keyboard, KeyEventType};
-use crate::halt;
 
 const HEAD_CHAR: char = 2 as char;
 const BASE_LENGTH: u16 = 4;

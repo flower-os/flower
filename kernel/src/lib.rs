@@ -15,6 +15,8 @@
 #![feature(naked_functions)]
 #![feature(core_intrinsics)]
 
+#![allow(unused_attributes)]
+
 #[cfg(test)]
 #[cfg_attr(test, macro_use)]
 extern crate std;
@@ -85,11 +87,7 @@ pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
 
     let _acpi = acpi_impl::acpi_init();
 
-    unsafe { crate::userspace::jump_usermode() };
-
-//    snake::snake(&mut controller);
-
-    halt()
+    unsafe { crate::userspace::jump_usermode() }
 }
 
 /// Say hello to the user and print flower
@@ -130,19 +128,7 @@ fn print_flower() -> Result<(), terminal::TerminalOutputError<()>> {
     Ok(())
 }
 
-pub extern fn usermode() -> ! {
-    info!("Jumped into userspace successfully!");
-    // Initialize the PS/2 controller
-    let mut controller = ps2::CONTROLLER.lock();
-    match controller.initialize() {
-        Ok(_) => info!("ps2c: init successful"),
-        Err(error) => { error!("ps2c: {:?}", error); loop {}},
-    };
-
-    snake::snake(&mut controller);
-    loop {}
-}
-
+#[allow(dead_code)]
 fn keyboard_echo_loop(controller: &mut ps2::Controller) {
     let keyboard_device = controller.device(ps2::DevicePort::Keyboard);
     let mut keyboard = Ps2Keyboard::new(keyboard_device);
