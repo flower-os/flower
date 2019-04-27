@@ -39,7 +39,7 @@ the same thing on different branches/forks.
 are doing, e.g `acpi`.
 4. Commit your things
 5. Open a pull request. Select base as `development` (again, if you're editing code).
-6. Wait for review. Sorry if the reviews are a bit nitpicky -- @gegy1000 and I (@Restioson) usually write reviews like that. It
+6. Wait for review. Sorry if the reviews are a bit nitpicky -- @gegy1000 and @Restioson (the maintainers) usually write reviews like that. It
 does help to keep code quality good though.
 7. Debate review comments/implement requested changes.
 8. Repeat until everyone is happy with the changes.
