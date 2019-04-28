@@ -14,7 +14,7 @@ use x86_64::structures::gdt::{GlobalDescriptorTable, Descriptor, DescriptorFlags
                               SegmentSelector};
 
 lazy_static! {
-    static ref GDT: Gdt = {
+    pub static ref GDT: Gdt = {
         let mut gdt = GlobalDescriptorTable::new();
         let kernel_cs = gdt.add_entry(Descriptor::kernel_code_segment());
         let kernel_ds = gdt.add_entry(Descriptor::UserSegment(
@@ -40,17 +40,17 @@ lazy_static! {
     };
 }
 
-struct Gdt {
-    table: GlobalDescriptorTable,
-    selectors: Selectors,
+pub struct Gdt {
+    pub table: GlobalDescriptorTable,
+    pub selectors: Selectors,
 }
 
-struct Selectors {
-    kernel_cs: SegmentSelector,
-    kernel_ds: SegmentSelector,
-    user_cs: SegmentSelector,
-    user_ds: SegmentSelector,
-    tss: SegmentSelector,
+pub struct Selectors {
+    pub kernel_cs: SegmentSelector,
+    pub kernel_ds: SegmentSelector,
+    pub user_cs: SegmentSelector,
+    pub user_ds: SegmentSelector,
+    pub tss: SegmentSelector,
 }
 
 #[repr(C)]
@@ -132,12 +132,6 @@ pub fn init() {
         load_fs(GDT.selectors.kernel_ds);
         load_gs(GDT.selectors.kernel_ds);
     }
-
-    // TODO - do not hard code these
-    trace!("kernel cs = 0x{:x}", GDT.selectors.kernel_cs.0);
-    trace!("kernel ds = 0x{:x}", GDT.selectors.kernel_ds.0);
-    trace!("user cs = 0x{:x}", GDT.selectors.user_cs.0);
-    trace!("user ds = 0x{:x}", GDT.selectors.user_ds.0);
 
     let mut tss = TSS.wait().unwrap().lock();
     tss.set_port_range_usable(PORT_1_ADDR..PORT_1_ADDR + 8, true); // Serial1 ports

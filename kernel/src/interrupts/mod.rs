@@ -57,7 +57,7 @@ pub fn init() {
 
     pic::CHAINED_PICS.lock().init_and_remap();
     debug!("interrupts: pic initialized and remapped");
-    info!("interupts: initialized");
+    info!("interrupts: initialized");
 }
 
 pub fn enable() {

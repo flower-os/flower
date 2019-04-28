@@ -1,4 +1,4 @@
-use crate::{ps2, snake, process, memory::paging::ACTIVE_PAGE_TABLES};
+use crate::{ps2, snake, process, gdt::GDT, memory::paging::ACTIVE_PAGE_TABLES};
 use x86_64::VirtAddr;
 
 pub fn usermode_begin() -> ! {
@@ -15,6 +15,9 @@ pub fn usermode_begin() -> ! {
 /// Jumps to usermode.
 #[naked]
 pub unsafe fn jump_usermode() -> ! {
+    let ds = GDT.selectors.user_ds.0;
+    let cs = GDT.selectors.user_cs.0;
+
     asm!("
     mov ax, 0x33
     mov ds, ax
@@ -26,7 +29,7 @@ pub unsafe fn jump_usermode() -> ! {
     push 0x33
     push rax
     pushfq
-    " :::: "intel", "volatile");
+    " :: "{ax}"(ds) :: "intel", "volatile");
 
     let rsp: u64;
     asm!("mov %rsp, $0" : "=r"(rsp));
@@ -38,7 +41,7 @@ pub unsafe fn jump_usermode() -> ! {
     mov rax, rbx
     push rax
     iretq
-    ":: "{rbx}"(usermode as u64) :: "intel", "volatile");
+    ":: "{rax}"(cs), "{rbx}"(usermode as u64) :: "intel", "volatile");
     core::intrinsics::unreachable()
 }
 
