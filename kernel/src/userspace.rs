@@ -22,7 +22,7 @@ pub fn usermode_begin() -> ! {
 
     unsafe {
         // Zero the stack
-        util::memset_volatile(stack_bottom as *mut u8, 0, stack_size);
+        util::memset_volatile_64bit(stack_bottom as *mut u64, 0, stack_size);
         jump_usermode()
     }
 }

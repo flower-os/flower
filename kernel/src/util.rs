@@ -96,6 +96,17 @@ pub unsafe fn memset_volatile(s: *mut u8, c: u8, n: usize) -> *mut u8 {
     s
 }
 
+pub unsafe fn memset_volatile_64bit(s: *mut u64, c: u64, n: usize) -> *mut u64 {
+    assert!(n & 0b111 == 0, "n must a be multiple of 8");
+    assert!(s as usize & 0b111 == 0, "ptr must be aligned to 8 bytes");
+    let mut i = 0;
+    while i < (n >> 3) {
+        core::ptr::write_volatile(s.offset(i as isize), c);
+        i += 1;
+    }
+    s
+}
+
 pub unsafe fn cr3_write(val: ::x86_64::PhysAddr) {
     // Taken from https://docs.rs/x86_64/0.2.14/src/x86_64/registers/control.rs.html#116-120
     asm!("mov $0, %cr3" :: "r" (val.as_u64()) : "memory")

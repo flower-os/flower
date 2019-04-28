@@ -162,8 +162,8 @@ impl Mapper {
 
         // Zero the page
         if zero == ZeroPage::Zero {
-            util::memset_volatile(
-                page.start_address().unwrap() as *mut u8,
+            util::memset_volatile_64bit(
+                page.start_address().unwrap() as *mut u64,
                 0,
                 page.size.unwrap().bytes()
             );
