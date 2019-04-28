@@ -269,7 +269,11 @@ fn kernel_area(mb_info: &BootInformation) -> RangeInclusive<usize> {
 
     let used_areas = elf_sections.sections()
         .filter(|section| section.flags().contains(ElfSectionFlags::ALLOCATED))
-        .map(|section| section.start_address()..section.end_address() + 1);
+        .map(|section| section.start_address()..section.end_address() + 1)
+        .chain(
+            mb_info.module_tags()
+                .map(|section| section.start_address() as u64..section.end_address() as u64 + 1)
+        );
 
     let begin = used_areas.clone().map(
         |range| range.start
