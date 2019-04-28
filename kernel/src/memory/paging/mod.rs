@@ -3,6 +3,7 @@
 
 pub mod remap;
 mod page_map;
+pub mod userspace;
 pub use self::page_map::*;
 
 use core::{marker::PhantomData, ptr::Unique};
@@ -12,7 +13,7 @@ use super::physical_allocator::PHYSICAL_ALLOCATOR;
 use x86_64::instructions::tlb;
 
 const PAGE_TABLE_ENTRIES: usize = 512;
-pub static PAGE_TABLES: Mutex<ActivePageMap> = Mutex::new(unsafe { ActivePageMap::new() });
+pub static ACTIVE_PAGE_TABLES: Mutex<ActivePageMap> = Mutex::new(unsafe { ActivePageMap::new() });
 
 #[derive(Debug, Eq, PartialEq, Copy, Clone, Ord, PartialOrd)]
 pub struct PhysicalAddress(pub usize);
@@ -234,7 +235,7 @@ impl<L: TableLevel> PageTable<L> {
         }
     }
 
-    fn next_page_table(&self, index: usize) -> Option<&PageTable<L::NextLevel>>
+    pub fn next_page_table(&self, index: usize) -> Option<&PageTable<L::NextLevel>>
         where L: HierarchicalLevel
     {
         unsafe {
@@ -243,7 +244,7 @@ impl<L: TableLevel> PageTable<L> {
         }
     }
 
-    fn next_page_table_mut(&mut self, index: usize) -> Option<&mut PageTable<L::NextLevel>>
+    pub fn next_page_table_mut(&mut self, index: usize) -> Option<&mut PageTable<L::NextLevel>>
         where L: HierarchicalLevel
     {
         unsafe {

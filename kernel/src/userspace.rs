@@ -1,5 +1,16 @@
-use crate::{ps2, snake};
+use crate::{ps2, snake, process, memory::paging::ACTIVE_PAGE_TABLES};
 use x86_64::VirtAddr;
+
+pub fn usermode_begin() -> ! {
+    let pid = process::ProcessId::next();
+    let process = process::Process::new();
+    let page_tables = process.page_tables.clone();
+    process::PROCESSES.insert(pid, process);
+
+    ACTIVE_PAGE_TABLES.lock().switch(&page_tables);
+
+    unsafe { jump_usermode() }
+}
 
 /// Jumps to usermode.
 #[naked]

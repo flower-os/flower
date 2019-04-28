@@ -66,9 +66,13 @@ mod gdt;
 mod cpuid;
 mod snake;
 mod userspace;
+mod process;
 
 #[cfg_attr(not(test), global_allocator)]
 pub static HEAP: Heap = Heap::new();
+
+use crate::alloc::string::ToString;
+// TODO
 
 /// Kernel main function
 #[no_mangle]
@@ -86,8 +90,7 @@ pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
     info!("interrupts: ready");
 
     let _acpi = acpi_impl::acpi_init();
-
-    unsafe { crate::userspace::jump_usermode() }
+    crate::userspace::usermode_begin()
 }
 
 /// Say hello to the user and print flower

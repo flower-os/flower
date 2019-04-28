@@ -1,4 +1,10 @@
 //! Various utilities
+use core::sync::atomic::{Ordering, AtomicU64};
+use crate::drivers::pit;
+
+lazy_static! {
+    pub static ref RNG: Random = Random::new();
+}
 
 /// A macro to implement [FromDiscriminator] on an enum with explicit discriminators.
 /// Doesn't support generics or comments, but does support attributes, etc
@@ -93,4 +99,42 @@ pub fn cr3() -> u64 {
     }
 
     value
+}
+
+pub struct Random {
+    seed: AtomicU64,
+}
+
+impl Random {
+    fn new() -> Random {
+        let time = pit::time_ms() as u64;
+        Random {
+            seed: AtomicU64::new(time ^ 2246577883182828989),
+        }
+    }
+
+    pub fn next_bounded(&self, bound: u64) -> u64 {
+        self.next() % bound
+    }
+
+    /// Thanks to https://stackoverflow.com/a/3062783/4871468 and
+    /// https://en.wikipedia.org/wiki/Linear_congruential_generator#Parameters_in_common_use
+    /// (glibc's values used here).
+    pub fn next(&self) -> u64 {
+        const A: u64 = 1103515245;
+        const M: u64 = 1 << 31;
+        const C: u64 = 12345;
+
+        let mut seed = self.seed.load(Ordering::SeqCst);
+        loop {
+            let next = (A.wrapping_mul(seed) + C) % M;
+            let cas_result = self.seed.compare_and_swap(seed, next, Ordering::SeqCst);
+
+            if cas_result == seed {
+                return next;
+            } else {
+                seed = cas_result;
+            }
+        }
+    }
 }

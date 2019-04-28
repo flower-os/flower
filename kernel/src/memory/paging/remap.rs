@@ -1,6 +1,6 @@
-use core::alloc::Layout;
-use multiboot2::BootInformation;
-use crate::memory::paging::{self, PAGE_TABLES, Page, PhysicalAddress, EntryFlags,
+use x86_64::registers::control::{Cr0, Cr0Flags};
+use multiboot2::{BootInformation, ElfSectionFlags};
+use crate::memory::paging::{self, ACTIVE_PAGE_TABLES, Page, PhysicalAddress, EntryFlags,
                             page_map::TemporaryPage, InvalidateTlb, FreeMemory};
 use crate::memory::{bootstrap_heap::BOOTSTRAP_HEAP, physical_allocator::PHYSICAL_ALLOCATOR};
 use crate::memory::heap::Heap;
@@ -11,38 +11,13 @@ pub fn remap_kernel(
     boot_info: &BootInformation,
     heap_tree_start_virt: usize,
 ) {
-    use core::alloc::GlobalAlloc;
-    use multiboot2::ElfSectionFlags;
-    use x86_64::registers::control::{Cr0, Cr0Flags};
-
-    // Allocate some heap memory for us to put the temporary page on
-    let heap_layout = Layout::from_size_align(0x1000, 0x1000).unwrap();
-    let heap_page_addr = unsafe {
-        crate::HEAP.alloc(heap_layout)
-    };
-
-    let heap_page = Page::containing_address(
-        heap_page_addr as usize,
-        PageSize::Kib4
-    );
-    let heap_frame_addr = PAGE_TABLES.lock().walk_page_table(heap_page).unwrap().0;
-
-    // Unmap the heap page temporarily to avoid confusing the temporary page code
-    // This code *is* correct -- we want to avoid mapping arbitrary pages as temporary, so we keep it in
-    unsafe {
-        PAGE_TABLES.lock().unmap(heap_page, FreeMemory::NoFree, InvalidateTlb::Invalidate);
-    }
-
-    let mut temporary_page = TemporaryPage::new(heap_page);
+    let mut temporary_page = TemporaryPage::new();
 
     trace!("Creating new page tables");
 
+    // This must be duplicated to avoid double locks. This is safe though -- in this context!
     let mut active_table = unsafe { paging::ActivePageMap::new() };
-
-    let frame = PhysicalAddress(
-        PHYSICAL_ALLOCATOR.allocate(0).expect("no more frames") as usize
-    );
-
+    let frame = PhysicalAddress(PHYSICAL_ALLOCATOR.allocate(0).expect("no more frames") as usize);
     let mut new_table = paging::InactivePageMap::new(frame, &mut active_table, &mut temporary_page);
 
     trace!("Mapping new page tables");
@@ -123,19 +98,10 @@ pub fn remap_kernel(
     );
 
     trace!("mem: switching page tables");
-    active_table.switch(new_table);
+    active_table.switch(&new_table);
 
-    // Remap heap page so it can be deallocated correctly
-    unsafe {
-        PAGE_TABLES.lock().map_to(
-            heap_page,
-            heap_frame_addr.physical_address().unwrap(),
-            paging::EntryFlags::from_bits_truncate(0),
-            InvalidateTlb::Invalidate,
-        );
-    }
-
-    unsafe { crate::HEAP.dealloc(heap_page_addr, heap_layout) };
+    // Drop this lock so that the RAII guarded temporary page can be destroyed
+    drop(active_table);
 
     trace!("mem: enabling write protection");
     unsafe { Cr0::write(Cr0::read() | Cr0Flags::WRITE_PROTECT) };

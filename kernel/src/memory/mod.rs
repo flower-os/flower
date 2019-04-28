@@ -32,7 +32,7 @@ use self::physical_allocator::{PHYSICAL_ALLOCATOR, BLOCKS_IN_TREE};
 use self::buddy_allocator::Block;
 use self::stack_allocator::StackAllocator;
 use self::bootstrap_heap::{BootstrapHeap, BOOTSTRAP_HEAP};
-use self::paging::{Page, PageSize, PhysicalAddress, VirtualAddress, PAGE_TABLES, EntryFlags,
+use self::paging::{Page, PageSize, PhysicalAddress, VirtualAddress, ACTIVE_PAGE_TABLES, EntryFlags,
                    PageRangeMapping, remap, InvalidateTlb};
 use crate::util::round_up_divide;
 use crate::gdt::{TSS, Tss};
@@ -93,7 +93,7 @@ pub fn init_memory(mb_info_addr: usize, guard_page_addr: usize) {
         PageSize::Kib4
     );
 
-    unsafe { setup_ist( page) }
+    unsafe { setup_ist( page) };
 
     info!("mem: initialised");
 }
@@ -126,7 +126,7 @@ unsafe fn setup_ist(begin: Page) {
         if page % IST_STACK_SIZE_PAGES == 0 {
             // Page is guard page: do not map
         } else {
-            PAGE_TABLES.lock().map(
+            ACTIVE_PAGE_TABLES.lock().map(
                 Page::containing_address(begin.start_address().unwrap() + (page * 4096), PageSize::Kib4),
                 EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE | EntryFlags::USER_ACCESSIBLE, // TODO
                 InvalidateTlb::Invalidate,
@@ -172,7 +172,7 @@ unsafe fn setup_bootstrap_heap(
         BootstrapHeap::space_taken() / 4096,
     );
 
-    PAGE_TABLES.lock().map_page_range(
+    ACTIVE_PAGE_TABLES.lock().map_page_range(
         mapping,
         InvalidateTlb::NoInvalidate,
         EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE,
@@ -254,10 +254,10 @@ unsafe fn setup_guard_page(addr: usize) {
     let page = Page::containing_address(addr, PageSize::Kib4);
 
     // Check it is a 4kib page
-    let size = PAGE_TABLES.lock().walk_page_table(page).expect("Guard page must be mapped!").1;
+    let size = ACTIVE_PAGE_TABLES.lock().walk_page_table(page).expect("Guard page must be mapped!").1;
     assert_eq!(size, PageSize::Kib4, "Guard page must be on a 4kib page!");
 
-    PAGE_TABLES.lock().unmap(page, FreeMemory::NoFree, InvalidateTlb::Invalidate);
+    ACTIVE_PAGE_TABLES.lock().unmap(page, FreeMemory::NoFree, InvalidateTlb::Invalidate);
 }
 
 fn kernel_area(mb_info: &BootInformation) -> RangeInclusive<usize> {

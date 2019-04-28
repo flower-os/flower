@@ -44,6 +44,11 @@ features = ["nightly"]
 version = "^1.0.0"
 features = ["spin_no_std"]
 
+[dependencies.ccl]
+version = "^1.2.2"
+default-features = false
+features = ["no_std"]
+
 [features]
 default = []
 
