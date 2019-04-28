@@ -7,7 +7,7 @@ pub mod userspace;
 pub use self::page_map::*;
 
 use core::{marker::PhantomData, ptr::Unique};
-use core::ops::{Add, Index, IndexMut};
+use core::ops::{Add, Sub, Index, IndexMut};
 use spin::Mutex;
 use super::physical_allocator::PHYSICAL_ALLOCATOR;
 use x86_64::instructions::tlb;
@@ -87,6 +87,17 @@ impl Add<usize> for Page {
     fn add(self, other: usize) -> Page {
         Page {
             number: self.number + other,
+            size: self.size
+        }
+    }
+}
+
+impl Sub<usize> for Page {
+    type Output = Page;
+
+    fn sub(self, other: usize) -> Page {
+        Page {
+            number: self.number - other,
             size: self.size
         }
     }

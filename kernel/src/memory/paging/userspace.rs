@@ -1,8 +1,6 @@
 use super::*;
+use crate::userspace::{STACK_TOP, INITIAL_STACK_SIZE_PAGES};
 use core::alloc::{Layout, GlobalAlloc};
-
-const STACK_TOP: usize = 0xfffffffff000; // Top of lower half but page aligned
-const INITIAL_STACK_SIZE_PAGES: usize = 16; // 64kib stack
 
 pub fn map_new_process() -> InactivePageMap {
     let mut temporary_page = TemporaryPage::new();
@@ -26,20 +24,19 @@ pub fn map_new_process() -> InactivePageMap {
 
     // Set up user stack
     let stack_top = Page::containing_address(STACK_TOP, PageSize::Kib4);
-    let stack_bottom = stack_top + INITIAL_STACK_SIZE_PAGES;
+    let stack_bottom = stack_top - INITIAL_STACK_SIZE_PAGES;
+    trace!("stack bottom = 0x{:x}", stack_bottom.start_address().unwrap());
+
     active_table.with_inactive_p4(&mut new_table, &mut temporary_page, |mapper| {
         unsafe {
             mapper.map_range(
-                stack_top..=stack_bottom,
+                stack_bottom..=stack_top,
                 EntryFlags::WRITABLE | EntryFlags::USER_ACCESSIBLE | EntryFlags::NO_EXECUTE,
                 InvalidateTlb::NoInvalidate,
                 ZeroPage::NoZero,
             );
         }
     });
-
-    // TODO zero ^
-
 
     // Drop this lock so that the RAII guarded temporary page can be destroyed
     drop(active_table);

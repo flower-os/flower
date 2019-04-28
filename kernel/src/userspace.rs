@@ -1,5 +1,9 @@
+use core::ptr;
 use crate::{ps2, snake, process, gdt::GDT, memory::paging::ACTIVE_PAGE_TABLES};
 use x86_64::VirtAddr;
+
+pub const STACK_TOP: usize = 0x7ffffffff000; // Top of lower half but page aligned
+pub const INITIAL_STACK_SIZE_PAGES: usize = 16; // 64kib stack
 
 pub fn usermode_begin() -> ! {
     let pid = process::ProcessId::next();
@@ -9,7 +13,18 @@ pub fn usermode_begin() -> ! {
 
     ACTIVE_PAGE_TABLES.lock().switch(&page_tables);
 
-    unsafe { jump_usermode() }
+    let stack_top = STACK_TOP;
+    let stack_size = INITIAL_STACK_SIZE_PAGES * 0x1000;
+    let stack_bottom = stack_top - stack_size;
+
+    // TODO
+    trace!("stack bottom = 0x{:x}", stack_bottom);
+
+    unsafe {
+        // Zero the stack
+        ptr::write_bytes(stack_bottom as *mut u8, 0, stack_size);// TODO volatile
+        jump_usermode()
+    }
 }
 
 /// Jumps to usermode.
@@ -24,12 +39,13 @@ pub unsafe fn jump_usermode() -> ! {
     mov es, ax
     mov fs ,ax
     mov gs, ax
+    mov rsp, rbx
 
     mov rax, rsp
     push 0x33
     push rax
     pushfq
-    " :: "{ax}"(ds) :: "intel", "volatile");
+    " :: "{ax}"(ds), "{rbx}"(STACK_TOP) :: "intel", "volatile");
 
     let rsp: u64;
     asm!("mov %rsp, $0" : "=r"(rsp));
