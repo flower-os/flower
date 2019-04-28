@@ -6,7 +6,8 @@ use core::{iter, mem};
 use core::ptr::Unique;
 use core::ops::{Deref, DerefMut};
 use spin::{Once, Mutex};
-use super::paging::{ACTIVE_PAGE_TABLES, Page, PageSize, EntryFlags, FreeMemory, InvalidateTlb};
+use super::paging::{ACTIVE_PAGE_TABLES, Page, PageSize, EntryFlags, FreeMemory, InvalidateTlb,
+                    ZeroPage};
 use crate::memory::{buddy_allocator, paging::PhysicalAddress};
 use crate::util;
 // use ...::Block // <-- this one comes from the macro invocation below
@@ -63,19 +64,17 @@ impl Heap {
             let heap_tree_start = ((heap_tree_start / 4096) + 1) * 4096;
 
             // Map pages for the tree to use for accounting info
-            let pages_to_map = util::round_up_divide(
-                mem::size_of::<[Block; BLOCKS_IN_TREE]>() as u64,
-                4096,
-            );
+            let tree_size_pages = mem::size_of::<[Block; BLOCKS_IN_TREE]>() / 4096;
 
-            for page in 0..pages_to_map as usize {
-                let mut table = ACTIVE_PAGE_TABLES.lock();
-                table.map(
-                    Page::containing_address(heap_tree_start + (page * 4096), PageSize::Kib4),
-                    EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE | EntryFlags::USER_ACCESSIBLE, // TODO
-                    InvalidateTlb::Invalidate,
-                );
-            }
+            let page_start = Page::containing_address(heap_tree_start, PageSize::Kib4);
+            let page_end = page_start + tree_size_pages;
+
+            ACTIVE_PAGE_TABLES.lock().map_range(
+                page_start..=page_end,
+                EntryFlags::WRITABLE | EntryFlags::USER_ACCESSIBLE | EntryFlags::NO_EXECUTE,
+                InvalidateTlb::Invalidate, // TODO?
+                ZeroPage::Zero,
+            );
 
             let tree = Tree::new(
                 iter::once(0..(1 << 30 + 1)),
@@ -206,6 +205,7 @@ unsafe impl GlobalAlloc for Heap {
                     Page::containing_address(page_addr, PageSize::Kib4),
                     EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE | EntryFlags::USER_ACCESSIBLE, // TODO
                     InvalidateTlb::NoInvalidate,
+                    ZeroPage::Zero,
                 );
             }
         }

@@ -19,6 +19,12 @@ pub enum InvalidateTlb {
     NoInvalidate,
 }
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum ZeroPage {
+    Zero,
+    NoZero,
+}
+
 pub struct Mapper {
     p4: Unique<PageTable<Level4>>,
 }
@@ -134,7 +140,13 @@ impl Mapper {
         }
     }
 
-    pub unsafe fn map(&mut self, page: Page, flags: EntryFlags, invplg: InvalidateTlb) {
+    pub unsafe fn map(
+        &mut self,
+        page: Page,
+        flags: EntryFlags,
+        invplg: InvalidateTlb,
+        zero: ZeroPage
+    ) {
         use core::ptr;
 
         assert!(page.size.is_some(), "Page needs size!");
@@ -149,11 +161,13 @@ impl Mapper {
         self.map_to(page, frame, flags, invplg);
 
         // Zero the page
-        ptr::write_bytes(
-            page.start_address().unwrap() as *mut u8,
-            0,
-            page.size.unwrap().bytes()
-        );
+        if zero == ZeroPage::Zero {
+            ptr::write_bytes( // TODO volatile
+                page.start_address().unwrap() as *mut u8,
+                0,
+                page.size.unwrap().bytes()
+            );
+        }
     }
 
     pub unsafe fn unmap(&mut self, page: Page, free_physmem: FreeMemory, invplg: InvalidateTlb) {
@@ -239,16 +253,22 @@ impl Mapper {
 
     /// Maps a range of pages, allocating physical memory for them
     // TODO use this more widely
-    pub unsafe fn map_range(&mut self, pages: RangeInclusive<Page>, flags: EntryFlags, invplg: InvalidateTlb) {
+    pub unsafe fn map_range(
+        &mut self,
+        pages: RangeInclusive<Page>,
+        flags: EntryFlags,
+        invplg: InvalidateTlb,
+        zero: ZeroPage
+    ) {
         assert!(
             pages.start().page_size() == Some(PageSize::Kib4) &&
                 pages.end().page_size() == Some(PageSize::Kib4),
             "Only mapping of 4kib pages is supported"
         );
 
-        for no in pages.start().start_address().unwrap()..=pages.end().start_address().unwrap() {
+        for no in pages.start().number()..=pages.end().number() {
             let page = Page::containing_address(no * 0x1000, PageSize::Kib4);
-            self.map(page, flags, invplg);
+            self.map(page, flags, invplg, zero);
         }
     }
 
@@ -326,7 +346,7 @@ impl TemporaryPage {
     pub unsafe fn map(
         &mut self,
         frame: PhysicalAddress,
-        active_table: &mut ActivePageMap
+        active_table: &mut ActivePageMap,
     ) -> VirtualAddress {
         let page_addr = self.page.start_address().expect("Temporary page requires size");
         assert!(

@@ -29,13 +29,16 @@ pub fn map_new_process() -> InactivePageMap {
     let stack_bottom = stack_top + INITIAL_STACK_SIZE_PAGES;
     active_table.with_inactive_p4(&mut new_table, &mut temporary_page, |mapper| {
         unsafe {
-            mapper.map_range( // TODO map this shit before zero :l
+            mapper.map_range(
                 stack_top..=stack_bottom,
                 EntryFlags::WRITABLE | EntryFlags::USER_ACCESSIBLE | EntryFlags::NO_EXECUTE,
                 InvalidateTlb::NoInvalidate,
+                ZeroPage::NoZero,
             );
         }
     });
+
+    // TODO zero ^
 
 
     // Drop this lock so that the RAII guarded temporary page can be destroyed

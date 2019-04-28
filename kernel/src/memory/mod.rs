@@ -33,7 +33,7 @@ use self::buddy_allocator::Block;
 use self::stack_allocator::StackAllocator;
 use self::bootstrap_heap::{BootstrapHeap, BOOTSTRAP_HEAP};
 use self::paging::{Page, PageSize, PhysicalAddress, VirtualAddress, ACTIVE_PAGE_TABLES, EntryFlags,
-                   PageRangeMapping, remap, InvalidateTlb};
+                   PageRangeMapping, remap, InvalidateTlb, ZeroPage};
 use crate::util::round_up_divide;
 use crate::gdt::{TSS, Tss};
 
@@ -130,6 +130,7 @@ unsafe fn setup_ist(begin: Page) {
                 Page::containing_address(begin.start_address().unwrap() + (page * 4096), PageSize::Kib4),
                 EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE | EntryFlags::USER_ACCESSIBLE, // TODO
                 InvalidateTlb::Invalidate,
+                ZeroPage::Zero,
             );
         }
     }
