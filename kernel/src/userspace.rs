@@ -1,5 +1,5 @@
 use core::ptr;
-use crate::{ps2, snake, process, gdt::GDT, memory::paging::ACTIVE_PAGE_TABLES};
+use crate::{util, ps2, snake, process, gdt::GDT, memory::paging::ACTIVE_PAGE_TABLES};
 use x86_64::VirtAddr;
 
 pub const STACK_TOP: usize = 0x7ffffffff000; // Top of lower half but page aligned
@@ -22,7 +22,7 @@ pub fn usermode_begin() -> ! {
 
     unsafe {
         // Zero the stack
-        ptr::write_bytes(stack_bottom as *mut u8, 0, stack_size);// TODO volatile
+        util::memset_volatile(stack_bottom as *mut u8, 0, stack_size);
         jump_usermode()
     }
 }

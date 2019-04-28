@@ -86,6 +86,16 @@ pub const fn round_up_divide(x: u64, y: u64) -> u64 {
     (x + y - 1) / y
 }
 
+/// Adapted from https://github.com/rust-lang-nursery/compiler-builtins/blob/master/src/mem.rs#L44
+pub unsafe fn memset_volatile(s: *mut u8, c: u8, n: usize) -> *mut u8 {
+    let mut i = 0;
+    while i < n {
+        core::ptr::write_volatile(s.offset(i as isize), c);
+        i += 1;
+    }
+    s
+}
+
 pub unsafe fn cr3_write(val: ::x86_64::PhysAddr) {
     // Taken from https://docs.rs/x86_64/0.2.14/src/x86_64/registers/control.rs.html#116-120
     asm!("mov $0, %cr3" :: "r" (val.as_u64()) : "memory")

@@ -162,7 +162,7 @@ impl Mapper {
 
         // Zero the page
         if zero == ZeroPage::Zero {
-            ptr::write_bytes( // TODO volatile
+            util::memset_volatile(
                 page.start_address().unwrap() as *mut u8,
                 0,
                 page.size.unwrap().bytes()
