@@ -237,6 +237,22 @@ impl Mapper {
         }
     }
 
+    /// Maps a range of pages, allocating physical memory for them
+    // TODO use this more widely
+    pub unsafe fn map_range(&mut self, pages: RangeInclusive<Page>, flags: EntryFlags, invplg: InvalidateTlb) {
+        assert!(
+            pages.start().page_size() == Some(PageSize::Kib4) &&
+                pages.end().page_size() == Some(PageSize::Kib4),
+            "Only mapping of 4kib pages is supported"
+        );
+
+        for no in pages.start().start_address().unwrap()..=pages.end().start_address().unwrap() {
+            let page = Page::containing_address(no * 0x1000, PageSize::Kib4);
+            self.map(page, flags, invplg);
+        }
+    }
+
+    /// Maps a range of pages with specific physical memory.
     pub unsafe fn map_page_range(
         &mut self,
         mapping: PageRangeMapping,

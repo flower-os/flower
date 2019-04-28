@@ -123,24 +123,6 @@ impl PageTableEntry {
             physical_address.0,
         );
 
-        // Check that physical address is correctly sign extended
-        let bit_47 = (physical_address.0 >> 48) & 1;
-        if bit_47 == 1 {
-            assert_eq!(
-                physical_address.0 >> 48,
-                0xFFFF,
-                "Physical address 0x{:x} is not correctly sign extended!",
-                physical_address.0,
-            )
-        } else {
-            assert_eq!(
-                physical_address.0 >> 48,
-                0,
-                "Physical address 0x{:x} is not correctly sign extended!",
-                physical_address.0,
-            )
-        }
-
         self.0 = (physical_address.0 as u64) | flags.bits();
     }
 }
@@ -167,7 +149,7 @@ bitflags! {
         /// and a 2MiB page in P2
         const HUGE_PAGE = 1 << 7;
         /// If set, this page will not be flushed in the TLB. PGE bit in CR4 must be set.
-        const GLOBAL = 1 << 8;
+        const GLOBAL = 1 << 8; // TODO map kernel pages as global?
         /// Do not allow executing code from this page. NXE bit in EFER must be set.
         const NO_EXECUTE = 1 << 63;
     }
