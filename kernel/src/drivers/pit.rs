@@ -2,8 +2,8 @@
 /// Note: This is a very low accuracy driver, with a drift of ~1ms every 6 seconds
 
 use crate::interrupts;
+use crate::io::Port;
 use spin::Mutex;
-use crate::io::SynchronizedPort;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 static COUNTER: AtomicUsize = AtomicUsize::new(0);
@@ -35,15 +35,15 @@ pub fn time_ms() -> usize {
 }
 
 pub struct Controller {
-    configure_port: SynchronizedPort<u8>,
+    configure_port: Port<u8>,
     channel_0: Channel,
 }
 
 impl Controller {
     const unsafe fn new() -> Controller {
         Controller {
-            configure_port: SynchronizedPort::new(0x43),
-            channel_0: Channel::new(SynchronizedPort::new(0x40)),
+            configure_port: Port::new(0x43),
+            channel_0: Channel::new(Port::new(0x40)),
         }
     }
 
@@ -66,11 +66,11 @@ impl Controller {
 }
 
 pub struct Channel {
-    port: SynchronizedPort<u8>,
+    port: Port<u8>,
 }
 
 impl Channel {
-    const fn new(port: SynchronizedPort<u8>) -> Channel {
+    const fn new(port: Port<u8>) -> Channel {
         Channel { port }
     }
 

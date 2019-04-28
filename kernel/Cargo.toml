@@ -24,6 +24,12 @@ bit_field = "^0.9.0"
 log = "^0.4.3"
 static_assertions = "^0.2.5"
 
+[dependencies.crossbeam]
+git = "https://github.com/Restioson/crossbeam/"
+rev = "92b764bb630cc57d5aa0c38ac4e5b79016aef530"
+default-features = false
+features = ["nightly", "no_std"]
+
 [dependencies.multiboot2]
 git = "https://github.com/rust-osdev/multiboot2-elf64/"
 rev = "9ce9247eee220a0bc2ca480c23c7572132c5ae9c"
@@ -40,7 +46,7 @@ version = "^0.0.3"
 features = ["nightly"]
 
 [dependencies.lazy_static]
-version = "^1.0.0"
+version = "^1.1.0"
 features = ["spin_no_std"]
 
 [features]

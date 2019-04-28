@@ -12,6 +12,7 @@
 #![feature(compiler_builtins_lib)]
 #![feature(panic_info_message)]
 #![feature(integer_atomics)]
+#![feature(try_trait)]
 
 #[cfg(test)]
 #[cfg_attr(test, macro_use)]
@@ -36,9 +37,10 @@ extern crate lazy_static;
 #[macro_use]
 extern crate static_assertions;
 extern crate arrayvec;
+extern crate crossbeam;
 
-use crate::drivers::keyboard::{Keyboard, KeyEventType, Ps2Keyboard};
-use crate::drivers::keyboard::keymap;
+//use crate::drivers::keyboard::{Keyboard, KeyEventType, Ps2Keyboard};
+//use crate::drivers::keyboard::keymap;
 use crate::drivers::{ps2, serial};
 use crate::terminal::TerminalOutput;
 
@@ -62,6 +64,7 @@ mod cpuid;
 mod snake;
 
 use crate::memory::heap::Heap;
+use crate::drivers::keyboard::{keymap, Ps2Keyboard, Keyboard, KeyEventType};
 
 #[cfg_attr(not(test), global_allocator)]
 pub static HEAP: Heap = Heap::new();
@@ -84,13 +87,12 @@ pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
     let _acpi = acpi_impl::acpi_init();
 
     // Initialize the PS/2 controller and run the keyboard echo loop
-    let mut controller = ps2::CONTROLLER.lock();
-    match controller.initialize() {
+    match ps2::initialize() {
         Ok(_) => info!("ps2c: init successful"),
         Err(error) => error!("ps2c: {:?}", error),
     }
 
-    snake::snake(&mut controller);
+    snake::snake();
 
     halt()
 }
@@ -133,25 +135,19 @@ fn print_flower() -> Result<(), terminal::TerminalOutputError<()>> {
     Ok(())
 }
 
-fn keyboard_echo_loop(controller: &mut ps2::Controller) {
-    let keyboard_device = controller.device(ps2::DevicePort::Keyboard);
-    let mut keyboard = Ps2Keyboard::new(keyboard_device);
-    if let Ok(_) = keyboard.enable() {
-        info!("kbd: successfully enabled");
-        loop {
-            if let Ok(Some(event)) = keyboard.read_event() {
-                if event.event_type != KeyEventType::Break {
-                    if event.keycode == keymap::codes::BACKSPACE {
-                        // Ignore error
-                        let _ = terminal::STDOUT.write().backspace();
-                    } else if let Some(character) = event.char {
-                        print!("{}", character)
-                    }
+fn keyboard_echo_loop() {
+    let mut keyboard = Ps2Keyboard::new();
+    loop {
+        if let Ok(Some(event)) = keyboard.read_event() {
+            if event.event_type != KeyEventType::Break {
+                if event.keycode == keymap::codes::BACKSPACE {
+                    // Ignore error
+                    let _ = terminal::STDOUT.write().backspace();
+                } else if let Some(character) = event.char {
+                    print!("{}", character)
                 }
             }
         }
-    } else {
-        error!("kbd: enable unsuccessful");
     }
 }
 

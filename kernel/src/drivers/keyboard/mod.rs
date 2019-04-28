@@ -19,22 +19,36 @@
 //! }
 //! ```
 
+// TODO: Redo all examples
+
+use core::convert::{TryFrom, TryInto};
+
 pub mod keymap;
 
-use core::convert::From;
-
-use crate::drivers::ps2::{self, Device, DeviceState};
-use crate::drivers::ps2::io::Ps2Error;
-use crate::drivers::ps2::io::commands::{DeviceCommand, DeviceDataCommand};
+use crate::drivers::ps2;
 
 bitflags! {
     pub struct ModifierFlags: u8 {
-        /// If a CTRL modifier is active
-        const CTRL = 1 << 0;
-        /// If an ALT modifier is active
-        const ALT = 1 << 1;
         /// If a SHIFT modifier is active
-        const SHIFT = 1 << 2;
+        const SHIFT = 1 << 0;
+        /// If the NUM_LOCK modifier is active
+        const NUM_LOCK = 1 << 1;
+        /// If a CAPS_LOCK modifier is active
+        const CAPS_LOCK = 1 << 2;
+    }
+}
+
+bitflags! {
+    /// Flags to hold the current keyboard lock states
+    pub struct StateFlags: u8 {
+        /// If num lock is enabled
+        const NUM_LOCK = 1 << 0;
+        /// If scroll lock is enabled
+        const SCROLL_LOCK = 1 << 1;
+        /// If caps lock is enabled
+        const CAPS_LOCK = 1 << 2;
+        /// If function lock is enabled
+        const FUNCTION_LOCK = 1 << 3;
     }
 }
 
@@ -45,21 +59,59 @@ impl ModifierFlags {
     ///
     /// ```rust
     /// let modifiers = ModifierFlags::from_modifiers(true, true, true);
-    /// assert_eq!(modifiers, ModifierFlags::CTRL | ModifierFlags::ALT | ModifierFlags::SHIFT);
+    /// assert_eq!(modifiers, ModifierFlags::SHIFT | ModifierFlags::NUM_LOCK | ModifierFlags::CAPS_LOCK);
     /// ```
-    fn from_modifiers(ctrl: bool, alt: bool, shift: bool) -> Self {
+    fn from_modifiers(shift: bool, num_lock: bool, caps_lock: bool) -> Self {
         let mut flags = ModifierFlags::empty();
-        flags.set(ModifierFlags::CTRL, ctrl);
-        flags.set(ModifierFlags::ALT, alt);
         flags.set(ModifierFlags::SHIFT, shift);
+        flags.set(ModifierFlags::NUM_LOCK, num_lock);
+        flags.set(ModifierFlags::CAPS_LOCK, caps_lock);
         flags
     }
 }
 
+/// Mapping from a keycode into a character
+pub enum KeyCharMapping {
+    /// A key with no character mapping
+    Empty,
+    /// A key with a constant character mapping
+    Single(char),
+    /// A key with an alternative character mapping when shift is pressed
+    Shifted(char, char),
+    /// A key with an alternative character mapping when either CAPS is enabled or shift is pressed
+    Capitalized(char, char),
+    /// A key that only maps to a character when numlock is disabled
+    NumLocked(char),
+}
+
+impl KeyCharMapping {
+    /// Gets the character for this char based on the given modifiers
+    pub fn char(&self, modifiers: ModifierFlags) -> Option<char> {
+        use self::KeyCharMapping::*;
+        match *self {
+            Single(character) => Some(character),
+            Shifted(character, shifted) => if modifiers.contains(ModifierFlags::SHIFT) {
+                Some(shifted)
+            } else {
+                Some(character)
+            },
+            Capitalized(character, capital) => if modifiers.contains(ModifierFlags::CAPS_LOCK) ^ modifiers.contains(ModifierFlags::SHIFT) {
+                Some(capital)
+            } else {
+                Some(character)
+            },
+            NumLocked(character) if !modifiers.contains(ModifierFlags::NUM_LOCK) => Some(character),
+            _ => None,
+        }
+    }
+}
+
+pub type Keycode = u8;
+
 /// Contains data relating to a key press event
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct KeyEvent {
-    pub keycode: u8,
+    pub keycode: Keycode,
     pub char: Option<char>,
     pub event_type: KeyEventType,
     pub modifiers: ModifierFlags,
@@ -77,62 +129,9 @@ pub enum KeyEventType {
     Repeat,
 }
 
-/// An error for a PS/2 keyboard
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub enum Ps2KeyboardError {
-    /// If an error occurred while reading from PS/2
-    ReadError(Ps2Error),
-    /// If the keyboard is disabled and cannot be used
-    KeyboardDisabled,
-    /// If enabling the keyboard fails
-    KeyboardEnableFailed,
-    /// If setting the scancode fails
-    ScancodeSetFailed,
-    /// If enabling scanning fails
-    ScanningEnableFailed,
-}
-
 /// Interface to a generic keyboard.
 pub trait Keyboard {
     type Error;
-
-    /// Enables this keyboard, setting it up before use.
-    ///
-    /// # Note
-    ///
-    /// The keyboard should not be accessed while not enabled!
-    ///
-    /// # Examples
-    ///
-    /// ```rust,no_run
-    /// let device = drivers::ps2::CONTROLLER.device(drivers::ps2::DevicePort::Keyboard);
-    /// let mut keyboard = Ps2Keyboard::new(device);
-    ///
-    /// match keyboard.enable() {
-    ///     Ok(_) => println!("Keyboard successfully enabled"),
-    ///     Err(err) => println!("Keyboard enable failed with error: {:?}", err),
-    /// }
-    /// ```
-    fn enable(&mut self) -> Result<(), Self::Error>;
-
-    /// Disables this keyboard, making use unavailable.
-    ///
-    /// # Note
-    ///
-    /// Until `enable` is called again, this keyboard should not be used
-    ///
-    /// # Examples
-    ///
-    /// ```rust,no_run
-    /// let device = drivers::ps2::CONTROLLER.device(drivers::ps2::DevicePort::Keyboard);
-    /// let mut keyboard = Ps2Keyboard::new(device);
-    ///
-    /// match keyboard.disable() {
-    ///     Ok(_) => println!("Keyboard successfully disabled"),
-    ///     Err(err) => println!("Keyboard disable failed with error: {:?}", err),
-    /// }
-    /// ```
-    fn disable(&mut self) -> Result<(), Self::Error>;
 
     /// Polls the device for a new key state event, or returns `None` if none have occurred since the last poll.
     ///
@@ -146,31 +145,43 @@ pub trait Keyboard {
     ///     println!("Event occurred for char: {}", event.char.unwrap_or(' '));
     /// }
     /// ```
-    // TODO: This should eventually use interrupts and hold a queue
     fn read_event(&mut self) -> Result<Option<KeyEvent>, Self::Error>;
 
-    /// Returns `true` if the given keycode is currently being pressed
+    /// Returns `true` if the given keycode is currently being held down
     ///
     /// ```rust,no_run
     /// let device = drivers::ps2::CONTROLLER.device(drivers::ps2::DevicePort::Keyboard);
     /// let mut keyboard = Ps2Keyboard::new(device);
     ///
-    /// if keyboard.pressed(keymap::codes::LEFT_SHIFT) {
-    ///     println!("Left shift pressed");
+    /// if keyboard.is_down(keymap::codes::LEFT_SHIFT) {
+    ///     println!("Left shift down");
     /// } else {
-    ///     println!("Left shift not pressed");
+    ///     println!("Left shift not down");
     /// }
     /// ```
-    fn pressed(&self, keycode: u8) -> bool;
+    fn is_down(&self, keycode: Keycode) -> bool;
+
+    fn num_lock(&self) -> bool;
+
+    fn scroll_lock(&self) -> bool;
+
+    fn caps_lock(&self) -> bool;
+
+    fn function_lock(&self) -> bool;
 }
+
+const KEY_STATE_WORD_WIDTH: usize = 8;
+/// The amount of words each containing 8 key state bits
+const KEY_STATE_LENGTH: usize = 0xFF / KEY_STATE_WORD_WIDTH;
 
 /// Handles interface to a PS/2 keyboard, if available
-pub struct Ps2Keyboard<'a> {
-    device: &'a mut Device,
-    key_states: [bool; 0xFF],
+pub struct Ps2Keyboard {
+    /// Bitmap containing state of every key. 8 key states are stored per entry (word)
+    key_state_words: [u8; KEY_STATE_LENGTH],
+    state: StateFlags,
 }
 
-impl<'a> Ps2Keyboard<'a> {
+impl Ps2Keyboard {
     /// Creates a new Ps2Keyboard from the given PS/2 device
     ///
     /// # Examples
@@ -179,58 +190,16 @@ impl<'a> Ps2Keyboard<'a> {
     /// let device = drivers::ps2::CONTROLLER.device(drivers::ps2::DevicePort::Keyboard);
     /// let mut keyboard = Ps2Keyboard::new(device);
     /// ```
-    pub fn new(device: &'a mut Device) -> Self {
+    pub fn new() -> Self {
         Ps2Keyboard {
-            device,
-            key_states: [false; 0xFF],
+            key_state_words: [0; KEY_STATE_LENGTH],
+            state: StateFlags::empty(),
         }
     }
 
-    /// Reads a single scancode from this PS/2 keyboard
-    ///
-    /// # Examples
-    ///
-    /// ```rust,no_run
-    /// let device = drivers::ps2::CONTROLLER.device(drivers::ps2::DevicePort::Keyboard);
-    /// let mut keyboard = Ps2Keyboard::new(device);
-    ///
-    /// if let Some(scancode) = keyboard.read_scancode()? {
-    ///     print!(scancode);
-    /// }
-    /// ```
-    fn read_scancode(&self) -> Result<Option<Ps2Scancode>, Ps2KeyboardError> {
-        use crate::ps2::io;
-
-        if self.device.state == DeviceState::Enabled {
-            if io::can_read()? && io::can_read_keyboard()? {
-                let mut make = true;
-                let mut extended = false;
-
-                // Get all scancode modifiers, and return when the actual scancode is received
-                let scancode = (io::DATA_PORT.with_lock(|mut data_port| {
-                    loop {
-                        let data = io::read(&mut data_port)?;
-                        match data {
-                            0xE0 ... 0xE1 => extended = true,
-                            0xF0 => make = false,
-                            _ => {
-                                break Ok(data);
-                            }
-                        }
-                    }
-                }): Result<u8, io::Ps2Error>)?;
-
-                // If scancode is present, return it with modifiers
-                return Ok(if scancode != 0 {
-                    Some(Ps2Scancode::new(scancode, extended, make))
-                } else {
-                    None
-                });
-            }
-            Ok(None)
-        } else {
-            Err(Ps2KeyboardError::KeyboardDisabled)
-        }
+    // TODO
+    fn on_keyboard_change(keyboard: ps2::Keyboard) -> ps2::Result<()> {
+        ps2::Keyboard::set_scanset(ps2::keyboard::Scanset::Two)
     }
 
     /// Creates a [KeyEvent] from the given scancode and key state
@@ -238,115 +207,141 @@ impl<'a> Ps2Keyboard<'a> {
     /// # Examples
     ///
     /// ```rust,no_run
-    /// let scancode = Ps2Scancode::new(0x15, false, true);
+    /// let scancode = ps2::device::keyboard::Scancode::new(0x15, false, true);
     /// let event = keyboard.create_event(&scancode).unwrap();
     /// assert_eq!(event.keycode, keymap::codes::Q);
     /// assert_eq!(event.char, Some('q'));
     /// assert_eq!(event.event_type, KeyEventType::Make);
     /// ```
-    fn create_event(&self, scancode: &Ps2Scancode) -> Option<KeyEvent> {
-        let ctrl = self.pressed(keymap::codes::LEFT_CONTROL) || self.pressed(keymap::codes::RIGHT_CONTROL);
-        let alt = self.pressed(keymap::codes::LEFT_ALT) || self.pressed(keymap::codes::RIGHT_ALT);
-        let shift = self.pressed(keymap::codes::LEFT_SHIFT) || self.pressed(keymap::codes::RIGHT_SHIFT);
-        let modifiers = ModifierFlags::from_modifiers(ctrl, alt, shift);
+    fn create_event(&self, scancode: &ps2::keyboard::Scancode) -> Option<KeyEvent> {
+        let shift = self.is_down(keymap::codes::LEFT_SHIFT) || self.is_down(keymap::codes::RIGHT_SHIFT);
+        let num_lock = self.state.contains(StateFlags::NUM_LOCK);
+        let caps_lock = self.state.contains(StateFlags::CAPS_LOCK);
+        let modifiers = ModifierFlags::from_modifiers(shift, num_lock, caps_lock);
 
-        if let Some(keycode) = scancode.keycode() {
-            let char = keymap::get_us_qwerty_char(keycode)
-                .map(|chars| if shift {
-                    chars.1
-                } else {
-                    chars.0
-                });
+        if let Ok(keycode) = (*scancode).try_into() {
+            let char = keymap::get_us_qwerty_char(keycode).char(modifiers);
 
             // If the key was already pressed and make was sent, this is a repeat event
             let event_type = match scancode.make {
-                true if self.pressed(keycode) => KeyEventType::Repeat,
+                true if self.is_down(keycode) => KeyEventType::Repeat,
                 true => KeyEventType::Make,
                 false => KeyEventType::Break,
             };
 
-            return Some(KeyEvent { keycode, char, event_type, modifiers });
+            Some(KeyEvent { keycode, char, event_type, modifiers })
+        } else {
+            None
         }
+    }
 
-        None
+    fn handle_state(&mut self, event: KeyEvent) -> ps2::Result<()> {
+        if event.event_type == KeyEventType::Make {
+            use self::keymap::codes::*;
+            let last_state = self.state.bits();
+            match event.keycode {
+                SCROLL_LOCK => self.state.toggle(StateFlags::SCROLL_LOCK),
+                NUM_LOCK => self.state.toggle(StateFlags::NUM_LOCK),
+                CAPS_LOCK => self.state.toggle(StateFlags::CAPS_LOCK),
+                ESCAPE if self.is_down(FUNCTION) => self.state.toggle(StateFlags::FUNCTION_LOCK),
+                _ => (),
+            }
+            if self.state.bits() != last_state {
+                ps2::Keyboard::set_leds(self.state.into())?;
+            }
+        }
+        Ok(())
     }
 }
 
-impl<'a> Keyboard for Ps2Keyboard<'a> {
-    type Error = Ps2KeyboardError;
+impl Keyboard for Ps2Keyboard {
+    type Error = ps2::Error;
 
-    fn enable(&mut self) -> Result<(), Ps2KeyboardError> {
-        self.device.enable()?;
-
-        if self.device.state != DeviceState::Enabled {
-            return Err(Ps2KeyboardError::KeyboardEnableFailed);
-        }
-
-        if self.device.command_data(DeviceDataCommand::SetScancode, 2)? != ps2::ACK {
-            return Err(Ps2KeyboardError::ScancodeSetFailed);
-        }
-
-        if self.device.command(DeviceCommand::EnableScanning)? != ps2::ACK {
-            return Err(Ps2KeyboardError::ScanningEnableFailed);
-        }
-
-        Ok(())
-    }
-
-    fn disable(&mut self) -> Result<(), Ps2KeyboardError> {
-        self.device.disable()?;
-
-        Ok(())
-    }
-
-    fn read_event(&mut self) -> Result<Option<KeyEvent>, Self::Error> {
-        let event = self.read_scancode()?.and_then(|scancode| {
+    fn read_event(&mut self) -> ps2::Result<Option<KeyEvent>> {
+        Ok(if let Some(scancode) = ps2::Keyboard::next_scancode() {
             let event = self.create_event(&scancode);
-            if event.is_some() {
-                self.key_states[event.unwrap().keycode as usize] = scancode.make;
+            if let Some(event) = event {
+                // Update states such as caps lock with this key event
+                self.handle_state(event)?;
+                let index = event.keycode as usize;
+                let bit = 1 << (index % KEY_STATE_WORD_WIDTH);
+                let word_index = index / KEY_STATE_WORD_WIDTH;
+                if scancode.make {
+                    self.key_state_words[word_index] |= bit;
+                } else {
+                    self.key_state_words[word_index] &= !bit;
+                }
+            } else {
+                // TODO: Handle invalid scancode
             }
             event
-        });
-        Ok(event)
+        } else {
+            None
+        })
     }
 
-    fn pressed(&self, keycode: u8) -> bool {
-        *self.key_states.get(keycode as usize).unwrap_or(&false)
+    fn is_down(&self, keycode: Keycode) -> bool {
+        let index = keycode as usize;
+        let word = *self.key_state_words.get(index / KEY_STATE_WORD_WIDTH).unwrap_or(&0);
+        let bit_index = index % KEY_STATE_WORD_WIDTH;
+        ((word >> bit_index) & 1) != 0
     }
+
+    fn num_lock(&self) -> bool { self.state.contains(StateFlags::NUM_LOCK) }
+
+    fn scroll_lock(&self) -> bool { self.state.contains(StateFlags::SCROLL_LOCK) }
+
+    fn caps_lock(&self) -> bool { self.state.contains(StateFlags::CAPS_LOCK) }
+
+    fn function_lock(&self) -> bool { self.state.contains(StateFlags::FUNCTION_LOCK) }
 }
 
-/// Represents a PS/2 scancode received from the device
-struct Ps2Scancode {
-    pub code: u8,
-    pub extended: bool,
-    pub make: bool,
+pub enum UnknownScancode {
+    UnknownPlainScancode(u8),
+    UnknownExtendedScancode(u8),
 }
 
-impl Ps2Scancode {
-    /// Constructs a new [Ps2Scancode]
-    fn new(scancode: u8, extended: bool, make: bool) -> Self {
-        Ps2Scancode { code: scancode, extended, make }
-    }
+impl TryFrom<ps2::keyboard::Scancode> for Keycode {
+    type Error = UnknownScancode;
 
     /// Gets the Flower keycode for this scancode
     ///
     /// # Examples
     ///
     /// ```rust
-    /// let scancode = Ps2Scancode::new(0x01, false, true);
+    /// let scancode = ps2::device::keyboard::Scancode::new(0x01, false, true);
     /// assert_eq!(scancode.keycode(), Some(keymap::codes::KEY_F9));
     /// ```
-    fn keycode(&self) -> Option<u8> {
-        if self.extended {
-            keymap::get_extended_code_ps2_set_2(self.code)
+    fn try_from(scancode: ps2::keyboard::Scancode) -> Result<Keycode, UnknownScancode> {
+        use self::UnknownScancode::*;
+
+        let converted = if !scancode.extended {
+            keymap::get_code_ps2_set_2(scancode.code)
         } else {
-            keymap::get_code_ps2_set_2(self.code)
+            keymap::get_extended_code_ps2_set_2(scancode.code)
+        };
+
+        match (converted, scancode.extended) {
+            (Some(keycode), _) => Ok(keycode),
+            (None, false) => Err(UnknownPlainScancode(scancode.code)),
+            (None, true) => Err(UnknownExtendedScancode(scancode.code)),
         }
     }
 }
 
-impl From<Ps2Error> for Ps2KeyboardError {
-    fn from(error: Ps2Error) -> Self {
-        Ps2KeyboardError::ReadError(error)
+impl From<StateFlags> for ps2::keyboard::LedFlags {
+    fn from(state: StateFlags) -> Self {
+        use ps2::keyboard::LedFlags;
+        let mut flags = LedFlags::empty();
+        if state.contains(StateFlags::SCROLL_LOCK) {
+            flags.insert(LedFlags::SCROLL_LOCK);
+        }
+        if state.contains(StateFlags::NUM_LOCK) {
+            flags.insert(LedFlags::NUMBER_LOCK);
+        }
+        if state.contains(StateFlags::CAPS_LOCK) {
+            flags.insert(LedFlags::CAPS_LOCK);
+        }
+        flags
     }
 }

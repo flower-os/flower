@@ -1,12 +1,12 @@
 // Thanks to http://www.randomhacks.net/2015/11/16/bare-metal-rust-configure-your-pic-interrupts/
 
-use crate::io::SynchronizedPort;
+use crate::io::Port;
 use spin::Mutex;
 
 pub static CHAINED_PICS: Mutex<ChainedPics> = Mutex::new(ChainedPics::new());
 
 /// Used to pause execution temporarily
-pub static IO_WAIT_PORT: SynchronizedPort<u8> = unsafe { SynchronizedPort::new(0x80) };
+pub static IO_WAIT_PORT: Port<u8> = unsafe { Port::new(0x80) };
 
 const COMMAND_INIT: u8 = 0x11;
 const COMMAND_END_OF_INTERRUPT: u8 = 0x20;
@@ -17,12 +17,12 @@ const COMMAND_READ_ISR: u8 = 0x0B;
 /// Represents an 8295/8295A PIC (superseded by APIC)
 struct Pic {
     offset: u8,
-    command_port: SynchronizedPort<u8>,
-    data_port: SynchronizedPort<u8>,
+    command_port: Port<u8>,
+    data_port: Port<u8>,
 }
 
 impl Pic {
-    const fn new(offset: u8, command_port: SynchronizedPort<u8>, data_port: SynchronizedPort<u8>) -> Self {
+    const fn new(offset: u8, command_port: Port<u8>, data_port: Port<u8>) -> Self {
         Pic { offset, command_port, data_port }
     }
 
@@ -93,13 +93,13 @@ impl ChainedPics {
             ChainedPics {
                 master: Pic::new(
                     0x20,
-                    SynchronizedPort::new(0x20),
-                    SynchronizedPort::new(0x21),
+                    Port::new(0x20),
+                    Port::new(0x21),
                 ),
                 slave: Pic::new(
                     0x28,
-                    SynchronizedPort::new(0xA0),
-                    SynchronizedPort::new(0xA1),
+                    Port::new(0xA0),
+                    Port::new(0xA1),
                 ),
             }
         }
