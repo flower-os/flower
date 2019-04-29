@@ -1,9 +1,8 @@
 use core::sync::atomic::{Ordering, AtomicU64};
 use alloc::vec::Vec;
 use crate::terminal::{TerminalOutput, TerminalCharacter, Point, STDOUT};
-use crate::drivers::{pit, ps2};
-use crate::drivers::keyboard::{Ps2Keyboard, Keyboard, KeyEventType};
-use crate::halt;
+use crate::drivers::pit;
+use crate::drivers::keyboard::{ps2_keyboard, Keyboard, KeyEventKind};
 
 const HEAD_CHAR: char = 2 as char;
 const BASE_LENGTH: u16 = 4;
@@ -12,23 +11,20 @@ lazy_static! {
     static ref RNG: Random = Random::new();
 }
 
-struct Game<'a> {
+struct Game {
     grid: Grid,
     snake: Snake,
     ups: usize,
-    keyboard: &'a mut Ps2Keyboard<'a>,
     highscore: u16,
 }
 
-impl<'a> Game<'a> {
-    fn new(keyboard: &'a mut Ps2Keyboard<'a>) -> Game<'a> {
+impl Game {
+    fn new() -> Game {
         let res = STDOUT.read().resolution().expect("Terminal must have resolution");
-
         Game {
             grid: Grid::empty(res.x as usize, res.y as usize),
             snake: Snake::new(),
             ups: 20,
-            keyboard,
             highscore: 0,
         }
     }
@@ -70,9 +66,9 @@ impl<'a> Game<'a> {
     fn get_input(&mut self) -> Option<Direction> {
         use crate::drivers::keyboard::keymap::codes::*;
 
-        let event = self.keyboard.read_event().expect("Error reading keyboard input!")?;
+        let event = ps2_keyboard().read_event().expect("Error reading keyboard input!")?;
 
-        if event.event_type != KeyEventType::Break {
+        if event.kind != KeyEventKind::Break {
             match event.keycode {
                 UP_ARROW | W => Some(Direction::Up),
                 DOWN_ARROW | S => Some(Direction::Down),
@@ -120,8 +116,8 @@ impl<'a> Game<'a> {
         pit::sleep(1000);
 
         loop {
-            if let Ok(Some(event)) = self.keyboard.read_event() {
-                if event.event_type == KeyEventType::Break {
+            if let Ok(Some(event)) = ps2_keyboard().read_event() {
+                if event.kind == KeyEventKind::Break {
                     break;
                 }
             }
@@ -354,17 +350,8 @@ impl Random {
 }
 
 
-pub fn snake(controller: &mut ps2::Controller) {
-    let keyboard_device = controller.device(ps2::DevicePort::Keyboard);
-    let mut keyboard = Ps2Keyboard::new(keyboard_device);
-    if let Ok(_) = keyboard.enable() {
-        info!("kbd: successfully enabled");
-    } else {
-        error!("kbd: enable unsuccessful");
-        halt();
-    }
-
-    let mut game = Game::new(&mut keyboard);
+pub fn snake() {
+    let mut game = Game::new();
     game.run()
 }
 
