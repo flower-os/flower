@@ -3,35 +3,39 @@
 //! The keyboard driver handles all keyboard related functionality, intended to support both PS/2 and USB.
 //! Currently, only PS/2 support has been implemented through the use of the PS/2 driver.
 //!
-//! The driver is event based, and events are received through the `read_event` method, which blocks until an event is received.
+//! The driver is event based, and events are received through the `read_event` method, which will never block.
 //! The event contains the keycode pressed, which can be compared to `keymap::codes`, an optional `char`, the type of press, and various modifier flags.
 //!
 //! # Examples
 //!
 //! ```rust,no_run
-//! let device = drivers::ps2::CONTROLLER.device(drivers::ps2::DevicePort::Keyboard);
-//! let mut keyboard = Ps2Keyboard::new(device);
-//!
-//! keyboard.enable()?;
 //! loop {
-//!     let event = keyboard.read_event()?;
-//!     handle_event(event);
+//!     if let Some(event) = ps2_keyboard().read_event()? {
+//!         if let Some(char) = event.char {
+//!             println!("pressed `{}`", event.char.unwrap());
+//!         }
+//!     }
 //! }
 //! ```
-
-// TODO: Redo all examples
 
 pub mod keymap;
 
 use crate::drivers::ps2;
+use spin::Mutex;
+
+static PS2_KEYBOARD: Mutex<Ps2Keyboard> = Mutex::new(Ps2Keyboard::new());
+
+pub fn ps2_keyboard() -> &'static mut Ps2Keyboard {
+    &mut *PS2_KEYBOARD.lock()
+}
 
 bitflags! {
     pub struct ModifierFlags: u8 {
-        /// If a SHIFT modifier is active
+        /// If shift is pressed
         const SHIFT = 1 << 0;
-        /// If the NUM_LOCK modifier is active
+        /// If num lock is active
         const NUM_LOCK = 1 << 1;
-        /// If a CAPS_LOCK modifier is active
+        /// If caps lock is active
         const CAPS_LOCK = 1 << 2;
     }
 }
@@ -50,24 +54,6 @@ bitflags! {
     }
 }
 
-impl ModifierFlags {
-    /// Creates `ModifierFlags` from the given contained booleans
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// let modifiers = ModifierFlags::from_modifiers(true, true, true);
-    /// assert_eq!(modifiers, ModifierFlags::SHIFT | ModifierFlags::NUM_LOCK | ModifierFlags::CAPS_LOCK);
-    /// ```
-    fn from_modifiers(shift: bool, num_lock: bool, caps_lock: bool) -> Self {
-        let mut flags = ModifierFlags::empty();
-        flags.set(ModifierFlags::SHIFT, shift);
-        flags.set(ModifierFlags::NUM_LOCK, num_lock);
-        flags.set(ModifierFlags::CAPS_LOCK, caps_lock);
-        flags
-    }
-}
-
 /// Mapping from a keycode into a character
 pub enum KeyCharMapping {
     /// A key with no character mapping
@@ -83,8 +69,8 @@ pub enum KeyCharMapping {
 }
 
 impl KeyCharMapping {
-    /// Gets the character for this char based on the given modifiers
-    pub fn char(&self, modifiers: ModifierFlags) -> Option<char> {
+    /// Resolves the character for this mapping based on the given modifiers
+    pub fn resolve(&self, modifiers: ModifierFlags) -> Option<char> {
         use self::KeyCharMapping::*;
         match *self {
             Single(character) => Some(character),
@@ -106,12 +92,16 @@ impl KeyCharMapping {
 
 pub type Keycode = u8;
 
-/// Contains data relating to a key press event
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+/// Represents an event received from the keyboard.
+#[derive(Copy, Clone, Debug)]
 pub struct KeyEvent {
+    /// The flower keycode that triggered this event
     pub keycode: Keycode,
+    /// The character that this key represents, affected by active modifiers
+    /// `None` if a key with no character equivalent such as backspace
     pub char: Option<char>,
     pub kind: KeyEventKind,
+    /// Key modifiers active when this event was received
     pub modifiers: ModifierFlags,
 }
 
@@ -127,20 +117,24 @@ pub enum KeyEventKind {
     Repeat,
 }
 
-/// Interface to a generic keyboard.
+/// A generic keyboard
 pub trait Keyboard {
     type Error;
 
-    /// Polls the device for a new key state event, or returns `None` if none have occurred since the last poll.
+    /// Reads a single event from this keyboard. If there are no queued events, `None` is returned.
+    /// If no keyboard is present, `None` will also be returned
+    ///
+    /// This may also return an error depending on the keyboard implementation
     ///
     /// # Examples
     ///
     /// ```rust,no_run
-    /// let device = drivers::ps2::CONTROLLER.device(drivers::ps2::DevicePort::Keyboard);
-    /// let mut keyboard = Ps2Keyboard::new(device);
-    ///
-    /// if let Some(event) = keyboard.read_event()? {
-    ///     println!("Event occurred for char: {}", event.char.unwrap_or(' '));
+    /// loop {
+    ///     if let Some(event) = ps2_keyboard().read_event()? {
+    ///         if let Some(char) = event.char {
+    ///             println!("pressed `{}`", event.char.unwrap());
+    ///         }
+    ///     }
     /// }
     /// ```
     fn read_event(&mut self) -> Result<Option<KeyEvent>, Self::Error>;
@@ -148,10 +142,7 @@ pub trait Keyboard {
     /// Returns `true` if the given keycode is currently being held down
     ///
     /// ```rust,no_run
-    /// let device = drivers::ps2::CONTROLLER.device(drivers::ps2::DevicePort::Keyboard);
-    /// let mut keyboard = Ps2Keyboard::new(device);
-    ///
-    /// if keyboard.is_down(keymap::codes::LEFT_SHIFT) {
+    /// if ps2_keyboard().is_down(keymap::codes::LEFT_SHIFT) {
     ///     println!("Left shift down");
     /// } else {
     ///     println!("Left shift not down");
@@ -159,12 +150,16 @@ pub trait Keyboard {
     /// ```
     fn is_down(&self, keycode: Keycode) -> bool;
 
+    /// Returns `true` if num lock is currently active
     fn num_lock(&self) -> bool;
 
+    /// Returns `true` if scroll lock is currently active
     fn scroll_lock(&self) -> bool;
 
+    /// Returns `true` if caps lock is currently active
     fn caps_lock(&self) -> bool;
 
+    /// Returns `true` if function lock is currently active
     fn function_lock(&self) -> bool;
 }
 
@@ -172,30 +167,22 @@ const KEY_STATE_WORD_WIDTH: usize = 8;
 /// The amount of words each containing 8 key state bits
 const KEY_STATE_LENGTH: usize = 0xFF / KEY_STATE_WORD_WIDTH;
 
-/// Handles interface to a PS/2 keyboard, if available
+/// Provides access to a PS/2 keyboard
 pub struct Ps2Keyboard {
-    /// Bitmap containing state of every key. 8 key states are stored per entry (word)
+    /// Bitmap containing state of every key. 8 key states are stored per word
     key_state_words: [u8; KEY_STATE_LENGTH],
     state: StateFlags,
 }
 
 impl Ps2Keyboard {
-    /// Creates a new Ps2Keyboard from the given PS/2 device
-    ///
-    /// # Examples
-    ///
-    /// ```rust,no_run
-    /// let device = drivers::ps2::CONTROLLER.device(drivers::ps2::DevicePort::Keyboard);
-    /// let mut keyboard = Ps2Keyboard::new(device);
-    /// ```
-    pub fn new() -> Self {
+    const fn new() -> Self {
         Ps2Keyboard {
             key_state_words: [0; KEY_STATE_LENGTH],
             state: StateFlags::empty(),
         }
     }
 
-    fn on_keyboard_change(&self) -> ps2::Result<()> {
+    fn setup_keyboard(&self) -> ps2::Result<()> {
         ps2::Keyboard::set_scanset(ps2::keyboard::Scanset::Two)
     }
 
@@ -203,9 +190,13 @@ impl Ps2Keyboard {
         let shift = self.is_down(keymap::codes::LEFT_SHIFT) || self.is_down(keymap::codes::RIGHT_SHIFT);
         let num_lock = self.state.contains(StateFlags::NUM_LOCK);
         let caps_lock = self.state.contains(StateFlags::CAPS_LOCK);
-        let modifiers = ModifierFlags::from_modifiers(shift, num_lock, caps_lock);
 
-        let char = keymap::get_us_qwerty_char(keycode).char(modifiers);
+        let mut modifiers = ModifierFlags::empty();
+        modifiers.set(ModifierFlags::SHIFT, shift);
+        modifiers.set(ModifierFlags::NUM_LOCK, num_lock);
+        modifiers.set(ModifierFlags::CAPS_LOCK, caps_lock);
+
+        let char = keymap::get_us_qwerty_char(keycode).resolve(modifiers);
 
         // If the key was already pressed and make was sent, this is a repeat event
         let kind = match make {
@@ -257,7 +248,7 @@ impl Keyboard for Ps2Keyboard {
                     self.handle_event(event)?;
                     return Ok(Some(event));
                 }
-                ps2::keyboard::Event::BatSuccess => self.on_keyboard_change()?,
+                ps2::keyboard::Event::BatSuccess => self.setup_keyboard()?,
                 _ => ()
             }
         }

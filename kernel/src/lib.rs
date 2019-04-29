@@ -90,7 +90,6 @@ pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
         Err(error) => error!("ps2c: {:?}", error),
     }
 
-//    keyboard_echo_loop();
     snake::snake();
 
     halt()
@@ -132,22 +131,6 @@ fn print_flower() -> Result<(), terminal::TerminalOutputError<()>> {
     serial_println!("{}", FLOWER_STEM);
 
     Ok(())
-}
-
-fn keyboard_echo_loop() {
-    let mut keyboard = Ps2Keyboard::new();
-    loop {
-        if let Ok(Some(event)) = keyboard.read_event() {
-            if event.kind != KeyEventKind::Break {
-                if event.keycode == keymap::codes::BACKSPACE {
-                    // Ignore error
-                    let _ = terminal::STDOUT.write().backspace();
-                } else if let Some(character) = event.char {
-                    print!("{}", character)
-                }
-            }
-        }
-    }
 }
 
 fn halt() -> ! {
