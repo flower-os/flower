@@ -62,7 +62,6 @@ mod cpuid;
 mod snake;
 
 use crate::memory::heap::Heap;
-use crate::drivers::keyboard::{keymap, Ps2Keyboard, Keyboard, KeyEventKind};
 
 #[cfg_attr(not(test), global_allocator)]
 pub static HEAP: Heap = Heap::new();

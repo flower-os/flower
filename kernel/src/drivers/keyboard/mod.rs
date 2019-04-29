@@ -21,12 +21,13 @@
 pub mod keymap;
 
 use crate::drivers::ps2;
-use spin::Mutex;
+use spin::{Mutex, MutexGuard};
 
 static PS2_KEYBOARD: Mutex<Ps2Keyboard> = Mutex::new(Ps2Keyboard::new());
 
-pub fn ps2_keyboard() -> &'static mut Ps2Keyboard {
-    &mut *PS2_KEYBOARD.lock()
+#[inline]
+pub fn ps2_keyboard() -> MutexGuard<'static, Ps2Keyboard> {
+    PS2_KEYBOARD.lock()
 }
 
 bitflags! {
@@ -178,7 +179,7 @@ impl Ps2Keyboard {
     const fn new() -> Self {
         Ps2Keyboard {
             key_state_words: [0; KEY_STATE_LENGTH],
-            state: StateFlags::empty(),
+            state: StateFlags { bits: 0 },
         }
     }
 
