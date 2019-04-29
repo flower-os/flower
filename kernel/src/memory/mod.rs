@@ -54,8 +54,8 @@ pub fn init_memory(mb_info_addr: usize, guard_page_addr: usize) {
 
     debug!("mem: initialising bootstrap heap");
     let (bootstrap_heap_phys, bootstrap_heap_virtual) = unsafe {
-        let physical_start = PhysicalAddress(mb_info_phys.end() + 1); // TODO what if really high and no more space ?
-        let virtual_start = VirtualAddress(kernel_area.end() + 1);
+        let physical_start = PhysicalAddress(*mb_info_phys.end()); // TODO what if really high and no more space ?
+        let virtual_start = VirtualAddress(*kernel_area.end());
 
          setup_bootstrap_heap(virtual_start, physical_start)
     };
@@ -74,8 +74,8 @@ pub fn init_memory(mb_info_addr: usize, guard_page_addr: usize) {
     // The heap must NOT BE USED except in one specific place -- all heap objects will be corrupted
     // after the remap.
     debug!("mem: setting up kernel heap");
-    let heap_tree_start = bootstrap_heap_virtual.end() + 1;
-    let heap_tree_start = unsafe { crate::HEAP.init(heap_tree_start) };
+    let heap_tree_start = bootstrap_heap_virtual.end();
+    let heap_tree_start = unsafe { crate::HEAP.init(*heap_tree_start) };
     let heap_tree_end = heap_tree_start + heap::Heap::tree_size();
 
     debug!("mem: initialising pmm (2/2)");
@@ -164,8 +164,8 @@ unsafe fn setup_bootstrap_heap(
         start_ptr.align_offset(mem::align_of::<[Block; BLOCKS_IN_TREE]>()) as isize,
     ) as usize;
 
-    let start_page = Page::containing_address(heap_start, PageSize::Kib4) + 1;
-    let start_frame = (physical_start.0 / 4096) + 1;
+    let start_page = Page::containing_address(heap_start, PageSize::Kib4);
+    let start_frame = (physical_start.0 / 4096);
 
     let mapping = PageRangeMapping::new(
         start_page,
@@ -223,7 +223,7 @@ unsafe fn setup_physical_allocator_prelim(
         for used_area in [kernel_area_phys, mb_info_phys.clone(), bootstrap_heap_phys] {
             usable_areas = usable_areas.flat_map(move |free_area| {
                 // Convert to Range from  RangeInclusive
-                let range = *used_area.start()..*used_area.end() + 1;
+                let range = *used_area.start()..*used_area.end();
 
                 // HACK: arrays iterate with moving weirdly
                 // Also, filter map to remove `None`s
@@ -270,11 +270,15 @@ fn kernel_area(mb_info: &BootInformation) -> RangeInclusive<usize> {
 
     let used_areas = elf_sections.sections()
         .filter(|section| section.flags().contains(ElfSectionFlags::ALLOCATED))
-        .map(|section| section.start_address()..section.end_address() + 1)
+        .map(|section| section.start_address()..section.end_address())
         .chain(
             mb_info.module_tags()
-                .map(|section| section.start_address() as u64..section.end_address() as u64 + 1)
+                .map(|module| module.start_address() as u64..module.end_address() as u64)
         );
+
+    let module = mb_info.module_tags().next().unwrap();
+    trace!("0x{:x}..0x{:x}", module.start_address(), module.end_address());
+
     let begin = used_areas.clone().map(
         |range| range.start
     ).min().unwrap() as usize;
