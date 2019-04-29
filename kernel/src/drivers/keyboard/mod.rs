@@ -254,10 +254,7 @@ impl Keyboard for Ps2Keyboard {
             match event {
                 ps2::keyboard::Event::Key { key, make } => {
                     let event = self.create_event(key, make);
-
-                    // Update states such as caps lock with this key event
                     self.handle_event(event)?;
-
                     return Ok(Some(event));
                 }
                 ps2::keyboard::Event::BatSuccess => self.on_keyboard_change()?,

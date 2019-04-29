@@ -26,17 +26,11 @@ bitflags! {
     }
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub struct Scancode {
-    pub code: u8,
-    pub extended: bool,
-    pub make: bool,
-}
-
-impl Scancode {
-    pub fn new(scancode: u8, extended: bool, make: bool) -> Self {
-        Scancode { code: scancode, extended, make }
-    }
+#[derive(Debug, Copy, Clone)]
+struct Scancode {
+    code: u8,
+    extended: bool,
+    make: bool,
 }
 
 struct EventParser {
@@ -68,9 +62,10 @@ impl EventParser {
             0xFC => Some(Event::BatError),
             _ => {
                 self.parse_scancode(byte).and_then(|scancode| {
-                    // TODO: How to handle invalid scancode?
-                    let key: Option<Keycode> = scanset_2::parse(scancode);
-                    key.map(|key| Event::Key { key, make: scancode.make })
+                    match scanset_2::parse(scancode) {
+                        Some(key) => Some(Event::Key { key, make: scancode.make }),
+                        None => Some(Event::UnexpectedByte(scancode.code))
+                    }
                 })
             }
         }
@@ -81,7 +76,11 @@ impl EventParser {
             0xE0...0xE1 => self.extended_scancode = true,
             0xF0 => self.make_scancode = false,
             _ => {
-                let scancode = Scancode::new(byte, self.extended_scancode, self.make_scancode);
+                let scancode = Scancode {
+                    code: byte,
+                    make: self.make_scancode,
+                    extended: self.extended_scancode,
+                };
                 self.make_scancode = true;
                 self.extended_scancode = false;
 
@@ -126,6 +125,7 @@ pub enum Event {
     BatSuccess,
     BatError,
     Key { key: Keycode, make: bool },
+    UnexpectedByte(u8),
 }
 
 impl Keyboard {
@@ -161,7 +161,7 @@ mod scanset_2 {
     use crate::drivers::keyboard::Keycode;
     use super::Scancode;
 
-    pub fn parse(scancode: Scancode) -> Option<Keycode> {
+    pub(in super) fn parse(scancode: Scancode) -> Option<Keycode> {
         if scancode.extended {
             parse_extended(scancode.code)
         } else {
