@@ -3,7 +3,6 @@
 
 pub mod remap;
 mod page_map;
-pub mod userspace;
 pub use self::page_map::*;
 
 use core::{marker::PhantomData, ptr::Unique};
@@ -283,4 +282,30 @@ impl<L: TableLevel> IndexMut<usize> for PageTable<L> {
     fn index_mut(&mut self, index: usize) -> &mut PageTableEntry {
         &mut self.entries[index]
     }
+}
+
+pub fn new_process_page_tables() -> InactivePageMap {
+    let mut temporary_page = TemporaryPage::new();
+
+    // This must be duplicated to avoid double locks. This is safe though -- in this context!
+    let mut active_table = unsafe { ActivePageMap::new() };
+    let frame = PhysicalAddress(PHYSICAL_ALLOCATOR.allocate(0).expect("no more frames") as usize);
+    let mut new_table = InactivePageMap::new(frame, &mut active_table, &mut temporary_page);
+
+    // Copy kernel pml4 entry
+    let kernel_pml4_entry = active_table.p4()[511];
+    let mut table = unsafe {
+        temporary_page.map_table_frame(frame.clone(), &mut active_table)
+    };
+
+    table[511] = kernel_pml4_entry;
+
+    unsafe {
+        temporary_page.unmap(&mut active_table);
+    }
+
+    // Drop this lock so that the RAII guarded temporary page can be destroyed
+    drop(active_table);
+
+    new_table
 }

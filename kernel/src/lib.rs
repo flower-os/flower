@@ -66,7 +66,6 @@ mod gdt;
 mod cpuid;
 mod snake;
 mod userspace;
-mod process;
 
 #[cfg_attr(not(test), global_allocator)]
 pub static HEAP: Heap = Heap::new();

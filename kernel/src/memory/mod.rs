@@ -218,6 +218,7 @@ unsafe fn setup_physical_allocator_prelim(
     // Remove already used physical mem areas
     let kernel_area_phys = 0..=kernel_area.end() - KERNEL_MAPPING_BEGIN;
 
+
     let usable_areas = constant_unroll! { // Use this macro to make types work
         for used_area in [kernel_area_phys, mb_info_phys.clone(), bootstrap_heap_phys] {
             usable_areas = usable_areas.flat_map(move |free_area| {
@@ -274,7 +275,6 @@ fn kernel_area(mb_info: &BootInformation) -> RangeInclusive<usize> {
             mb_info.module_tags()
                 .map(|section| section.start_address() as u64..section.end_address() as u64 + 1)
         );
-
     let begin = used_areas.clone().map(
         |range| range.start
     ).min().unwrap() as usize;

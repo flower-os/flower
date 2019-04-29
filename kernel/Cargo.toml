@@ -36,6 +36,11 @@ rev = "9ce9247eee220a0bc2ca480c23c7572132c5ae9c"
 version = "^0.4.7"
 default-features = false
 
+[dependencies.crossbeam]
+git = "https://github.com/taiki-e/crossbeam/"
+default-features = false
+branch = "no-std"
+
 [dependencies.array-init]
 version = "^0.0.3"
 features = ["nightly"]
