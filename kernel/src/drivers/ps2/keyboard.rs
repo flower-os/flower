@@ -106,7 +106,7 @@ impl ps2::io::CommandIo for Keyboard {
     }
 
     fn read() -> ps2::Result<u8> {
-        ps2::io::read_blocking(&ps2::io::DATA_PORT).ok_or(ps2::Error::ExpectedResponse)
+        ps2::io::read(&ps2::io::DATA_PORT).ok_or(ps2::Error::ExpectedResponse)
     }
 }
 
@@ -121,6 +121,7 @@ impl ps2::Device for Keyboard {
     fn test() -> ps2::Result<bool> { ps2::Controller::test_keyboard() }
 }
 
+#[derive(Debug, Clone)]
 pub enum Event {
     BatSuccess,
     BatError,
@@ -128,30 +129,14 @@ pub enum Event {
 }
 
 impl Keyboard {
+    #[inline]
     pub fn next_event() -> Option<Event> {
         INPUT_PARSER.lock().next_event()
     }
 
     #[inline]
-    pub fn send_repeat_events() -> ps2::Result<()> { Self::send(0xF7) }
-
-    #[inline]
-    pub fn send_make_release_events() -> ps2::Result<()> { Self::send(0xF8) }
-
-    #[inline]
-    pub fn send_make_events() -> ps2::Result<()> { Self::send(0xF9) }
-
-    #[inline]
-    pub fn send_all_events() -> ps2::Result<()> { Self::send(0xFA) }
-
-    #[inline]
     pub fn set_leds(flags: ps2::keyboard::LedFlags) -> ps2::Result<()> {
         Self::send_data(0xED, flags.bits())
-    }
-
-    #[inline]
-    pub fn set_typematic_options(flags: u8) -> ps2::Result<()> {
-        Self::send_data(0xF3, flags)
     }
 
     #[inline]

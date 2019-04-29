@@ -60,14 +60,6 @@ pub fn init() {
     info!("interupts: initialized");
 }
 
-pub fn ignored<F: FnOnce() -> R, R>(action: F) -> R {
-    disable();
-    let result = action();
-    enable();
-
-    result
-}
-
 pub fn enable() {
     unsafe { asm!("sti" :::: "volatile"); }
 }

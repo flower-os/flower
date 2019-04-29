@@ -14,7 +14,7 @@ impl ps2::io::CommandIo for Mouse {
     }
 
     fn read() -> ps2::Result<u8> {
-        ps2::io::read_blocking(&ps2::io::DATA_PORT).ok_or(ps2::Error::ExpectedResponse)
+        ps2::io::read(&ps2::io::DATA_PORT).ok_or(ps2::Error::ExpectedResponse)
     }
 }
 

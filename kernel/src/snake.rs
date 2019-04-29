@@ -354,7 +354,7 @@ impl Random {
 
 
 pub fn snake() {
-    let mut keyboard = Ps2Keyboard::new();
+    let keyboard = Ps2Keyboard::new();
     let mut game = Game::new(keyboard);
     game.run()
 }

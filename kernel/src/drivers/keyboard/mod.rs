@@ -195,8 +195,7 @@ impl Ps2Keyboard {
         }
     }
 
-    // TODO
-    fn on_keyboard_change(keyboard: ps2::Keyboard) -> ps2::Result<()> {
+    fn on_keyboard_change(&self) -> ps2::Result<()> {
         ps2::Keyboard::set_scanset(ps2::keyboard::Scanset::Two)
     }
 
@@ -261,9 +260,7 @@ impl Keyboard for Ps2Keyboard {
 
                     return Ok(Some(event));
                 }
-                ps2::keyboard::Event::BatSuccess => {
-                    // TODO
-                }
+                ps2::keyboard::Event::BatSuccess => self.on_keyboard_change()?,
                 _ => ()
             }
         }

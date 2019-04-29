@@ -7,7 +7,7 @@ pub mod mouse;
 use crate::interrupts::{self, Irq};
 use core::{option, result};
 
-pub use self::device::{Device, DeviceKind, KeyboardKind, MouseKind};
+pub use self::device::Device;
 pub use self::keyboard::Keyboard;
 pub use self::mouse::Mouse;
 
@@ -30,17 +30,12 @@ bitflags! {
     }
 }
 
-// TODO: remove and review unused variants
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum Error {
     RetriesExceeded,
-    DeviceUnavailable,
-    PortDisabled,
     UnexpectedResponse(u8),
     ExpectedResponse,
-    WriteUnavailable,
     ControllerTestFailed(u8),
-    TimeoutExceeded,
 }
 
 impl From<option::NoneError> for Error {
@@ -54,19 +49,19 @@ pub struct Controller;
 impl CommandIo for Controller {
     fn send(command: u8) -> Result<()> {
         io::flush_output();
-        io::write_blocking(&io::CONTROLLER_PORT, command);
+        io::write(&io::CONTROLLER_PORT, command);
         Ok(())
     }
 
     fn send_data(command: u8, data: u8) -> Result<()> {
         io::flush_output();
-        io::write_blocking(&io::CONTROLLER_PORT, command);
-        io::write_blocking(&io::DATA_PORT, data);
+        io::write(&io::CONTROLLER_PORT, command);
+        io::write(&io::DATA_PORT, data);
         Ok(())
     }
 
     fn read() -> Result<u8> {
-        io::read_blocking(&io::DATA_PORT).ok_or(Error::ExpectedResponse)
+        io::read(&io::DATA_PORT).ok_or(Error::ExpectedResponse)
     }
 }
 
@@ -140,12 +135,6 @@ pub fn initialize() -> Result<()> {
 
     port::detect()?;
     debug!("ps2c: tested ports");
-
-    // TODO: disables both port clocks. do we want this?
-//    let mut config = read_config()?;
-//    config.set(ConfigFlags::PORT_CLOCK_1, true);
-//    config.set(ConfigFlags::PORT_CLOCK_2, true);
-//    write_config(config);
 
     Keyboard::enable()?;
     Mouse::enable()?;

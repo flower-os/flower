@@ -90,8 +90,8 @@ pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
         Err(error) => error!("ps2c: {:?}", error),
     }
 
-    keyboard_echo_loop();
-//    snake::snake();
+//    keyboard_echo_loop();
+    snake::snake();
 
     halt()
 }

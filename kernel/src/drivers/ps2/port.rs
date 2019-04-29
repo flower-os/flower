@@ -8,7 +8,6 @@ lazy_static! {
 }
 
 pub fn detect() -> ps2::Result<()> {
-    // TODO: do something with this?
     if !Keyboard::test()? {
         warn!("ps2c: keyboard port not available");
     }
