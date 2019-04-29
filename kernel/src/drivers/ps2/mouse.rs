@@ -27,7 +27,4 @@ impl ps2::Device for Mouse {
 
     #[inline]
     fn test() -> ps2::Result<bool> { ps2::Controller::test_mouse() }
-
-    #[inline]
-    fn input_queue() -> &'static ps2::port::InputQueue { &*ps2::port::MOUSE_INPUT_QUEUE }
 }

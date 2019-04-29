@@ -3,8 +3,8 @@ use crate::drivers::ps2::{Device, Controller, Keyboard, Mouse};
 use crossbeam::queue::ArrayQueue;
 
 lazy_static! {
-    pub(in super) static ref KEYBOARD_INPUT_QUEUE: InputQueue = InputQueue::new();
-    pub(in super) static ref MOUSE_INPUT_QUEUE: InputQueue = InputQueue::new();
+    pub(in super) static ref KEYBOARD_INPUT: InputQueue = InputQueue::new();
+    pub(in super) static ref MOUSE_INPUT: InputQueue = InputQueue::new();
 }
 
 pub fn detect() -> ps2::Result<()> {

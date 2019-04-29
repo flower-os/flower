@@ -153,12 +153,12 @@ pub fn initialize() -> Result<()> {
     Keyboard::reset()?;
     Mouse::reset()?;
 
-    io::flush_output();
-
     interrupts::listen(Irq::Ps2Keyboard, interrupt_keyboard);
     interrupts::listen(Irq::Ps2Mouse, interrupt_mouse);
 
     enable_interrupts()?;
+
+    io::flush_output();
 
     // Make sure nothing got left in the output buffer during initialization
     io::flush_output();
@@ -168,13 +168,13 @@ pub fn initialize() -> Result<()> {
 
 fn interrupt_keyboard() {
     if let Some(byte) = io::read(&io::DATA_PORT) {
-        Keyboard::input_queue().push(byte);
+        port::KEYBOARD_INPUT.push(byte);
     }
 }
 
 fn interrupt_mouse() {
     if let Some(byte) = io::read(&io::DATA_PORT) {
-        Mouse::input_queue().push(byte);
+        port::MOUSE_INPUT.push(byte);
     }
 }
 

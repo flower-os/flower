@@ -2,7 +2,7 @@ use core::sync::atomic::{Ordering, AtomicU64};
 use alloc::vec::Vec;
 use crate::terminal::{TerminalOutput, TerminalCharacter, Point, STDOUT};
 use crate::drivers::pit;
-use crate::drivers::keyboard::{Ps2Keyboard, Keyboard, KeyEventType};
+use crate::drivers::keyboard::{Ps2Keyboard, Keyboard, KeyEventKind};
 
 const HEAD_CHAR: char = 2 as char;
 const BASE_LENGTH: u16 = 4;
@@ -71,7 +71,7 @@ impl Game {
 
         let event = self.keyboard.read_event().expect("Error reading keyboard input!")?;
 
-        if event.event_type != KeyEventType::Break {
+        if event.kind != KeyEventKind::Break {
             match event.keycode {
                 UP_ARROW | W => Some(Direction::Up),
                 DOWN_ARROW | S => Some(Direction::Down),
@@ -120,7 +120,7 @@ impl Game {
 
         loop {
             if let Ok(Some(event)) = self.keyboard.read_event() {
-                if event.event_type == KeyEventType::Break {
+                if event.kind == KeyEventKind::Break {
                     break;
                 }
             }

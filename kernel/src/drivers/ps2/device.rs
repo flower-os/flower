@@ -3,7 +3,6 @@
 use crate::drivers::ps2;
 use crate::drivers::ps2::io::CommandIo;
 use crate::drivers::ps2::Controller;
-use crate::drivers::ps2::port::InputQueue;
 
 pub const RESEND: u8 = 0xFE;
 pub const ACK: u8 = 0xFA;
@@ -71,8 +70,6 @@ pub trait Device: CommandIo + Sized {
     fn disable() -> ps2::Result<()>;
 
     fn test() -> ps2::Result<bool>;
-
-    fn input_queue() -> &'static InputQueue;
 
     #[inline]
     fn set_defaults() -> ps2::Result<()> { Self::send(0xF6) }

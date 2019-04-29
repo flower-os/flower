@@ -1,10 +1,10 @@
 use crate::drivers::ps2;
-use crate::drivers::ps2::Device;
 use crate::drivers::ps2::io::CommandIo;
 
 use spin::Mutex;
+use crate::drivers::keyboard::Keycode;
 
-static SCANCODE_PARSER: Mutex<ScancodeParser> = Mutex::new(ScancodeParser::new());
+static INPUT_PARSER: Mutex<EventParser> = Mutex::new(EventParser::new());
 
 #[allow(dead_code)]
 #[repr(u8)]
@@ -39,31 +39,56 @@ impl Scancode {
     }
 }
 
-struct ScancodeParser {
-    make: bool,
-    extended: bool,
+struct EventParser {
+    make_scancode: bool,
+    extended_scancode: bool,
 }
 
-impl ScancodeParser {
-    const fn new() -> ScancodeParser {
-        ScancodeParser {
-            make: true,
-            extended: false,
+impl EventParser {
+    const fn new() -> EventParser {
+        EventParser {
+            make_scancode: true,
+            extended_scancode: false,
         }
     }
 
-    fn push(&mut self, byte: u8) -> Option<Scancode> {
-        match byte {
-            0xE0...0xE1 => self.extended = true,
-            0xF0 => self.make = false,
-            _ => return Some(Scancode::new(byte, self.extended, self.make)),
+    pub fn next_event(&mut self) -> Option<Event> {
+        while let Some(byte) = ps2::port::KEYBOARD_INPUT.next() {
+            let event = self.parse_byte(byte);
+            if event.is_some() {
+                return event;
+            }
         }
         None
     }
 
-    fn reset(&mut self) {
-        self.make = true;
-        self.extended = false;
+    fn parse_byte(&mut self, byte: u8) -> Option<Event> {
+        match byte {
+            0xAA => Some(Event::BatSuccess),
+            0xFC => Some(Event::BatError),
+            _ => {
+                self.parse_scancode(byte).and_then(|scancode| {
+                    // TODO: How to handle invalid scancode?
+                    let key: Option<Keycode> = scanset_2::parse(scancode);
+                    key.map(|key| Event::Key { key, make: scancode.make })
+                })
+            }
+        }
+    }
+
+    fn parse_scancode(&mut self, byte: u8) -> Option<Scancode> {
+        match byte {
+            0xE0...0xE1 => self.extended_scancode = true,
+            0xF0 => self.make_scancode = false,
+            _ => {
+                let scancode = Scancode::new(byte, self.extended_scancode, self.make_scancode);
+                self.make_scancode = true;
+                self.extended_scancode = false;
+
+                return Some(scancode);
+            }
+        }
+        None
     }
 }
 
@@ -94,25 +119,17 @@ impl ps2::Device for Keyboard {
 
     #[inline]
     fn test() -> ps2::Result<bool> { ps2::Controller::test_keyboard() }
+}
 
-    #[inline]
-    fn input_queue() -> &'static ps2::port::InputQueue { &*ps2::port::KEYBOARD_INPUT_QUEUE }
+pub enum Event {
+    BatSuccess,
+    BatError,
+    Key { key: Keycode, make: bool },
 }
 
 impl Keyboard {
-    // TODO: possibly handle invalid scancodes here?
-    pub fn next_scancode() -> Option<Scancode> {
-        let input_queue = Self::input_queue();
-        let mut scancode_parser = SCANCODE_PARSER.lock();
-
-        while let Some(byte) = input_queue.next() {
-            if let Some(scancode) = scancode_parser.push(byte) {
-                scancode_parser.reset();
-                return Some(scancode);
-            }
-        }
-
-        None
+    pub fn next_event() -> Option<Event> {
+        INPUT_PARSER.lock().next_event()
     }
 
     #[inline]
@@ -150,6 +167,131 @@ impl Keyboard {
             2 => Ok(ps2::keyboard::Scanset::Two),
             3 => Ok(ps2::keyboard::Scanset::Three),
             v => Err(ps2::Error::UnexpectedResponse(v)),
+        }
+    }
+}
+
+mod scanset_2 {
+    use crate::drivers::keyboard::keymap::codes::*;
+    use crate::drivers::keyboard::Keycode;
+    use super::Scancode;
+
+    pub fn parse(scancode: Scancode) -> Option<Keycode> {
+        if scancode.extended {
+            parse_extended(scancode.code)
+        } else {
+            parse_standard(scancode.code)
+        }
+    }
+
+    fn parse_standard(code: u8) -> Option<Keycode> {
+        match code {
+            0x01 => Some(F9),
+            0x03 => Some(F5),
+            0x04 => Some(F3),
+            0x05 => Some(F1),
+            0x06 => Some(F2),
+            0x07 => Some(F12),
+            0x09 => Some(F10),
+            0x0A => Some(F8),
+            0x0B => Some(F6),
+            0x0C => Some(F4),
+            0x0D => Some(TAB),
+            0x0E => Some(BACK_TICK),
+            0x11 => Some(LEFT_ALT),
+            0x12 => Some(LEFT_SHIFT),
+            0x14 => Some(LEFT_CONTROL),
+            0x15 => Some(Q),
+            0x16 => Some(KEY_1),
+            0x1A => Some(Z),
+            0x1B => Some(S),
+            0x1C => Some(A),
+            0x1D => Some(W),
+            0x1E => Some(KEY_2),
+            0x21 => Some(C),
+            0x22 => Some(X),
+            0x23 => Some(D),
+            0x24 => Some(E),
+            0x25 => Some(KEY_4),
+            0x26 => Some(KEY_3),
+            0x29 => Some(SPACE),
+            0x2A => Some(V),
+            0x2B => Some(F),
+            0x2C => Some(T),
+            0x2D => Some(R),
+            0x2E => Some(KEY_5),
+            0x31 => Some(N),
+            0x32 => Some(B),
+            0x33 => Some(H),
+            0x34 => Some(G),
+            0x35 => Some(Y),
+            0x36 => Some(KEY_6),
+            0x3A => Some(M),
+            0x3B => Some(J),
+            0x3C => Some(U),
+            0x3D => Some(KEY_7),
+            0x3E => Some(KEY_8),
+            0x41 => Some(COMMA),
+            0x42 => Some(K),
+            0x43 => Some(I),
+            0x44 => Some(O),
+            0x45 => Some(KEY_0),
+            0x46 => Some(KEY_9),
+            0x49 => Some(PERIOD),
+            0x4A => Some(FORWARD_SLASH),
+            0x4B => Some(L),
+            0x4C => Some(SEMI_COLON),
+            0x4D => Some(P),
+            0x4E => Some(MINUS),
+            0x52 => Some(SINGLE_QUOTE),
+            0x54 => Some(SQUARE_BRACKET_OPEN),
+            0x55 => Some(EQUALS),
+            0x58 => Some(CAPS_LOCK),
+            0x59 => Some(RIGHT_SHIFT),
+            0x5A => Some(ENTER),
+            0x5B => Some(SQUARE_BRACKET_CLOSE),
+            0x5D => Some(BACK_SLASH),
+            0x66 => Some(BACKSPACE),
+            0x69 => Some(NUM_PAD_1),
+            0x6B => Some(NUM_PAD_4),
+            0x6C => Some(NUM_PAD_7),
+            0x70 => Some(NUM_PAD_0),
+            0x71 => Some(NUM_PAD_PERIOD),
+            0x72 => Some(NUM_PAD_2),
+            0x73 => Some(NUM_PAD_5),
+            0x74 => Some(NUM_PAD_6),
+            0x75 => Some(NUM_PAD_8),
+            0x76 => Some(ESCAPE),
+            0x77 => Some(NUM_LOCK),
+            0x78 => Some(F11),
+            0x79 => Some(NUM_PAD_PLUS),
+            0x7A => Some(NUM_PAD_3),
+            0x7B => Some(NUM_PAD_MINUS),
+            0x7C => Some(NUM_PAD_ASTERISK),
+            0x7D => Some(NUM_PAD_9),
+            0x7E => Some(SCROLL_LOCK),
+            0x83 => Some(F7),
+            _ => None,
+        }
+    }
+
+    fn parse_extended(code: u8) -> Option<Keycode> {
+        match code {
+            0x11 => Some(RIGHT_ALT),
+            0x14 => Some(RIGHT_CONTROL),
+            0x4A => Some(NUM_PAD_FORWARD_SLASH),
+            0x5A => Some(NUM_PAD_ENTER),
+            0x69 => Some(END),
+            0x6B => Some(LEFT_ARROW),
+            0x6C => Some(HOME),
+            0x70 => Some(INSERT),
+            0x71 => Some(DELETE),
+            0x72 => Some(DOWN_ARROW),
+            0x74 => Some(RIGHT_ARROW),
+            0x75 => Some(UP_ARROW),
+            0x7A => Some(PAGE_DOWN),
+            0x7D => Some(PAGE_UP),
+            _ => None,
         }
     }
 }

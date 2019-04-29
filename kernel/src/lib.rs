@@ -39,8 +39,6 @@ extern crate static_assertions;
 extern crate arrayvec;
 extern crate crossbeam;
 
-//use crate::drivers::keyboard::{Keyboard, KeyEventType, Ps2Keyboard};
-//use crate::drivers::keyboard::keymap;
 use crate::drivers::{ps2, serial};
 use crate::terminal::TerminalOutput;
 
@@ -64,7 +62,7 @@ mod cpuid;
 mod snake;
 
 use crate::memory::heap::Heap;
-use crate::drivers::keyboard::{keymap, Ps2Keyboard, Keyboard, KeyEventType};
+use crate::drivers::keyboard::{keymap, Ps2Keyboard, Keyboard, KeyEventKind};
 
 #[cfg_attr(not(test), global_allocator)]
 pub static HEAP: Heap = Heap::new();
@@ -84,7 +82,7 @@ pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
 
     drivers::pit::CONTROLLER.lock().initialize();
 
-    let _acpi = acpi_impl::acpi_init();
+    let acpi = acpi_impl::acpi_init().expect("failed to init acpi");
 
     // Initialize the PS/2 controller and run the keyboard echo loop
     match ps2::initialize() {
@@ -92,7 +90,8 @@ pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
         Err(error) => error!("ps2c: {:?}", error),
     }
 
-    snake::snake();
+    keyboard_echo_loop();
+//    snake::snake();
 
     halt()
 }
@@ -139,7 +138,7 @@ fn keyboard_echo_loop() {
     let mut keyboard = Ps2Keyboard::new();
     loop {
         if let Ok(Some(event)) = keyboard.read_event() {
-            if event.event_type != KeyEventType::Break {
+            if event.kind != KeyEventKind::Break {
                 if event.keycode == keymap::codes::BACKSPACE {
                     // Ignore error
                     let _ = terminal::STDOUT.write().backspace();
