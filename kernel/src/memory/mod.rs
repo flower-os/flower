@@ -46,7 +46,7 @@ pub fn init_memory(mb_info_addr: usize, guard_page_addr: usize) {
     let mb_info = unsafe { multiboot2::load(mb_info_addr) };
     let kernel_area = kernel_area(&mb_info);
 
-    let mb_info_phys = mb_info.start_address()..=mb_info.end_address();
+    let mb_info_phys = mb_info.start_address()..mb_info.end_address();
     let memory_map = mb_info.memory_map_tag()
         .expect("Expected a multiboot2 memory map tag, but it is not present!");
 
@@ -54,8 +54,8 @@ pub fn init_memory(mb_info_addr: usize, guard_page_addr: usize) {
 
     debug!("mem: initialising bootstrap heap");
     let (bootstrap_heap_phys, bootstrap_heap_virtual) = unsafe {
-        let physical_start = PhysicalAddress(*mb_info_phys.end()); // TODO what if really high and no more space ?
-        let virtual_start = VirtualAddress(*kernel_area.end());
+        let physical_start = PhysicalAddress(mb_info_phys.end); // TODO what if really high and no more space ?
+        let virtual_start = VirtualAddress(kernel_area.end);
 
          setup_bootstrap_heap(virtual_start, physical_start)
     };
@@ -158,7 +158,7 @@ unsafe fn setup_ist(begin: Page) {
 unsafe fn setup_bootstrap_heap(
     virtual_start: VirtualAddress,
     physical_start: PhysicalAddress,
-) -> (RangeInclusive<usize>, RangeInclusive<usize>) {
+) -> (Range<usize>, Range<usize>) {
     let start_ptr = virtual_start.0 as *const u8;
     let heap_start = start_ptr.offset(
         start_ptr.align_offset(mem::align_of::<[Block; BLOCKS_IN_TREE]>()) as isize,
@@ -185,17 +185,17 @@ unsafe fn setup_bootstrap_heap(
 
     let physical_start = start_frame * 4096;
     let virtual_start = start_page.number() * 4096;
-    let physical = physical_start..=physical_start + BootstrapHeap::space_taken();
-    let virtual_range = virtual_start..=virtual_start + BootstrapHeap::space_taken();
+    let physical = physical_start..physical_start + BootstrapHeap::space_taken();
+    let virtual_range = virtual_start..virtual_start + BootstrapHeap::space_taken();
 
     (physical, virtual_range)
 }
 
 unsafe fn setup_physical_allocator_prelim(
     mb_info: &BootInformation,
-    mb_info_phys: RangeInclusive<usize>,
-    bootstrap_heap_phys: RangeInclusive<usize>,
-    kernel_area: RangeInclusive<usize>,
+    mb_info_phys: Range<usize>,
+    bootstrap_heap_phys: Range<usize>,
+    kernel_area: Range<usize>,
 ) -> (u8, ArrayVec<[Range<usize>; 256]>) {
     let memory_map = mb_info.memory_map_tag()
         .expect("Expected a multiboot2 memory map tag, but it is not present!");
@@ -216,14 +216,13 @@ unsafe fn setup_physical_allocator_prelim(
         .map(|(start, end)| start..end);
 
     // Remove already used physical mem areas
-    let kernel_area_phys = 0..=kernel_area.end() - KERNEL_MAPPING_BEGIN;
+    let kernel_area_phys = 0..kernel_area.end - KERNEL_MAPPING_BEGIN;
 
 
     let usable_areas = constant_unroll! { // Use this macro to make types work
         for used_area in [kernel_area_phys, mb_info_phys.clone(), bootstrap_heap_phys] {
             usable_areas = usable_areas.flat_map(move |free_area| {
-                // Convert to Range from  RangeInclusive
-                let range = *used_area.start()..*used_area.end();
+                let range = used_area.start..used_area.end;
 
                 // HACK: arrays iterate with moving weirdly
                 // Also, filter map to remove `None`s
@@ -262,7 +261,7 @@ unsafe fn setup_guard_page(addr: usize) {
     ACTIVE_PAGE_TABLES.lock().unmap(page, FreeMemory::NoFree, InvalidateTlb::Invalidate);
 }
 
-fn kernel_area(mb_info: &BootInformation) -> RangeInclusive<usize> {
+fn kernel_area(mb_info: &BootInformation) -> Range<usize> {
     use multiboot2::ElfSectionFlags;
 
     let elf_sections = mb_info.elf_sections_tag()
@@ -286,7 +285,7 @@ fn kernel_area(mb_info: &BootInformation) -> RangeInclusive<usize> {
         |range| range.end
     ).max().unwrap() as usize;
 
-    begin..=end
+    begin..end
 }
 
 /// Subtracts one range from another, provided that start <= end in all cases
