@@ -2,10 +2,9 @@
 // Many thanks!
 
 use super::*;
-use core::ops::{Deref, DerefMut};
-use core::ops::RangeInclusive;
+use core::alloc::{Layout, GlobalAlloc};
+use core::ops::{Deref, DerefMut, RangeInclusive, Range};
 use crate::util::{self, round_up_divide};
-use core::ops::Range;
 use alloc::vec::Vec;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -18,6 +17,12 @@ pub enum FreeMemory {
 pub enum InvalidateTlb {
     Invalidate,
     NoInvalidate,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum ZeroPage {
+    Zero,
+    NoZero,
 }
 
 pub struct Mapper {
@@ -36,11 +41,11 @@ impl Mapper {
         }
     }
 
-    fn p4(&self) -> &PageTable<Level4> {
+    pub fn p4(&self) -> &PageTable<Level4> {
         unsafe { self.p4.as_ref() }
     }
 
-    fn p4_mut(&mut self) -> &mut PageTable<Level4> {
+    pub fn p4_mut(&mut self) -> &mut PageTable<Level4> {
         unsafe { self.p4.as_mut() }
     }
 
@@ -135,7 +140,13 @@ impl Mapper {
         }
     }
 
-    pub unsafe fn map(&mut self, page: Page, flags: EntryFlags, invplg: InvalidateTlb) {
+    pub unsafe fn map(
+        &mut self,
+        page: Page,
+        flags: EntryFlags,
+        invplg: InvalidateTlb,
+        zero: ZeroPage
+    ) {
         use core::ptr;
 
         assert!(page.size.is_some(), "Page needs size!");
@@ -150,11 +161,13 @@ impl Mapper {
         self.map_to(page, frame, flags, invplg);
 
         // Zero the page
-        ptr::write_bytes(
-            page.start_address().unwrap() as *mut u8,
-            0,
-            page.size.unwrap().bytes()
-        );
+        if zero == ZeroPage::Zero {
+            util::memset_volatile_64bit(
+                page.start_address().unwrap() as *mut u64,
+                0,
+                page.size.unwrap().bytes()
+            );
+        }
     }
 
     pub unsafe fn unmap(&mut self, page: Page, free_physmem: FreeMemory, invplg: InvalidateTlb) {
@@ -238,6 +251,28 @@ impl Mapper {
         }
     }
 
+    /// Maps a range of pages, allocating physical memory for them
+    // TODO use this more widely
+    pub unsafe fn map_range(
+        &mut self,
+        pages: RangeInclusive<Page>,
+        flags: EntryFlags,
+        invplg: InvalidateTlb,
+        zero: ZeroPage
+    ) {
+        assert!(
+            pages.start().page_size() == Some(PageSize::Kib4) &&
+                pages.end().page_size() == Some(PageSize::Kib4),
+            "Only mapping of 4kib pages is supported"
+        );
+
+        for no in pages.start().number()..=pages.end().number() {
+            let page = Page::containing_address(no * 0x1000, PageSize::Kib4);
+            self.map(page, flags, invplg, zero);
+        }
+    }
+
+    /// Maps a range of pages with specific physical memory.
     pub unsafe fn map_page_range(
         &mut self,
         mapping: PageRangeMapping,
@@ -286,11 +321,24 @@ impl PageRangeMapping {
 
 pub struct TemporaryPage {
     page: Page,
+    frame_addr: PhysicalAddress,
 }
 
 impl TemporaryPage {
-    pub fn new(page: Page) -> TemporaryPage {
-        TemporaryPage { page }
+    pub fn new() -> TemporaryPage {
+        // Allocate some heap memory for us to put the temporary page on (virtual addr)
+        let layout = Layout::from_size_align(0x1000, 0x1000).unwrap();
+        let page_addr = unsafe { crate::HEAP.alloc(layout) };
+        let page = Page::containing_address(page_addr as usize, PageSize::Kib4);
+        let frame_addr = ACTIVE_PAGE_TABLES.lock()
+            .walk_page_table(page).unwrap().0.physical_address().unwrap();
+
+        // Unmap the heap page temporarily to avoid confusing the temporary page code
+        unsafe {
+            ACTIVE_PAGE_TABLES.lock().unmap(page, FreeMemory::NoFree, InvalidateTlb::Invalidate);
+        }
+
+        TemporaryPage { page, frame_addr }
     }
 
     /// Maps the temporary page to the given frame in the active table.
@@ -298,7 +346,7 @@ impl TemporaryPage {
     pub unsafe fn map(
         &mut self,
         frame: PhysicalAddress,
-        active_table: &mut ActivePageMap
+        active_table: &mut ActivePageMap,
     ) -> VirtualAddress {
         let page_addr = self.page.start_address().expect("Temporary page requires size");
         assert!(
@@ -323,6 +371,24 @@ impl TemporaryPage {
         active_table: &mut ActivePageMap
     ) -> &mut PageTable<Level1> {
         &mut *(self.map(frame, active_table).0 as *mut PageTable<Level1>)
+    }
+}
+
+impl Drop for TemporaryPage {
+    fn drop(&mut self) {
+        // Remap heap page so it can be deallocated correctly
+        unsafe {
+            ACTIVE_PAGE_TABLES.lock().map_to(
+                self.page,
+                self.frame_addr,
+                EntryFlags::from_bits_truncate(0),
+                InvalidateTlb::Invalidate,
+            );
+        }
+
+        let layout = Layout::from_size_align(0x1000, 0x1000).unwrap();
+
+        unsafe { crate::HEAP.dealloc(self.page.start_address().unwrap() as *mut _, layout) };
     }
 }
 
@@ -354,7 +420,7 @@ impl ActivePageMap {
             // overwrite recursive mapping
             self.p4_mut()[510].set(
                 table.p4_frame.clone(),
-                EntryFlags::PRESENT | EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE
+                EntryFlags::PRESENT | EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE | EntryFlags::USER_ACCESSIBLE // TODO
             );
 
             tlb::flush_all();
@@ -365,7 +431,7 @@ impl ActivePageMap {
             // restore recursive mapping to original p4 table
             p4_table[510].set(
                 backup,
-              EntryFlags::PRESENT | EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE
+              EntryFlags::PRESENT | EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE | EntryFlags::USER_ACCESSIBLE // TODO
             );
 
             tlb::flush_all();
@@ -395,7 +461,7 @@ impl ActivePageMap {
                 PageSize::Kib4
             );
 
-            let entry = PAGE_TABLES.lock().walk_page_table(page).unwrap().0;
+            let entry = self.walk_page_table(page).unwrap().0;
             frames.push(entry.physical_address().unwrap());
         }
 
@@ -411,7 +477,8 @@ impl ActivePageMap {
         });
     }
 
-    pub fn switch(&mut self, new_table: InactivePageMap) -> InactivePageMap {
+    /// Switches page tables and returns the old one.
+    pub fn switch(&mut self, new_table: &InactivePageMap) -> InactivePageMap {
         let old_table = InactivePageMap {
             p4_frame: PhysicalAddress(util::cr3() as usize)
         };
@@ -438,8 +505,9 @@ impl DerefMut for ActivePageMap {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct InactivePageMap {
-    p4_frame: PhysicalAddress,
+    pub p4_frame: PhysicalAddress,
 }
 
 impl InactivePageMap {
@@ -458,7 +526,7 @@ impl InactivePageMap {
             // Set up recursive mapping for table
             table[510].set(
                 frame.clone(),
-                EntryFlags::PRESENT | EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE
+                EntryFlags::PRESENT | EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE | EntryFlags::USER_ACCESSIBLE // TODO
             );
         }
 

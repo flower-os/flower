@@ -6,13 +6,13 @@ mod page_map;
 pub use self::page_map::*;
 
 use core::{marker::PhantomData, ptr::Unique};
-use core::ops::{Add, Index, IndexMut};
+use core::ops::{Add, Sub, Index, IndexMut};
 use spin::Mutex;
 use super::physical_allocator::PHYSICAL_ALLOCATOR;
 use x86_64::instructions::tlb;
 
 const PAGE_TABLE_ENTRIES: usize = 512;
-pub static PAGE_TABLES: Mutex<ActivePageMap> = Mutex::new(unsafe { ActivePageMap::new() });
+pub static ACTIVE_PAGE_TABLES: Mutex<ActivePageMap> = Mutex::new(unsafe { ActivePageMap::new() });
 
 #[derive(Debug, Eq, PartialEq, Copy, Clone, Ord, PartialOrd)]
 pub struct PhysicalAddress(pub usize);
@@ -91,6 +91,17 @@ impl Add<usize> for Page {
     }
 }
 
+impl Sub<usize> for Page {
+    type Output = Page;
+
+    fn sub(self, other: usize) -> Page {
+        Page {
+            number: self.number - other,
+            size: self.size
+        }
+    }
+}
+
 /// An entry in a page table
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 #[repr(C)] // Just in case
@@ -122,24 +133,6 @@ impl PageTableEntry {
             physical_address.0,
         );
 
-        // Check that physical address is correctly sign extended
-        let bit_47 = (physical_address.0 >> 48) & 1;
-        if bit_47 == 1 {
-            assert_eq!(
-                physical_address.0 >> 48,
-                0xFFFF,
-                "Physical address 0x{:x} is not correctly sign extended!",
-                physical_address.0,
-            )
-        } else {
-            assert_eq!(
-                physical_address.0 >> 48,
-                0,
-                "Physical address 0x{:x} is not correctly sign extended!",
-                physical_address.0,
-            )
-        }
-
         self.0 = (physical_address.0 as u64) | flags.bits();
     }
 }
@@ -151,7 +144,8 @@ bitflags! {
         /// Whether the page is writable or read only
         const WRITABLE = 1 << 1;
         /// Whether ring 3 processes can access this page -- in theory. As of meltdown, this bit is
-        /// essentially useless, except on possibly newer CPUs with fixes in place
+        /// essentially useless for preventing attacks, except on possibly newer CPUs with fixes
+        /// in place.
         const USER_ACCESSIBLE = 1 << 2;
         /// If this bit is set, writes to this page go directly to memory
         const WRITE_DIRECT = 1 << 3;
@@ -165,7 +159,7 @@ bitflags! {
         /// and a 2MiB page in P2
         const HUGE_PAGE = 1 << 7;
         /// If set, this page will not be flushed in the TLB. PGE bit in CR4 must be set.
-        const GLOBAL = 1 << 8;
+        const GLOBAL = 1 << 8; // TODO map kernel pages as global?
         /// Do not allow executing code from this page. NXE bit in EFER must be set.
         const NO_EXECUTE = 1 << 63;
     }
@@ -233,7 +227,7 @@ impl<L: TableLevel> PageTable<L> {
         }
     }
 
-    fn next_page_table(&self, index: usize) -> Option<&PageTable<L::NextLevel>>
+    pub fn next_page_table(&self, index: usize) -> Option<&PageTable<L::NextLevel>>
         where L: HierarchicalLevel
     {
         unsafe {
@@ -242,7 +236,7 @@ impl<L: TableLevel> PageTable<L> {
         }
     }
 
-    fn next_page_table_mut(&mut self, index: usize) -> Option<&mut PageTable<L::NextLevel>>
+    pub fn next_page_table_mut(&mut self, index: usize) -> Option<&mut PageTable<L::NextLevel>>
         where L: HierarchicalLevel
     {
         unsafe {
@@ -265,7 +259,8 @@ impl<L: TableLevel> PageTable<L> {
                 self.entries[index].set(
                     frame,
                     self::EntryFlags::PRESENT |
-                        self::EntryFlags::WRITABLE
+                        self::EntryFlags::WRITABLE |
+                        self::EntryFlags::USER_ACCESSIBLE
                 );
                 self.next_page_table_mut(index).expect("No next table!").zero();
             }
@@ -287,4 +282,30 @@ impl<L: TableLevel> IndexMut<usize> for PageTable<L> {
     fn index_mut(&mut self, index: usize) -> &mut PageTableEntry {
         &mut self.entries[index]
     }
+}
+
+pub fn new_process_page_tables() -> InactivePageMap {
+    let mut temporary_page = TemporaryPage::new();
+
+    // This must be duplicated to avoid double locks. This is safe though -- in this context!
+    let mut active_table = unsafe { ActivePageMap::new() };
+    let frame = PhysicalAddress(PHYSICAL_ALLOCATOR.allocate(0).expect("no more frames") as usize);
+    let mut new_table = InactivePageMap::new(frame, &mut active_table, &mut temporary_page);
+
+    // Copy kernel pml4 entry
+    let kernel_pml4_entry = active_table.p4()[511];
+    let mut table = unsafe {
+        temporary_page.map_table_frame(frame.clone(), &mut active_table)
+    };
+
+    table[511] = kernel_pml4_entry;
+
+    unsafe {
+        temporary_page.unmap(&mut active_table);
+    }
+
+    // Drop this lock so that the RAII guarded temporary page can be destroyed
+    drop(active_table);
+
+    new_table
 }

@@ -1,16 +1,11 @@
-use core::sync::atomic::{Ordering, AtomicU64};
 use alloc::vec::Vec;
 use crate::terminal::{TerminalOutput, TerminalCharacter, Point, STDOUT};
 use crate::drivers::{pit, ps2};
 use crate::drivers::keyboard::{Ps2Keyboard, Keyboard, KeyEventType};
-use crate::halt;
+use crate::util::RNG;
 
 const HEAD_CHAR: char = 2 as char;
 const BASE_LENGTH: u16 = 4;
-
-lazy_static! {
-    static ref RNG: Random = Random::new();
-}
 
 struct Game<'a> {
     grid: Grid,
@@ -315,45 +310,6 @@ enum MoveResult {
     Lose,
 }
 
-struct Random {
-    seed: AtomicU64,
-}
-
-impl Random {
-    fn new() -> Random {
-        let time = pit::time_ms() as u64;
-        Random {
-            seed: AtomicU64::new(time ^ 2246577883182828989),
-        }
-    }
-
-    /// Thanks to https://stackoverflow.com/a/3062783/4871468 and
-    /// https://en.wikipedia.org/wiki/Linear_congruential_generator#Parameters_in_common_use
-    /// (glibc's values used here).
-    fn next_bounded(&self, bound: u64) -> u64 {
-        self.next() % bound
-    }
-
-    fn next(&self) -> u64 {
-        const A: u64 = 1103515245;
-        const M: u64 = 1 << 31;
-        const C: u64 = 12345;
-
-        let mut seed = self.seed.load(Ordering::SeqCst);
-        loop {
-            let next = (A.wrapping_mul(seed) + C) % M;
-            let cas_result = self.seed.compare_and_swap(seed, next, Ordering::SeqCst);
-
-            if cas_result == seed {
-                return next;
-            } else {
-                seed = cas_result;
-            }
-        }
-    }
-}
-
-
 pub fn snake(controller: &mut ps2::Controller) {
     let keyboard_device = controller.device(ps2::DevicePort::Keyboard);
     let mut keyboard = Ps2Keyboard::new(keyboard_device);
@@ -361,7 +317,9 @@ pub fn snake(controller: &mut ps2::Controller) {
         info!("kbd: successfully enabled");
     } else {
         error!("kbd: enable unsuccessful");
-        halt();
+        // TODO -- cannot halt, so just spin
+        loop {}
+//        halt();
     }
 
     let mut game = Game::new(&mut keyboard);

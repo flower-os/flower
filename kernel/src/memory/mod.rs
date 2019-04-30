@@ -24,6 +24,7 @@ pub mod physical_mapping;
 mod stack_allocator;
 
 use core::{mem, iter, ops::{Range, RangeInclusive}};
+use spin::Mutex;
 use x86_64::structures::tss::TaskStateSegment;
 use arrayvec::ArrayVec;
 use multiboot2::{self, BootInformation, MemoryMapTag};
@@ -31,10 +32,10 @@ use self::physical_allocator::{PHYSICAL_ALLOCATOR, BLOCKS_IN_TREE};
 use self::buddy_allocator::Block;
 use self::stack_allocator::StackAllocator;
 use self::bootstrap_heap::{BootstrapHeap, BOOTSTRAP_HEAP};
-use self::paging::{Page, PageSize, PhysicalAddress, VirtualAddress, PAGE_TABLES, EntryFlags,
-                   PageRangeMapping, remap, InvalidateTlb};
+use self::paging::{Page, PageSize, PhysicalAddress, VirtualAddress, ACTIVE_PAGE_TABLES, EntryFlags,
+                   PageRangeMapping, remap, InvalidateTlb, ZeroPage};
 use crate::util::round_up_divide;
-use crate::gdt;
+use crate::gdt::{TSS, Tss};
 
 pub const KERNEL_MAPPING_BEGIN: usize = 0xffffffff80000000;
 const IST_STACK_SIZE_PAGES: usize = 3;
@@ -45,7 +46,7 @@ pub fn init_memory(mb_info_addr: usize, guard_page_addr: usize) {
     let mb_info = unsafe { multiboot2::load(mb_info_addr) };
     let kernel_area = kernel_area(&mb_info);
 
-    let mb_info_phys = mb_info.start_address()..=mb_info.end_address();
+    let mb_info_phys = mb_info.start_address()..mb_info.end_address();
     let memory_map = mb_info.memory_map_tag()
         .expect("Expected a multiboot2 memory map tag, but it is not present!");
 
@@ -53,8 +54,8 @@ pub fn init_memory(mb_info_addr: usize, guard_page_addr: usize) {
 
     debug!("mem: initialising bootstrap heap");
     let (bootstrap_heap_phys, bootstrap_heap_virtual) = unsafe {
-        let physical_start = PhysicalAddress(mb_info_phys.end() + 1); // TODO what if really high and no more space ?
-        let virtual_start = VirtualAddress(kernel_area.end() + 1);
+        let physical_start = PhysicalAddress(mb_info_phys.end); // TODO what if really high and no more space ?
+        let virtual_start = VirtualAddress(kernel_area.end);
 
          setup_bootstrap_heap(virtual_start, physical_start)
     };
@@ -73,7 +74,7 @@ pub fn init_memory(mb_info_addr: usize, guard_page_addr: usize) {
     // The heap must NOT BE USED except in one specific place -- all heap objects will be corrupted
     // after the remap.
     debug!("mem: setting up kernel heap");
-    let heap_tree_start = bootstrap_heap_virtual.end() + 1;
+    let heap_tree_start = bootstrap_heap_virtual.end;
     let heap_tree_start = unsafe { crate::HEAP.init(heap_tree_start) };
     let heap_tree_end = heap_tree_start + heap::Heap::tree_size();
 
@@ -92,7 +93,7 @@ pub fn init_memory(mb_info_addr: usize, guard_page_addr: usize) {
         PageSize::Kib4
     );
 
-    unsafe { setup_ist( page) }
+    unsafe { setup_ist( page) };
 
     info!("mem: initialised");
 }
@@ -125,15 +126,16 @@ unsafe fn setup_ist(begin: Page) {
         if page % IST_STACK_SIZE_PAGES == 0 {
             // Page is guard page: do not map
         } else {
-            PAGE_TABLES.lock().map(
+            ACTIVE_PAGE_TABLES.lock().map(
                 Page::containing_address(begin.start_address().unwrap() + (page * 4096), PageSize::Kib4),
-                EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE,
+                EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE | EntryFlags::USER_ACCESSIBLE, // TODO
                 InvalidateTlb::Invalidate,
+                ZeroPage::Zero,
             );
         }
     }
 
-    gdt::TSS.call_once(|| {
+    TSS.call_once(|| {
         let mut tss = TaskStateSegment::new();
 
         for i in 0..7 { // Packed struct; cannot safely borrow fields
@@ -143,7 +145,7 @@ unsafe fn setup_ist(begin: Page) {
             tss.interrupt_stack_table[i] = x86_64::VirtAddr::new(stack_end);
         }
 
-        tss
+        Mutex::new(Tss::new(tss))
     });
 }
 
@@ -156,7 +158,7 @@ unsafe fn setup_ist(begin: Page) {
 unsafe fn setup_bootstrap_heap(
     virtual_start: VirtualAddress,
     physical_start: PhysicalAddress,
-) -> (RangeInclusive<usize>, RangeInclusive<usize>) {
+) -> (Range<usize>, Range<usize>) {
     let start_ptr = virtual_start.0 as *const u8;
     let heap_start = start_ptr.offset(
         start_ptr.align_offset(mem::align_of::<[Block; BLOCKS_IN_TREE]>()) as isize,
@@ -171,7 +173,7 @@ unsafe fn setup_bootstrap_heap(
         BootstrapHeap::space_taken() / 4096,
     );
 
-    PAGE_TABLES.lock().map_page_range(
+    ACTIVE_PAGE_TABLES.lock().map_page_range(
         mapping,
         InvalidateTlb::NoInvalidate,
         EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE,
@@ -183,17 +185,17 @@ unsafe fn setup_bootstrap_heap(
 
     let physical_start = start_frame * 4096;
     let virtual_start = start_page.number() * 4096;
-    let physical = physical_start..=physical_start + BootstrapHeap::space_taken();
-    let virtual_range = virtual_start..=virtual_start + BootstrapHeap::space_taken();
+    let physical = physical_start..physical_start + BootstrapHeap::space_taken();
+    let virtual_range = virtual_start..virtual_start + BootstrapHeap::space_taken();
 
     (physical, virtual_range)
 }
 
 unsafe fn setup_physical_allocator_prelim(
     mb_info: &BootInformation,
-    mb_info_phys: RangeInclusive<usize>,
-    bootstrap_heap_phys: RangeInclusive<usize>,
-    kernel_area: RangeInclusive<usize>,
+    mb_info_phys: Range<usize>,
+    bootstrap_heap_phys: Range<usize>,
+    kernel_area: Range<usize>,
 ) -> (u8, ArrayVec<[Range<usize>; 256]>) {
     let memory_map = mb_info.memory_map_tag()
         .expect("Expected a multiboot2 memory map tag, but it is not present!");
@@ -214,13 +216,13 @@ unsafe fn setup_physical_allocator_prelim(
         .map(|(start, end)| start..end);
 
     // Remove already used physical mem areas
-    let kernel_area_phys = 0..=kernel_area.end() - KERNEL_MAPPING_BEGIN;
+    let kernel_area_phys = 0..kernel_area.end - KERNEL_MAPPING_BEGIN;
+
 
     let usable_areas = constant_unroll! { // Use this macro to make types work
         for used_area in [kernel_area_phys, mb_info_phys.clone(), bootstrap_heap_phys] {
             usable_areas = usable_areas.flat_map(move |free_area| {
-                // Convert to Range from  RangeInclusive
-                let range = *used_area.start()..*used_area.end() + 1;
+                let range = used_area.start..used_area.end;
 
                 // HACK: arrays iterate with moving weirdly
                 // Also, filter map to remove `None`s
@@ -253,22 +255,25 @@ unsafe fn setup_guard_page(addr: usize) {
     let page = Page::containing_address(addr, PageSize::Kib4);
 
     // Check it is a 4kib page
-    let size = PAGE_TABLES.lock().walk_page_table(page).expect("Guard page must be mapped!").1;
+    let size = ACTIVE_PAGE_TABLES.lock().walk_page_table(page).expect("Guard page must be mapped!").1;
     assert_eq!(size, PageSize::Kib4, "Guard page must be on a 4kib page!");
 
-    PAGE_TABLES.lock().unmap(page, FreeMemory::NoFree, InvalidateTlb::Invalidate);
+    ACTIVE_PAGE_TABLES.lock().unmap(page, FreeMemory::NoFree, InvalidateTlb::Invalidate);
 }
 
-fn kernel_area(mb_info: &BootInformation) -> RangeInclusive<usize> {
+fn kernel_area(mb_info: &BootInformation) -> Range<usize> {
     use multiboot2::ElfSectionFlags;
 
     let elf_sections = mb_info.elf_sections_tag()
         .expect("Expected a multiboot2 elf sections tag, but it is not present!");
 
     let used_areas = elf_sections.sections()
-        .filter(|section| section.flags().contains(ElfSectionFlags::ALLOCATED)) // TODO this will overwrite debug info
-        .map(|section| section.start_address()..section.end_address() + 1);
-
+        .filter(|section| section.flags().contains(ElfSectionFlags::ALLOCATED))
+        .map(|section| section.start_address()..section.end_address())
+        .chain(
+            mb_info.module_tags()
+                .map(|section| section.start_address() as u64..section.end_address() as u64)
+        );
     let begin = used_areas.clone().map(
         |range| range.start
     ).min().unwrap() as usize;
@@ -276,7 +281,7 @@ fn kernel_area(mb_info: &BootInformation) -> RangeInclusive<usize> {
         |range| range.end
     ).max().unwrap() as usize;
 
-    begin..=end
+    begin..end
 }
 
 /// Subtracts one range from another, provided that start <= end in all cases

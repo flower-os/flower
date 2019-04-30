@@ -46,7 +46,7 @@ bitflags! {
         const CMPXCHG16B = 1 << 45;
         const STREAMING_SIMD_EXTENSION_4_1 = 1 << 51;
         const STREAMING_SIMD_EXTENSION_4_2 = 1 << 52;
-        const x2APIC = 1 << 53;
+        const X2APIC = 1 << 53;
         const POPCNT_INSTRUCTION = 1 << 55;
         const AES_INSTRUCTION = 1 << 57;
         const XSAVE_INSTRUCTION = 1 << 58;

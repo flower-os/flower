@@ -18,22 +18,28 @@ opt-level = 3
 rlibc = "^1.0.0"
 volatile = "^0.2.3"
 spin = "^0.4.6"
-x86_64 = "0.2"
 bitflags = "^1.0.1"
 bit_field = "^0.9.0"
 log = "^0.4.3"
 static_assertions = "^0.2.5"
+acpi = "0.2"
+
+[dependencies.x86_64]
+git = "https://github.com/Restioson/x86_64"
+branch = "gdt"
 
 [dependencies.multiboot2]
 git = "https://github.com/rust-osdev/multiboot2-elf64/"
 rev = "9ce9247eee220a0bc2ca480c23c7572132c5ae9c"
 
-[dependencies.acpi]
-version = "0.2"
-
 [dependencies.arrayvec]
 version = "^0.4.7"
 default-features = false
+
+[dependencies.crossbeam]
+git = "https://github.com/taiki-e/crossbeam/"
+default-features = false
+branch = "no-std"
 
 [dependencies.array-init]
 version = "^0.0.3"
@@ -42,6 +48,11 @@ features = ["nightly"]
 [dependencies.lazy_static]
 version = "^1.0.0"
 features = ["spin_no_std"]
+
+[dependencies.ccl]
+version = "^1.2.2"
+default-features = false
+features = ["no_std"]
 
 [features]
 default = []

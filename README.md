@@ -70,8 +70,9 @@ Much thanks to:
    - Omarrx024, 
    - [Mintsuki](https://github.com/mintsuki), 
    - [Korona](https://github.com/avdgrinten), 
+   - [Qookie](https://gitlab.com/qookei),
    - and [Safsom](https://github.com/asfsom);
- - the people part of the [rust-osdev](https://github.com/rust-osdev), such as
+ - the people part of the [rust-osdev](https://github.com/rust-osdev) organisation, such as
    - [Isaac Woods](https://github.com/IsaacWoods);
  - the [OsDev wiki](http://wiki.osdev.org);
  - [Bare Metal Rust](http://www.randomhacks.net/bare-metal-rust/);

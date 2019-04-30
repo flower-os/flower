@@ -6,7 +6,8 @@ use core::{iter, mem};
 use core::ptr::Unique;
 use core::ops::{Deref, DerefMut};
 use spin::{Once, Mutex};
-use super::paging::{PAGE_TABLES, Page, PageSize, EntryFlags, FreeMemory, InvalidateTlb};
+use super::paging::{ACTIVE_PAGE_TABLES, Page, PageSize, EntryFlags, FreeMemory, InvalidateTlb,
+                    ZeroPage};
 use crate::memory::{buddy_allocator, paging::PhysicalAddress};
 use crate::util;
 // use ...::Block // <-- this one comes from the macro invocation below
@@ -63,19 +64,17 @@ impl Heap {
             let heap_tree_start = ((heap_tree_start / 4096) + 1) * 4096;
 
             // Map pages for the tree to use for accounting info
-            let pages_to_map = util::round_up_divide(
-                mem::size_of::<[Block; BLOCKS_IN_TREE]>() as u64,
-                4096,
-            );
+            let tree_size_pages = mem::size_of::<[Block; BLOCKS_IN_TREE]>() / 4096;
 
-            for page in 0..pages_to_map as usize {
-                let mut table = PAGE_TABLES.lock();
-                table.map(
-                    Page::containing_address(heap_tree_start + (page * 4096), PageSize::Kib4),
-                    EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE,
-                    InvalidateTlb::Invalidate,
-                );
-            }
+            let page_start = Page::containing_address(heap_tree_start, PageSize::Kib4);
+            let page_end = page_start + tree_size_pages;
+
+            ACTIVE_PAGE_TABLES.lock().map_range(
+                page_start..=page_end,
+                EntryFlags::WRITABLE | EntryFlags::USER_ACCESSIBLE | EntryFlags::NO_EXECUTE,
+                InvalidateTlb::Invalidate, // TODO?
+                ZeroPage::Zero,
+            );
 
             let tree = Tree::new(
                 iter::once(0..(1 << 30 + 1)),
@@ -121,10 +120,10 @@ impl Heap {
         // Map pages that must be mapped
         for page in 0..util::round_up_divide(1u64 << (order + BASE_ORDER), 4096) as usize {
             let page_addr = ptr as usize + (page * 4096);
-            PAGE_TABLES.lock().map_to(
+            ACTIVE_PAGE_TABLES.lock().map_to(
                 Page::containing_address(page_addr, PageSize::Kib4),
                 PhysicalAddress((physical_begin_frame + page) * 4096),
-                EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE,
+                EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE | EntryFlags::USER_ACCESSIBLE, // TODO
                 InvalidateTlb::Invalidate,
             );
         }
@@ -166,7 +165,7 @@ impl Heap {
         for page in 0..util::round_up_divide(1u64 << (order + BASE_ORDER), 4096) as usize {
             let page_addr = global_ptr as usize + (page * 4096);
 
-            PAGE_TABLES.lock().unmap(
+            ACTIVE_PAGE_TABLES.lock().unmap(
                 Page::containing_address(page_addr, PageSize::Kib4),
                 FreeMemory::NoFree,
                 InvalidateTlb::NoInvalidate,
@@ -192,7 +191,7 @@ unsafe impl GlobalAlloc for Heap {
 
         // Map pages that have yet to be mapped
         for page in 0..util::round_up_divide(1u64 << (order + BASE_ORDER - 1), 4096) as usize {
-            let mut page_tables = PAGE_TABLES.lock();
+            let mut page_tables = ACTIVE_PAGE_TABLES.lock();
 
             let page_addr = ptr as usize + (page * 4096);
 
@@ -204,15 +203,16 @@ unsafe impl GlobalAlloc for Heap {
             if !mapped {
                 page_tables.map(
                     Page::containing_address(page_addr, PageSize::Kib4),
-                    EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE,
+                    EntryFlags::WRITABLE | EntryFlags::NO_EXECUTE | EntryFlags::USER_ACCESSIBLE, // TODO
                     InvalidateTlb::NoInvalidate,
+                    ZeroPage::Zero,
                 );
             }
         }
         ptr
     }
 
-   unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         if ptr.is_null() {
             return;
         }
@@ -233,7 +233,7 @@ unsafe impl GlobalAlloc for Heap {
 
         let page_order = 12 - BASE_ORDER; // log2(4096) - base order
 
-           // There will only be pages to unmap which totally contained this allocation if this
+        // There will only be pages to unmap which totally contained this allocation if this
         // allocation was larger or equal to the size of a page
         if order < page_order  {
             // Else, we must check if it happened to be on its own page
@@ -248,10 +248,10 @@ unsafe impl GlobalAlloc for Heap {
             if order_free == page_order + 1 {
                 let global_ptr = page_base_ptr + HEAP_START;
 
-                PAGE_TABLES.lock().unmap(
+                ACTIVE_PAGE_TABLES.lock().unmap(
                     Page::containing_address(global_ptr, PageSize::Kib4),
                     FreeMemory::Free,
-                    InvalidateTlb::Invalidate,
+                    InvalidateTlb::NoInvalidate, // TODO invalidate
                 );
             }
         } else {
@@ -259,36 +259,44 @@ unsafe impl GlobalAlloc for Heap {
            for page in 0..util::round_up_divide(1u64 << (order + BASE_ORDER - 1), 4096) as usize {
                let page_addr = global_ptr as usize + (page * 4096);
 
-               PAGE_TABLES.lock().unmap(
+               ACTIVE_PAGE_TABLES.lock().unmap(
                    Page::containing_address(page_addr, PageSize::Kib4),
                    FreeMemory::Free,
-                   InvalidateTlb::Invalidate,
+                   InvalidateTlb::NoInvalidate, // TODO invalidate
                );
            }
        }
    }
 }
 
-
-/// Converts log2 to order (NOT minus 1)
 fn order(val: usize) -> u8 {
     if val == 0 {
         return 0;
     }
 
-    // Calculates the integer log2 of the given input
-    let mut i = val;
-    let mut log2 = 0;
-    while i > 0 {
-        i >>= 1;
-        log2 += 1;
-    }
-
-    let log2 = log2;
+    let log2 = log2_ceil(val as u64) + 1;
 
     if log2 > BASE_ORDER {
         log2 - BASE_ORDER
     } else {
         0
     }
+}
+
+fn log2_ceil(val: u64) -> u8 {
+    let log2 = log2_floor(val);
+    if val != (1u64 << log2) {
+        log2 + 1
+    } else {
+        log2
+    }
+}
+
+fn log2_floor(mut val: u64) -> u8 {
+    let mut log2 = 0;
+    while val > 1 {
+        val >>= 1;
+        log2 += 1;
+    }
+    log2 as u8
 }

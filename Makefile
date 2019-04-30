@@ -1,55 +1,49 @@
 build_containing_dir := build
+
 debug ?= 0
 
-ifneq ($(debug), 1)
+ifneq (debug, 1)
 else ifndef log_level
     log_level := debug
 endif
 
-ifndef log_level
-    log_level := ""
-endif
+log_level ?= ""
 
 ifeq ($(debug), 1)
     nasm_flags := -f elf64 -F dwarf -g
     build_type := debug
     qemu_flags := -s -m 256M -d int -no-reboot -no-shutdown -monitor stdio -serial file:serial.log
-    cargo_flags := --features $(log_level)
+    kernel_cargo_flags := --features $(log_level)
 else
     nasm_flags := -f elf64
-    cargo_flags := --release --features $(log_level)
- 	rustflags := "-C code-model=kernel"
+    kernel_cargo_flags := --release --features $(log_level)
+    init_cargo_flags := --release
     build_type := release
     qemu_flags := -m 256M -serial file:serial.log
 endif
 
 ifeq ($(wait_for_gdb), 1)
-    qemu_flags := -s -S
+    qemu_flags += -S
 endif
 
-linker_script := cfg/linker.ld
+out_dir := $(build_containing_dir)/$(build_type)
 grub_cfg := cfg/grub.cfg
-out_dir = $(build_containing_dir)/$(build_type)
-asm_dir := kernel/src/asm
-rust_crate_dir := kernel
-rust_kernel := $(out_dir)/libflower_kernel.a
-target := x86_64-unknown-flower-none
-asm_source_files := $(wildcard $(asm_dir)/*.asm)
-asm_obj_files = $(patsubst $(asm_dir)/%.asm, $(out_dir)/%.o, $(asm_source_files))
+grub_iso := $(out_dir)/flower.iso
 
-kernel = $(out_dir)/kernel.elf
-grub_iso = $(out_dir)/flower.iso
+kernel_crate_dir := kernel/
+kernel_lib := $(out_dir)/libflower_kernel.a
+kernel := $(out_dir)/kernel.elf
+
+init_crate_dir := init/
+init_lib := $(out_dir)/libinit.a
+init := $(out_dir)/init.elf
 
 default: build
 
 .PHONY: clean run build $(rust_kernel) iso test
-$(grub_iso): $(kernel) $(grub_cfg)
-	@cp $(grub_cfg) $(out_dir)/isofiles/boot/grub/
-	@cp $(kernel) $(out_dir)/isofiles/boot/
-	@grub-mkrescue -o $(out_dir)/flower.iso $(out_dir)/isofiles
 
 test:
-	cd $(rust_crate_dir) && \
+	@cd $(rust_crate_dir) && \
         cargo test
 
 build: $(kernel)
@@ -57,7 +51,21 @@ iso: $(grub_iso)
 
 # Run with qemu
 run: $(grub_iso)
-	@qemu-system-x86_64 -cdrom $(grub_iso) $(qemu_flags) -m 128M
+	qemu-system-x86_64 -cdrom $(grub_iso) $(qemu_flags)
+
+$(grub_iso): rm_old $(kernel) $(init) $(grub_cfg)
+	@cp $(grub_cfg) $(out_dir)/isofiles/boot/grub/
+	@cp $(kernel) $(out_dir)/isofiles/boot/
+	@cp $(init) $(out_dir)/isofiles/boot/
+	grub-mkrescue -o $(out_dir)/flower.iso $(out_dir)/isofiles
+
+$(kernel): $(kernel_crate_dir)/**/* makedirs
+	@$(MAKE) nasm_flags="$(nasm_flags)" build_type="$(build_type)" cargo_flags="$(kernel_cargo_flags)" -s \
+	-C $(kernel_crate_dir)
+
+$(init): $(init_crate_dir)/**/* makedirs
+	@$(MAKE) nasm_flags="$(nasm_flags)" build_type="$(build_type)" cargo_flags="$(init_cargo_flags)" \
+	 -s -C $(init_crate_dir)
 
 # Clean build dir
 clean:
@@ -71,17 +79,6 @@ makedirs:
 	@mkdir -p $(out_dir)/isofiles
 	@mkdir -p $(out_dir)/isofiles/boot/grub
 
-# Compile rust
-$(rust_kernel): $(rust_crate_dir)/**/*
-	@cd $(rust_crate_dir) && \
-      RUST_TARGET_PATH=$(shell pwd)/$(rust_crate_dir) RUSTFLAGS=$(rustflags) cargo xbuild --target $(target) $(cargo_flags)
-	@rm -f $(rust_kernel)
-	@mv $(rust_crate_dir)/target/$(target)/$(build_type)/libflower_kernel.a $(rust_kernel)
-
-# Compile kernel.elf
-$(kernel): $(asm_obj_files) $(linker_script) $(rust_kernel)
-	@ld -n -T $(linker_script) -o $(kernel) $(asm_obj_files) $(rust_kernel) --gc-sections
-    
-# Compile asm files
-$(out_dir)/%.o: $(asm_dir)/%.asm makedirs
-	@nasm $(nasm_flags) $< -o $@
+rm_old:
+	@rm -f $(kernel_lib)
+	@rm -f $(init_lib)

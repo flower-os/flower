@@ -6,3 +6,4 @@ kernel/Cargo.lock
 build/
 kernel/target/
 *.bxrc
+serial.log

@@ -12,6 +12,10 @@
 #![feature(compiler_builtins_lib)]
 #![feature(panic_info_message)]
 #![feature(integer_atomics)]
+#![feature(naked_functions)]
+#![feature(core_intrinsics)]
+
+#![allow(unused_attributes)]
 
 #[cfg(test)]
 #[cfg_attr(test, macro_use)]
@@ -41,6 +45,7 @@ use crate::drivers::keyboard::{Keyboard, KeyEventType, Ps2Keyboard};
 use crate::drivers::keyboard::keymap;
 use crate::drivers::{ps2, serial};
 use crate::terminal::TerminalOutput;
+use crate::memory::heap::Heap;
 
 #[cfg(not(test))]
 mod lang;
@@ -60,8 +65,7 @@ mod acpi_impl;
 mod gdt;
 mod cpuid;
 mod snake;
-
-use crate::memory::heap::Heap;
+mod userspace;
 
 #[cfg_attr(not(test), global_allocator)]
 pub static HEAP: Heap = Heap::new();
@@ -71,28 +75,18 @@ pub static HEAP: Heap = Heap::new();
 pub extern fn kmain(multiboot_info_addr: usize, guard_page_addr: usize) -> ! {
     serial::PORT_1.lock().init(serial::MAX_BAUD, false).expect("Error initializing serial port 1");
     say_hello();
-    info!("serial: initialized port 1");
+
     log::init();
     memory::init_memory(multiboot_info_addr, guard_page_addr);
     gdt::init();
+    drivers::pit::CONTROLLER.lock().initialize();
     interrupts::init();
     interrupts::enable();
+
     info!("interrupts: ready");
 
-    drivers::pit::CONTROLLER.lock().initialize();
-
     let _acpi = acpi_impl::acpi_init();
-
-    // Initialize the PS/2 controller and run the keyboard echo loop
-    let mut controller = ps2::CONTROLLER.lock();
-    match controller.initialize() {
-        Ok(_) => info!("ps2c: init successful"),
-        Err(error) => error!("ps2c: {:?}", error),
-    }
-
-    snake::snake(&mut controller);
-
-    halt()
+    crate::userspace::usermode_begin()
 }
 
 /// Say hello to the user and print flower
@@ -133,6 +127,7 @@ fn print_flower() -> Result<(), terminal::TerminalOutputError<()>> {
     Ok(())
 }
 
+#[allow(dead_code)]
 fn keyboard_echo_loop(controller: &mut ps2::Controller) {
     let keyboard_device = controller.device(ps2::DevicePort::Keyboard);
     let mut keyboard = Ps2Keyboard::new(keyboard_device);
