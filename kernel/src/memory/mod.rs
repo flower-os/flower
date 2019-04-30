@@ -74,8 +74,8 @@ pub fn init_memory(mb_info_addr: usize, guard_page_addr: usize) {
     // The heap must NOT BE USED except in one specific place -- all heap objects will be corrupted
     // after the remap.
     debug!("mem: setting up kernel heap");
-    let heap_tree_start = bootstrap_heap_virtual.end();
-    let heap_tree_start = unsafe { crate::HEAP.init(*heap_tree_start) };
+    let heap_tree_start = bootstrap_heap_virtual.end;
+    let heap_tree_start = unsafe { crate::HEAP.init(heap_tree_start) };
     let heap_tree_end = heap_tree_start + heap::Heap::tree_size();
 
     debug!("mem: initialising pmm (2/2)");
@@ -164,8 +164,8 @@ unsafe fn setup_bootstrap_heap(
         start_ptr.align_offset(mem::align_of::<[Block; BLOCKS_IN_TREE]>()) as isize,
     ) as usize;
 
-    let start_page = Page::containing_address(heap_start, PageSize::Kib4);
-    let start_frame = (physical_start.0 / 4096);
+    let start_page = Page::containing_address(heap_start, PageSize::Kib4) + 1;
+    let start_frame = (physical_start.0 / 4096) + 1;
 
     let mapping = PageRangeMapping::new(
         start_page,
@@ -272,12 +272,8 @@ fn kernel_area(mb_info: &BootInformation) -> Range<usize> {
         .map(|section| section.start_address()..section.end_address())
         .chain(
             mb_info.module_tags()
-                .map(|module| module.start_address() as u64..module.end_address() as u64)
+                .map(|section| section.start_address() as u64..section.end_address() as u64)
         );
-
-    let module = mb_info.module_tags().next().unwrap();
-    trace!("0x{:x}..0x{:x}", module.start_address(), module.end_address());
-
     let begin = used_areas.clone().map(
         |range| range.start
     ).min().unwrap() as usize;
